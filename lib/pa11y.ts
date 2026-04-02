@@ -5,6 +5,7 @@ import pa11y from "pa11y";
 import puppeteer from "puppeteer";
 
 import type { ScanIssue, ScanRecommendation } from "@/types";
+import { ACCESSIBILITY_SCANNER_UNAVAILABLE_MESSAGE, isAccessibilityScannerUnavailableError } from "@/lib/scan-errors";
 
 function mapImpactToSeverity(impact?: string | null): "low" | "medium" | "high" {
   if (impact === "critical" || impact === "serious") {
@@ -119,14 +120,18 @@ export async function runAccessibilityScan(url: string) {
       error: null as string | null
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Accessibility scan failed.";
+    const browserUnavailable = isAccessibilityScannerUnavailableError(message);
+
     return {
       accessibilityViolations: [] as Array<Record<string, unknown>>,
       issues: [] as ScanIssue[],
       recommendations: [] as ScanRecommendation[],
       raw: {
-        error: error instanceof Error ? error.message : "Accessibility scan failed."
+        error: message,
+        warning: browserUnavailable ? ACCESSIBILITY_SCANNER_UNAVAILABLE_MESSAGE : null
       },
-      error: error instanceof Error ? error.message : "Accessibility scan failed."
+      error: browserUnavailable ? null : message
     };
   } finally {
     if (browser) {

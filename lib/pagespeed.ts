@@ -1,5 +1,5 @@
 import type { DeviceAuditSummary, ScanIssue, ScanRecommendation, ScanResult } from "@/types";
-import { getFriendlyScanFailureMessage } from "@/lib/scan-errors";
+import { getFriendlyScanFailureMessage, isPageSpeedRateLimitError } from "@/lib/scan-errors";
 
 const PAGE_SPEED_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 const AUDIT_DOCS_LINK = "https://developer.chrome.com/docs/lighthouse/overview/";
@@ -183,8 +183,23 @@ async function fetchStrategyReport(url: string, strategy: "mobile" | "desktop") 
   });
 
   if (!response.ok) {
+    const contentType = response.headers.get("content-type") ?? "";
+
+    if (contentType.includes("application/json")) {
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: { message?: string } }
+        | null;
+      const message =
+        payload?.error?.message?.trim() || `PageSpeed ${strategy} request failed (${response.status}).`;
+      throw new Error(getFriendlyScanFailureMessage(message));
+    }
+
     const errorText = await response.text();
-    throw new Error(`PageSpeed ${strategy} request failed (${response.status}): ${errorText}`);
+    const rawMessage = isPageSpeedRateLimitError(errorText)
+      ? errorText
+      : `PageSpeed ${strategy} request failed (${response.status}).`;
+
+    throw new Error(getFriendlyScanFailureMessage(rawMessage));
   }
 
   return (await response.json()) as PageSpeedResponse;
@@ -210,6 +225,8 @@ export async function runPageSpeedScan(url: string): Promise<
     | "error_message"
   >
 > {
+  const uniqueMessages = (messages: string[]) => [...new Set(messages.filter(Boolean))];
+
   const [mobileResult, desktopResult] = await Promise.allSettled([
     fetchStrategyReport(url, "mobile"),
     fetchStrategyReport(url, "desktop")
@@ -217,10 +234,10 @@ export async function runPageSpeedScan(url: string): Promise<
 
   if (mobileResult.status === "rejected" && desktopResult.status === "rejected") {
     throw new Error(
-      [
+      uniqueMessages([
         mobileResult.reason instanceof Error ? mobileResult.reason.message : "Mobile audit failed.",
         desktopResult.reason instanceof Error ? desktopResult.reason.message : "Desktop audit failed."
-      ].join(" | ")
+      ]).join(" | ")
     );
   }
 
@@ -235,11 +252,13 @@ export async function runPageSpeedScan(url: string): Promise<
     (snapshot): snapshot is DeviceAuditSummary => Boolean(snapshot)
   );
 
-  const errorMessages = [mobileResult, desktopResult]
-    .filter((result) => result.status === "rejected")
-    .map((result) =>
-      getFriendlyScanFailureMessage(result.reason instanceof Error ? result.reason.message : "Unknown PageSpeed error")
-    );
+  const errorMessages = uniqueMessages(
+    [mobileResult, desktopResult]
+      .filter((result) => result.status === "rejected")
+      .map((result) =>
+        getFriendlyScanFailureMessage(result.reason instanceof Error ? result.reason.message : "Unknown PageSpeed error")
+      )
+  );
 
   return {
     performance_score: Math.round(average(snapshots.map((snapshot) => snapshot.performance_score)) ?? 0),

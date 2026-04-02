@@ -4,7 +4,12 @@ import type { ScanResult, UserProfile, Website } from "@/types";
 import { runAccessibilityScan } from "@/lib/pa11y";
 import { runPageSpeedScan } from "@/lib/pagespeed";
 import { sendCriticalAlertEmail } from "@/lib/resend";
-import { FRIENDLY_SCAN_FAILURE_MESSAGE, getFriendlyScanFailureMessage, shouldUseFriendlyScanFailureMessage } from "@/lib/scan-errors";
+import {
+  FRIENDLY_SCAN_FAILURE_MESSAGE,
+  getFriendlyScanFailureMessage,
+  isPageSpeedRateLimitError,
+  shouldUseFriendlyScanFailureMessage
+} from "@/lib/scan-errors";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { PLAN_LIMITS } from "@/lib/utils";
 
@@ -157,14 +162,21 @@ export async function executeWebsiteScan(websiteId: string) {
         };
 
   const scanStatus = pageSpeedResult.status === "fulfilled" ? "success" : "failed";
+  const normalizedPageSpeedError =
+    pageSpeedResult.status === "rejected"
+      ? getFriendlyScanFailureMessage(
+          pageSpeedResult.reason instanceof Error ? pageSpeedResult.reason.message : "PageSpeed scan failed."
+        )
+      : null;
   const hasFriendlyPageSpeedFailure =
     pageSpeedResult.status === "rejected" &&
-    shouldUseFriendlyScanFailureMessage(
+    (shouldUseFriendlyScanFailureMessage(
       pageSpeedResult.reason instanceof Error ? pageSpeedResult.reason.message : null
-    );
+    ) ||
+      isPageSpeedRateLimitError(pageSpeedResult.reason instanceof Error ? pageSpeedResult.reason.message : null));
 
   const errorMessages = hasFriendlyPageSpeedFailure
-    ? [FRIENDLY_SCAN_FAILURE_MESSAGE]
+    ? [normalizedPageSpeedError ?? FRIENDLY_SCAN_FAILURE_MESSAGE]
     : [pageSpeed.error_message, accessibility.error].filter((value): value is string => Boolean(value));
 
   const { data: scan, error: insertError } = await admin
