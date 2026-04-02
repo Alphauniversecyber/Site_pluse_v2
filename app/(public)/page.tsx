@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BellRing, Check, FileCheck2, Link2, MailCheck, Radar, X } from "lucide-react";
+import { ArrowRight, Check, Link2, MailCheck, Radar, X } from "lucide-react";
 
 import { DashboardMockup } from "@/components/landing/dashboard-mockup";
 import { EmailReportPreview } from "@/components/landing/email-report-preview";
@@ -132,25 +132,29 @@ const testimonials = [
 export default function LandingPage() {
   return (
     <main>
-      <section className="mx-auto grid w-full max-w-[1920px] gap-12 px-5 py-12 sm:px-6 md:px-8 md:py-16 lg:min-h-[calc(100vh-5rem)] lg:grid-cols-[1fr_0.9fr] lg:items-center lg:px-10 lg:py-10 xl:min-h-[1080px] xl:px-16 xl:py-14 2xl:px-20">
-        <div className="relative lg:py-8">
+      <section className="mx-auto grid w-full max-w-[1440px] gap-12 px-5 py-12 sm:px-6 md:px-8 md:py-16 lg:min-h-[calc(100vh-5rem)] lg:grid-cols-2 lg:items-center lg:gap-16 lg:px-10 lg:py-10 xl:px-14 xl:py-14">
+        <div className="relative max-w-2xl lg:py-8">
           <Badge>Automated white-label reporting for agencies</Badge>
-          <h1 className="mt-6 max-w-3xl font-display text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
+          <h1 className="mt-6 max-w-2xl font-display text-4xl font-semibold leading-[1.02] sm:text-5xl lg:text-[3.8rem]">
             Know when client sites break before they call.
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
+          <p className="mt-5 max-w-xl text-lg leading-8 text-muted-foreground">
             Automated white-label website reports for agencies. Monitor performance, accessibility, and SEO across
             client websites, then send branded reports automatically.
           </p>
-          <p className="mt-6 max-w-2xl text-base leading-7 text-muted-foreground">{siteCopy.positioning}</p>
-          <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:flex-wrap">
-            <Button asChild size="lg" className="w-full sm:w-auto">
+          <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground">{siteCopy.positioning}</p>
+          <div className="mt-7 flex flex-col gap-4 sm:flex-row sm:flex-wrap">
+            <Button
+              asChild
+              size="lg"
+              className="h-12 w-full rounded-2xl px-6 text-base shadow-[0_20px_42px_-22px_rgba(59,130,246,0.95)] sm:w-auto"
+            >
               <Link href="/signup">
                 Start free
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
+            <Button asChild size="lg" variant="outline" className="h-12 w-full rounded-2xl px-6 text-base sm:w-auto">
               <Link href="/features#report-preview">See sample report</Link>
             </Button>
           </div>
@@ -158,41 +162,11 @@ export default function LandingPage() {
             Built for agencies, freelancers, and website maintenance retainers.
           </p>
 
-          <div className="mt-8 grid gap-3 sm:grid-cols-3">
-            {[
-              {
-                icon: Radar,
-                title: "Monitor every client site",
-                body: "Performance, accessibility, SEO, and best-practice regressions in one clean workflow."
-              },
-              {
-                icon: FileCheck2,
-                title: "Send polished reports",
-                body: "White-label PDFs and email updates that feel ready for client eyes immediately."
-              },
-              {
-                icon: BellRing,
-                title: "Catch issues early",
-                body: "Score-drop alerts arrive before support tickets and uncomfortable calls."
-              }
-            ].map((item) => {
-              const Icon = item.icon;
-
-              return (
-                <div key={item.title} className="theme-panel rounded-[1.5rem] p-4">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <p className="mt-4 font-semibold">{item.title}</p>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.body}</p>
-                </div>
-              );
-            })}
-          </div>
-
           <p className="mt-8 text-sm text-muted-foreground">{siteCopy.socialProof}</p>
         </div>
-        <DashboardMockup />
+        <div className="flex justify-center lg:justify-end lg:pl-8">
+          <DashboardMockup />
+        </div>
       </section>
 
       <section id="report-preview" className="container py-10 md:py-14">
@@ -209,7 +183,7 @@ export default function LandingPage() {
             White-label ready
           </Badge>
         </div>
-        <div className="mt-10">
+        <div className="mx-auto mt-8 max-w-5xl">
           <EmailReportPreview />
         </div>
       </section>
@@ -271,9 +245,9 @@ export default function LandingPage() {
           <h2 className="mt-4 font-display text-4xl font-semibold">Everything agencies need. Nothing they do not.</h2>
           <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {features.map((feature) => (
-              <Card key={feature.title} className="theme-panel">
+              <Card key={feature.title} className="theme-panel group interactive-card border-border/80">
                 <CardHeader className="gap-5">
-                  <FeatureOrbIcon kind={feature.kind} className="h-20 w-20" />
+                  <FeatureOrbIcon kind={feature.kind} />
                   <CardTitle className="text-2xl">{feature.title}</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0 text-muted-foreground">{feature.description}</CardContent>
@@ -344,7 +318,7 @@ export default function LandingPage() {
               </Link>
             </Button>
           </div>
-          <Card className="theme-panel">
+          <Card className="theme-panel border-border/80 transition duration-300 ease-out hover:-translate-y-1 hover:border-primary/25 hover:shadow-[0_28px_70px_-34px_rgba(59,130,246,0.26),0_0_0_1px_rgba(96,165,250,0.14)]">
             <CardHeader>
               <CardTitle>Profit calculator</CardTitle>
             </CardHeader>
@@ -369,6 +343,9 @@ export default function LandingPage() {
       <section id="pricing" className="container py-20">
         <p className="text-sm font-semibold uppercase tracking-[0.28em] text-primary">Pricing</p>
         <h2 className="mt-4 font-display text-4xl font-semibold">Simple pricing. No surprises.</h2>
+        <p className="mt-4 max-w-2xl text-lg leading-8 text-muted-foreground">
+          Compare the essentials at a glance, then upgrade when your reporting workflow starts paying for itself.
+        </p>
         <div className="mt-10">
           <PricingGrid />
         </div>
