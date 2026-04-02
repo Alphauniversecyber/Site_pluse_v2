@@ -1,0 +1,440 @@
+create extension if not exists "pgcrypto";
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'plan_tier') then
+    create type public.plan_tier as enum ('free', 'starter', 'agency');
+  end if;
+
+  if not exists (select 1 from pg_type where typname = 'scan_frequency') then
+    create type public.scan_frequency as enum ('daily', 'weekly', 'monthly');
+  end if;
+
+  if not exists (select 1 from pg_type where typname = 'scan_status') then
+    create type public.scan_status as enum ('success', 'failed');
+  end if;
+
+  if not exists (select 1 from pg_type where typname = 'severity_level') then
+    create type public.severity_level as enum ('low', 'medium', 'high');
+  end if;
+
+  if not exists (select 1 from pg_type where typname = 'notification_type') then
+    create type public.notification_type as enum ('score_drop', 'critical_score', 'scan_failure', 'report_ready', 'accessibility_regression');
+  end if;
+
+  if not exists (select 1 from pg_type where typname = 'team_role') then
+    create type public.team_role as enum ('owner', 'admin', 'viewer');
+  end if;
+
+  if not exists (select 1 from pg_type where typname = 'team_status') then
+    create type public.team_status as enum ('invited', 'active');
+  end if;
+end $$;
+
+create or replace function public.handle_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = timezone('utc', now());
+  return new;
+end;
+$$;
+
+create table if not exists public.users (
+  id uuid primary key references auth.users (id) on delete cascade,
+  email text not null unique,
+  full_name text,
+  plan public.plan_tier not null default 'free',
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  email_report_frequency public.scan_frequency not null default 'weekly',
+  email_reports_enabled boolean not null default false,
+  email_notifications_enabled boolean not null default false,
+  profile_photo_url text,
+  extra_report_recipients text[] not null default '{}'::text[],
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.agency_branding (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique references public.users (id) on delete cascade,
+  agency_name text not null,
+  logo_url text,
+  brand_color text not null default '#3B82F6',
+  email_from_name text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.team_members (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid not null references public.users (id) on delete cascade,
+  member_email text not null,
+  member_user_id uuid references public.users (id) on delete set null,
+  role public.team_role not null default 'viewer',
+  status public.team_status not null default 'invited',
+  invited_at timestamptz not null default timezone('utc', now()),
+  unique (owner_user_id, member_email)
+);
+
+create table if not exists public.websites (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users (id) on delete cascade,
+  url text not null,
+  label text not null,
+  is_active boolean not null default true,
+  email_reports_enabled boolean not null default false,
+  report_recipients text[] not null default '{}'::text[],
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (user_id, url)
+);
+
+create table if not exists public.scan_results (
+  id uuid primary key default gen_random_uuid(),
+  website_id uuid not null references public.websites (id) on delete cascade,
+  performance_score integer not null check (performance_score >= 0 and performance_score <= 100),
+  seo_score integer not null check (seo_score >= 0 and seo_score <= 100),
+  accessibility_score integer not null check (accessibility_score >= 0 and accessibility_score <= 100),
+  best_practices_score integer not null check (best_practices_score >= 0 and best_practices_score <= 100),
+  lcp double precision,
+  fid double precision,
+  cls double precision,
+  tbt double precision,
+  issues jsonb not null default '[]'::jsonb,
+  recommendations jsonb not null default '[]'::jsonb,
+  accessibility_violations jsonb not null default '[]'::jsonb,
+  raw_data jsonb not null default '{}'::jsonb,
+  mobile_snapshot jsonb not null default '{}'::jsonb,
+  desktop_snapshot jsonb not null default '{}'::jsonb,
+  scan_status public.scan_status not null default 'success',
+  error_message text,
+  scanned_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.reports (
+  id uuid primary key default gen_random_uuid(),
+  website_id uuid not null references public.websites (id) on delete cascade,
+  scan_id uuid not null references public.scan_results (id) on delete cascade,
+  pdf_url text not null,
+  sent_to_email text,
+  sent_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.scan_schedules (
+  id uuid primary key default gen_random_uuid(),
+  website_id uuid not null unique references public.websites (id) on delete cascade,
+  frequency public.scan_frequency not null default 'weekly',
+  next_scan_at timestamptz,
+  last_scan_at timestamptz
+);
+
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users (id) on delete cascade,
+  website_id uuid references public.websites (id) on delete cascade,
+  type public.notification_type not null,
+  title text not null,
+  body text not null,
+  severity public.severity_level not null default 'medium',
+  is_read boolean not null default false,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists idx_websites_user_id on public.websites (user_id);
+create index if not exists idx_scan_results_website_id on public.scan_results (website_id);
+create index if not exists idx_scan_results_scanned_at on public.scan_results (scanned_at desc);
+create index if not exists idx_reports_website_id on public.reports (website_id);
+create index if not exists idx_reports_scan_id on public.reports (scan_id);
+create index if not exists idx_notifications_user_id_created_at on public.notifications (user_id, created_at desc);
+create index if not exists idx_team_members_owner on public.team_members (owner_user_id);
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.users (id, email, full_name)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1))
+  )
+  on conflict (id) do update
+  set email = excluded.email;
+
+  insert into public.agency_branding (user_id, agency_name, email_from_name)
+  values (
+    new.id,
+    coalesce(
+      new.raw_user_meta_data ->> 'agency_name',
+      new.raw_user_meta_data ->> 'full_name',
+      split_part(new.email, '@', 1)
+    ),
+    coalesce(
+      new.raw_user_meta_data ->> 'agency_name',
+      split_part(new.email, '@', 1)
+    )
+  )
+  on conflict (user_id) do nothing;
+
+  update public.team_members
+  set member_user_id = new.id,
+      status = 'active'
+  where lower(member_email) = lower(new.email)
+    and member_user_id is null;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+drop trigger if exists users_updated_at on public.users;
+create trigger users_updated_at
+  before update on public.users
+  for each row execute procedure public.handle_updated_at();
+
+drop trigger if exists agency_branding_updated_at on public.agency_branding;
+create trigger agency_branding_updated_at
+  before update on public.agency_branding
+  for each row execute procedure public.handle_updated_at();
+
+drop trigger if exists websites_updated_at on public.websites;
+create trigger websites_updated_at
+  before update on public.websites
+  for each row execute procedure public.handle_updated_at();
+
+create or replace function public.user_can_access_owner(target_owner uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    auth.uid() = target_owner
+    or exists (
+      select 1
+      from public.team_members tm
+      where tm.owner_user_id = target_owner
+        and tm.member_user_id = auth.uid()
+        and tm.status = 'active'
+    );
+$$;
+
+create or replace function public.website_owner(site_id uuid)
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select w.user_id
+  from public.websites w
+  where w.id = site_id;
+$$;
+
+create or replace function public.next_scan_date(frequency public.scan_frequency, anchor timestamptz)
+returns timestamptz
+language sql
+immutable
+as $$
+  select case
+    when frequency = 'daily' then anchor + interval '1 day'
+    when frequency = 'weekly' then anchor + interval '7 day'
+    else anchor + interval '1 month'
+  end;
+$$;
+
+create or replace function public.purge_old_scan_results()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.scan_results sr
+  using public.websites w
+  join public.users u on u.id = w.user_id
+  where sr.website_id = w.id
+    and sr.scanned_at < case
+      when u.plan = 'free' then timezone('utc', now()) - interval '30 day'
+      when u.plan = 'starter' then timezone('utc', now()) - interval '90 day'
+      else timezone('utc', now()) - interval '365 day'
+    end;
+end;
+$$;
+
+alter table public.users enable row level security;
+alter table public.agency_branding enable row level security;
+alter table public.team_members enable row level security;
+alter table public.websites enable row level security;
+alter table public.scan_results enable row level security;
+alter table public.reports enable row level security;
+alter table public.scan_schedules enable row level security;
+alter table public.notifications enable row level security;
+
+drop policy if exists "Users can view own profile" on public.users;
+create policy "Users can view own profile"
+  on public.users for select
+  using (auth.uid() = id);
+
+drop policy if exists "Users can update own profile" on public.users;
+create policy "Users can update own profile"
+  on public.users for update
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
+
+drop policy if exists "Users can view own branding" on public.agency_branding;
+create policy "Users can view own branding"
+  on public.agency_branding for select
+  using (public.user_can_access_owner(user_id));
+
+drop policy if exists "Users can manage own branding" on public.agency_branding;
+create policy "Users can manage own branding"
+  on public.agency_branding for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Owners can view team members" on public.team_members;
+create policy "Owners can view team members"
+  on public.team_members for select
+  using (auth.uid() = owner_user_id or auth.uid() = member_user_id);
+
+drop policy if exists "Owners can manage team members" on public.team_members;
+create policy "Owners can manage team members"
+  on public.team_members for all
+  using (auth.uid() = owner_user_id)
+  with check (auth.uid() = owner_user_id);
+
+drop policy if exists "Users can view accessible websites" on public.websites;
+create policy "Users can view accessible websites"
+  on public.websites for select
+  using (public.user_can_access_owner(user_id));
+
+drop policy if exists "Users can create own websites" on public.websites;
+create policy "Users can create own websites"
+  on public.websites for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Owners can update accessible websites" on public.websites;
+create policy "Owners can update accessible websites"
+  on public.websites for update
+  using (public.user_can_access_owner(user_id))
+  with check (public.user_can_access_owner(user_id));
+
+drop policy if exists "Owners can delete own websites" on public.websites;
+create policy "Owners can delete own websites"
+  on public.websites for delete
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can view accessible scan results" on public.scan_results;
+create policy "Users can view accessible scan results"
+  on public.scan_results for select
+  using (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Owners can insert scan results" on public.scan_results;
+create policy "Owners can insert scan results"
+  on public.scan_results for insert
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Owners can update scan results" on public.scan_results;
+create policy "Owners can update scan results"
+  on public.scan_results for update
+  using (public.user_can_access_owner(public.website_owner(website_id)))
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Users can view accessible reports" on public.reports;
+create policy "Users can view accessible reports"
+  on public.reports for select
+  using (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Owners can insert reports" on public.reports;
+create policy "Owners can insert reports"
+  on public.reports for insert
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Owners can update reports" on public.reports;
+create policy "Owners can update reports"
+  on public.reports for update
+  using (public.user_can_access_owner(public.website_owner(website_id)))
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Users can view accessible schedules" on public.scan_schedules;
+create policy "Users can view accessible schedules"
+  on public.scan_schedules for select
+  using (
+    public.user_can_access_owner(
+      public.website_owner(website_id)
+    )
+  );
+
+drop policy if exists "Owners can manage schedules" on public.scan_schedules;
+create policy "Owners can manage schedules"
+  on public.scan_schedules for all
+  using (public.user_can_access_owner(public.website_owner(website_id)))
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Users can view own notifications" on public.notifications;
+create policy "Users can view own notifications"
+  on public.notifications for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can manage own notifications" on public.notifications;
+create policy "Users can manage own notifications"
+  on public.notifications for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+insert into storage.buckets (id, name, public)
+values
+  ('reports', 'reports', false),
+  ('profile-assets', 'profile-assets', true),
+  ('branding-assets', 'branding-assets', true)
+on conflict (id) do nothing;
+
+drop policy if exists "Users can read private report assets" on storage.objects;
+create policy "Users can read private report assets"
+  on storage.objects for select
+  using (
+    bucket_id in ('reports', 'profile-assets', 'branding-assets')
+    and public.user_can_access_owner(((storage.foldername(name))[1])::uuid)
+  );
+
+drop policy if exists "Users can write private assets" on storage.objects;
+create policy "Users can write private assets"
+  on storage.objects for insert
+  with check (
+    bucket_id in ('reports', 'profile-assets', 'branding-assets')
+    and public.user_can_access_owner(((storage.foldername(name))[1])::uuid)
+  );
+
+drop policy if exists "Users can update private assets" on storage.objects;
+create policy "Users can update private assets"
+  on storage.objects for update
+  using (
+    bucket_id in ('reports', 'profile-assets', 'branding-assets')
+    and public.user_can_access_owner(((storage.foldername(name))[1])::uuid)
+  )
+  with check (
+    bucket_id in ('reports', 'profile-assets', 'branding-assets')
+    and public.user_can_access_owner(((storage.foldername(name))[1])::uuid)
+  );
+
+drop policy if exists "Users can delete private assets" on storage.objects;
+create policy "Users can delete private assets"
+  on storage.objects for delete
+  using (
+    bucket_id in ('reports', 'profile-assets', 'branding-assets')
+    and public.user_can_access_owner(((storage.foldername(name))[1])::uuid)
+  );

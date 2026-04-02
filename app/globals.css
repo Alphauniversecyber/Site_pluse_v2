@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 33% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 24% 94%;
+    --muted-foreground: 215 16% 40%;
+    --accent: 214 32% 93%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 25% 88%;
+    --input: 214 25% 88%;
+    --ring: 217 91% 60%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --radius: 1rem;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 217 33% 17%;
+    --card-foreground: 210 40% 98%;
+    --popover: 217 33% 17%;
+    --popover-foreground: 210 40% 98%;
+    --secondary: 217 33% 22%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 22%;
+    --accent-foreground: 210 40% 98%;
+    --border: 217 33% 25%;
+    --input: 217 33% 25%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased transition-colors duration-300;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 30%),
+      radial-gradient(circle at bottom left, rgba(96, 165, 250, 0.08), transparent 24%);
+  }
+
+  .dark body {
+    background-image:
+      radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 30%),
+      radial-gradient(circle at bottom left, rgba(37, 99, 235, 0.12), transparent 22%);
+  }
+
+  img,
+  svg {
+    max-width: 100%;
+  }
+
+  ::selection {
+    background: rgba(59, 130, 246, 0.24);
+    color: inherit;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .page-shell {
+    @apply animate-fade-in;
+  }
+
+  .glass-panel {
+    @apply border border-white/10 bg-white/70 backdrop-blur-xl;
+  }
+
+  .theme-panel {
+    @apply border border-border bg-card/85 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.45)] backdrop-blur;
+  }
+
+  .premium-link {
+    @apply transition-colors duration-200 hover:text-foreground;
+  }
+
+  .interactive-card {
+    @apply transition duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_28px_90px_-48px_rgba(15,23,42,0.5)];
+  }
+}

@@ -1,0 +1,9 @@
+.next
+node_modules
+.env.local
+.env
+.env - Copy.example
+coverage
+dist
+*.log
+*.tsbuildinfo
