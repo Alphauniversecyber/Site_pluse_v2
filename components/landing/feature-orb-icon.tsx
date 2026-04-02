@@ -1,5 +1,3 @@
-import { BellRing, FileBarChart2, Gauge, LineChart, Search, ShieldCheck } from "lucide-react";
-
 import { cn } from "@/lib/utils";
 
 export function FeatureOrbIcon({
@@ -11,41 +9,41 @@ export function FeatureOrbIcon({
 }) {
   const iconMap = {
     scanning: {
-      icon: Gauge,
+      src: "https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/activity.svg",
       animation: "feature-icon-subtle-pulse"
     },
-    seo: {
-      icon: Search,
+    pdf: {
+      src: "https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/file-text.svg",
       animation: ""
     },
     accessibility: {
-      icon: ShieldCheck,
-      animation: ""
-    },
-    pdf: {
-      icon: FileBarChart2,
+      src: "https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/accessibility.svg",
       animation: ""
     },
     alerts: {
-      icon: BellRing,
-      animation: ""
+      src: "https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/bell.svg",
+      animation: "feature-icon-subtle-tilt"
     },
     trends: {
-      icon: LineChart,
+      src: "https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/bar-chart-2.svg",
       animation: "feature-icon-subtle-rise"
+    },
+    seo: {
+      src: "https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/smartphone.svg",
+      animation: ""
     }
   }[kind];
 
-  const Icon = iconMap.icon;
-
   return (
-    <span
-      className={cn(
-        "inline-flex items-center justify-center text-slate-200 transition duration-200 ease-out group-hover:scale-[1.05] group-hover:text-primary",
-        className
-      )}
-    >
-      <Icon className={cn("h-11 w-11", iconMap.animation)} strokeWidth={2.15} />
+    <span className={cn("feature-icon-shell", className)}>
+      <span
+        aria-hidden="true"
+        className={cn("feature-icon-glyph", iconMap.animation)}
+        style={{
+          WebkitMaskImage: `url(${iconMap.src})`,
+          maskImage: `url(${iconMap.src})`
+        }}
+      />
     </span>
   );
 }

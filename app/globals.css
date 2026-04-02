@@ -134,6 +134,51 @@
       0 0 0 1px rgba(96, 165, 250, 0.14),
       0 0 32px rgba(59, 130, 246, 0.12);
   }
+
+  .feature-card {
+    @apply border border-border bg-card/85 backdrop-blur transition-[transform,border-color,box-shadow] duration-300 ease-out;
+    box-shadow: 0 20px 60px -34px rgba(15, 23, 42, 0.35);
+  }
+
+  .feature-card:hover {
+    transform: translateY(-6px) scale(1.01);
+    border-color: rgba(59, 130, 246, 0.22);
+    box-shadow:
+      0 10px 30px rgba(59, 130, 246, 0.25),
+      0 22px 56px -34px rgba(15, 23, 42, 0.42);
+  }
+
+  .feature-icon-shell {
+    @apply relative inline-flex h-14 w-14 items-center justify-center rounded-full transition-[transform,background-color,border-color,box-shadow] duration-300 ease-out;
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+  }
+
+  .feature-card:hover .feature-icon-shell {
+    transform: scale(1.1);
+    background: rgba(59, 130, 246, 0.14);
+    border-color: rgba(59, 130, 246, 0.24);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+  }
+
+  .feature-icon-glyph {
+    display: block;
+    width: 30px;
+    height: 30px;
+    background-color: hsl(var(--foreground) / 0.82);
+    transition: transform 0.3s ease, background-color 0.3s ease;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+  }
+
+  .feature-card:hover .feature-icon-glyph {
+    background-color: rgb(59 130 246);
+    transform: scale(1.05);
+  }
 }
 
 @layer utilities {
@@ -144,6 +189,11 @@
 
   .feature-icon-subtle-rise {
     animation: feature-icon-subtle-rise 5.2s ease-in-out infinite;
+    transform-origin: center;
+  }
+
+  .feature-icon-subtle-tilt {
+    animation: feature-icon-subtle-tilt 6s ease-in-out infinite;
     transform-origin: center;
   }
 }
@@ -165,5 +215,15 @@
   }
   50% {
     transform: translateY(-2px);
+  }
+}
+
+@keyframes feature-icon-subtle-tilt {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(4deg);
   }
 }

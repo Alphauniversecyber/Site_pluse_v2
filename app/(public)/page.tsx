@@ -245,7 +245,7 @@ export default function LandingPage() {
           <h2 className="mt-4 font-display text-4xl font-semibold">Everything agencies need. Nothing they do not.</h2>
           <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {features.map((feature) => (
-              <Card key={feature.title} className="theme-panel group interactive-card border-border/80">
+              <Card key={feature.title} className="feature-card group border-border/80">
                 <CardHeader className="gap-5">
                   <FeatureOrbIcon kind={feature.kind} />
                   <CardTitle className="text-2xl">{feature.title}</CardTitle>
