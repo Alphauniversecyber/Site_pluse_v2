@@ -34,6 +34,36 @@ export default async function DashboardOverviewPage() {
       )
     : 0;
   const criticalSites = latestScans.filter((scan) => scan.performance_score < 50).length;
+  const snapshotStats = [
+    {
+      label: "Websites monitored",
+      value: websites?.length ?? 0,
+      icon: Globe2,
+      iconTone: "text-primary",
+      iconBg: "bg-primary/10"
+    },
+    {
+      label: "Average performance",
+      value: averagePerformance,
+      icon: Radar,
+      iconTone: "text-primary",
+      iconBg: "bg-primary/10"
+    },
+    {
+      label: "Scans this month",
+      value: scanCount ?? 0,
+      icon: LineChart,
+      iconTone: "text-primary",
+      iconBg: "bg-primary/10"
+    },
+    {
+      label: "Critical sites",
+      value: criticalSites,
+      icon: AlertTriangle,
+      iconTone: "text-rose-400",
+      iconBg: "bg-rose-500/10"
+    }
+  ] as const;
 
   return (
     <div className="space-y-8">
@@ -53,35 +83,24 @@ export default async function DashboardOverviewPage() {
           <CardHeader>
             <CardTitle>Agency health snapshot</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-6 md:grid-cols-4">
-            <div className="rounded-3xl border border-border bg-background p-5">
-              <div className="flex items-center gap-3 text-primary">
-                <Globe2 className="h-5 w-5" />
-                <span className="text-sm text-muted-foreground">Websites monitored</span>
-              </div>
-              <p className="mt-4 font-display text-4xl font-semibold">{websites?.length ?? 0}</p>
-            </div>
-            <div className="rounded-3xl border border-border bg-background p-5">
-              <div className="flex items-center gap-3 text-primary">
-                <Radar className="h-5 w-5" />
-                <span className="text-sm text-muted-foreground">Average performance</span>
-              </div>
-              <p className="mt-4 font-display text-4xl font-semibold">{averagePerformance}</p>
-            </div>
-            <div className="rounded-3xl border border-border bg-background p-5">
-              <div className="flex items-center gap-3 text-primary">
-                <LineChart className="h-5 w-5" />
-                <span className="text-sm text-muted-foreground">Scans this month</span>
-              </div>
-              <p className="mt-4 font-display text-4xl font-semibold">{scanCount ?? 0}</p>
-            </div>
-            <div className="rounded-3xl border border-border bg-background p-5">
-              <div className="flex items-center gap-3 text-rose-400">
-                <AlertTriangle className="h-5 w-5" />
-                <span className="text-sm text-muted-foreground">Critical sites</span>
-              </div>
-              <p className="mt-4 font-display text-4xl font-semibold">{criticalSites}</p>
-            </div>
+          <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {snapshotStats.map((stat) => {
+              const StatIcon = stat.icon;
+
+              return (
+                <div key={stat.label} className="flex min-h-[150px] flex-col rounded-3xl border border-border bg-background p-5">
+                  <div className="flex min-h-[52px] items-start gap-3">
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${stat.iconBg} ${stat.iconTone}`}>
+                      <StatIcon className="h-5 w-5" />
+                    </div>
+                    <span className="pt-1 text-sm leading-6 text-muted-foreground">{stat.label}</span>
+                  </div>
+                  <div className="mt-auto flex items-end pt-5">
+                    <p className="font-display text-4xl font-semibold leading-none">{stat.value}</p>
+                  </div>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -90,7 +109,7 @@ export default async function DashboardOverviewPage() {
             <CardTitle>Current score pulse</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
-            <ScoreRing label="Performance" score={averagePerformance} />
+            <ScoreRing label="Performance" score={averagePerformance} className="justify-center" />
             <div className="rounded-3xl border border-border bg-background p-6">
               <p className="text-sm text-muted-foreground">
                 {criticalSites
@@ -101,12 +120,14 @@ export default async function DashboardOverviewPage() {
                 {latestScans.slice(0, 4).map((scan) => {
                   const website = websites?.find((item) => item.id === scan.website_id);
                   return (
-                    <div key={scan.id} className="flex items-center justify-between rounded-2xl border border-border bg-card p-3">
-                      <div>
-                        <p className="font-medium">{website?.label ?? "Unknown website"}</p>
-                        <p className="text-xs text-muted-foreground">{website?.url}</p>
+                    <div key={scan.id} className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{website?.label ?? "Unknown website"}</p>
+                        <p className="truncate text-xs text-muted-foreground">{website?.url}</p>
                       </div>
-                      <span className="font-display text-2xl font-semibold">{scan.performance_score}</span>
+                      <span className="shrink-0 font-display text-2xl font-semibold leading-none">
+                        {scan.performance_score}
+                      </span>
                     </div>
                   );
                 })}

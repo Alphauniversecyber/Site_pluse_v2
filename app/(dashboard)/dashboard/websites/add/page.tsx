@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchJson } from "@/lib/api-client";
 import { websiteSchema } from "@/lib/validation";
+import type { Website } from "@/types";
 
 export default function AddWebsitePage() {
   const router = useRouter();
@@ -43,7 +44,7 @@ export default function AddWebsitePage() {
             onSubmit={form.handleSubmit(async (values: any) => {
               setSubmitting(true);
               try {
-                await fetchJson("/api/websites", {
+                await fetchJson<Website>("/api/websites", {
                   method: "POST",
                   body: JSON.stringify({
                     ...values,

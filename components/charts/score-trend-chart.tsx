@@ -19,18 +19,34 @@ export function ScoreTrendChart({ scans }: { scans: ScanResult[] }) {
     }));
 
   return (
-    <div className="h-[300px] w-full">
+    <div className="h-[220px] w-full sm:h-[260px] lg:h-[300px]">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
+        <LineChart
+          data={data}
+          margin={{
+            top: 8,
+            right: 10,
+            left: -24,
+            bottom: 0
+          }}
+        >
           <CartesianGrid stroke="rgba(148,163,184,0.14)" vertical={false} />
-          <XAxis dataKey="date" stroke="#94A3B8" tickLine={false} axisLine={false} />
-          <YAxis stroke="#94A3B8" tickLine={false} axisLine={false} domain={[0, 100]} />
+          <XAxis
+            dataKey="date"
+            stroke="#94A3B8"
+            tickLine={false}
+            axisLine={false}
+            minTickGap={18}
+            tick={{ fontSize: 11 }}
+          />
+          <YAxis stroke="#94A3B8" tickLine={false} axisLine={false} domain={[0, 100]} width={28} tick={{ fontSize: 11 }} />
           <Tooltip
             contentStyle={{
               background: "#0F172A",
               border: "1px solid #334155",
               borderRadius: "16px"
             }}
+            wrapperStyle={{ outline: "none" }}
           />
           <Line type="monotone" dataKey="performance" stroke="#3B82F6" strokeWidth={3} dot={false} />
           <Line type="monotone" dataKey="seo" stroke="#22C55E" strokeWidth={2} dot={false} />

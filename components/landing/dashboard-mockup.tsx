@@ -104,7 +104,7 @@ export function DashboardMockup() {
 
   return (
     <div
-      className="relative mx-auto w-full max-w-[340px] overflow-hidden rounded-[1.85rem] border border-blue-400/15 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.14),_transparent_42%),linear-gradient(180deg,_#091024,_#122661)] p-3 shadow-[0_24px_56px_-40px_rgba(37,99,235,0.35)] sm:max-w-[372px] sm:p-4 md:max-w-[390px] lg:h-[480px] lg:-translate-y-10 lg:translate-x-8"
+      className="relative mx-auto w-full max-w-[320px] max-h-[430px] overflow-hidden rounded-[1.85rem] border border-blue-400/15 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.14),_transparent_42%),linear-gradient(180deg,_#091024,_#122661)] p-2.5 shadow-[0_24px_56px_-40px_rgba(37,99,235,0.35)] sm:max-w-[372px] sm:max-h-none sm:p-4 md:max-w-[390px] lg:h-[480px] lg:-translate-y-10 lg:translate-x-8"
       onMouseMove={(event) => {
         if (reduceMotion) {
           return;
@@ -121,11 +121,11 @@ export function DashboardMockup() {
       }}
       onMouseLeave={() => setPointerOffset({ x: 0, y: 0 })}
     >
-      <div className="hero-glow-pulse absolute left-5 top-6 h-20 w-20 rounded-full bg-blue-500/12 blur-3xl sm:left-8 sm:h-28 sm:w-28" />
-      <div className="hero-glow-pulse absolute bottom-16 right-5 h-16 w-16 rounded-full bg-blue-400/12 blur-3xl sm:right-7 sm:h-24 sm:w-24" />
+      <div className="hero-glow-pulse absolute left-4 top-5 h-16 w-16 rounded-full bg-blue-500/12 blur-3xl sm:left-8 sm:h-28 sm:w-28" />
+      <div className="hero-glow-pulse absolute bottom-12 right-4 h-14 w-14 rounded-full bg-blue-400/12 blur-3xl sm:right-7 sm:h-24 sm:w-24" />
 
       <div
-        className="hero-device-float relative mx-auto w-full max-w-[148px] rounded-[1.85rem] border border-white/20 bg-slate-950 p-2 shadow-[0_24px_48px_-28px_rgba(15,23,42,0.92)] transition-transform duration-300 ease-out sm:max-w-[172px] sm:rounded-[2rem] md:max-w-[186px]"
+        className="hero-device-float relative mx-auto w-full max-w-[152px] rounded-[1.75rem] border border-white/20 bg-slate-950 p-2 shadow-[0_24px_48px_-28px_rgba(15,23,42,0.92)] transition-transform duration-300 ease-out sm:max-w-[172px] sm:rounded-[2rem] md:max-w-[186px]"
         style={
           reduceMotion
             ? undefined
@@ -134,7 +134,7 @@ export function DashboardMockup() {
               }
         }
       >
-        <div className="rounded-[1.9rem] border border-white/10 bg-[linear-gradient(180deg,_#101935,_#0c1228)] px-3.5 pb-3.5 pt-3 text-white sm:rounded-[2.2rem] sm:px-4 sm:pb-4 sm:pt-3.5 md:px-5 md:pb-5 md:pt-4">
+        <div className="rounded-[1.7rem] border border-white/10 bg-[linear-gradient(180deg,_#101935,_#0c1228)] px-3 pb-3 pt-2.5 text-white sm:rounded-[2.2rem] sm:px-4 sm:pb-4 sm:pt-3.5 md:px-5 md:pb-5 md:pt-4">
           <div className="mb-4 flex items-center justify-between px-1 text-xs text-slate-300">
             <span>9:41</span>
             <div className="rounded-full bg-black/80 px-5 py-1 text-[10px] text-blue-300">SitePulse</div>
@@ -238,7 +238,7 @@ export function DashboardMockup() {
         </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#122661] via-[#122661]/95 to-transparent lg:h-48" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-[#122661] via-[#122661]/95 to-transparent sm:h-32 lg:h-48" />
 
       <div className="absolute left-5 top-8 hidden w-36 rounded-[1.4rem] border border-white/10 bg-slate-950/80 p-3 backdrop-blur xl:block">
         <Badge variant="success">Live monitoring</Badge>

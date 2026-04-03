@@ -124,6 +124,20 @@ create table if not exists public.reports (
   created_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.report_ai_cache (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid not null references public.users (id) on delete cascade,
+  website_id uuid not null references public.websites (id) on delete cascade,
+  scan_id uuid not null references public.scan_results (id) on delete cascade,
+  cache_key text not null unique,
+  section text not null,
+  provider text not null check (provider in ('groq', 'gemini', 'template')),
+  payload jsonb not null default '{}'::jsonb,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
 create table if not exists public.scan_schedules (
   id uuid primary key default gen_random_uuid(),
   website_id uuid not null unique references public.websites (id) on delete cascade,
@@ -150,6 +164,8 @@ create index if not exists idx_scan_results_website_id on public.scan_results (w
 create index if not exists idx_scan_results_scanned_at on public.scan_results (scanned_at desc);
 create index if not exists idx_reports_website_id on public.reports (website_id);
 create index if not exists idx_reports_scan_id on public.reports (scan_id);
+create index if not exists idx_report_ai_cache_owner_expires on public.report_ai_cache (owner_user_id, expires_at desc);
+create index if not exists idx_report_ai_cache_scan_id on public.report_ai_cache (scan_id);
 create index if not exists idx_notifications_user_id_created_at on public.notifications (user_id, created_at desc);
 create index if not exists idx_team_members_owner on public.team_members (owner_user_id);
 
@@ -212,6 +228,11 @@ create trigger agency_branding_updated_at
 drop trigger if exists websites_updated_at on public.websites;
 create trigger websites_updated_at
   before update on public.websites
+  for each row execute procedure public.handle_updated_at();
+
+drop trigger if exists report_ai_cache_updated_at on public.report_ai_cache;
+create trigger report_ai_cache_updated_at
+  before update on public.report_ai_cache
   for each row execute procedure public.handle_updated_at();
 
 create or replace function public.user_can_access_owner(target_owner uuid)
@@ -281,6 +302,7 @@ alter table public.team_members enable row level security;
 alter table public.websites enable row level security;
 alter table public.scan_results enable row level security;
 alter table public.reports enable row level security;
+alter table public.report_ai_cache enable row level security;
 alter table public.scan_schedules enable row level security;
 alter table public.notifications enable row level security;
 
@@ -369,6 +391,17 @@ create policy "Owners can update reports"
   on public.reports for update
   using (public.user_can_access_owner(public.website_owner(website_id)))
   with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Users can view accessible report ai cache" on public.report_ai_cache;
+create policy "Users can view accessible report ai cache"
+  on public.report_ai_cache for select
+  using (public.user_can_access_owner(owner_user_id));
+
+drop policy if exists "Owners can manage report ai cache" on public.report_ai_cache;
+create policy "Owners can manage report ai cache"
+  on public.report_ai_cache for all
+  using (auth.uid() = owner_user_id)
+  with check (auth.uid() = owner_user_id);
 
 drop policy if exists "Users can view accessible schedules" on public.scan_schedules;
 create policy "Users can view accessible schedules"

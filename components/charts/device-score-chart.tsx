@@ -21,22 +21,32 @@ export function DeviceScoreChart({ scan }: { scan: ScanResult }) {
   ];
 
   return (
-    <div className="h-[300px] w-full">
+    <div className="h-[220px] w-full sm:h-[260px] lg:h-[300px]">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data}>
+        <BarChart
+          data={data}
+          margin={{
+            top: 8,
+            right: 8,
+            left: -22,
+            bottom: 0
+          }}
+          barCategoryGap="24%"
+        >
           <CartesianGrid stroke="rgba(148,163,184,0.14)" vertical={false} />
-          <XAxis dataKey="device" stroke="#94A3B8" tickLine={false} axisLine={false} />
-          <YAxis stroke="#94A3B8" tickLine={false} axisLine={false} domain={[0, 100]} />
+          <XAxis dataKey="device" stroke="#94A3B8" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
+          <YAxis stroke="#94A3B8" tickLine={false} axisLine={false} domain={[0, 100]} width={28} tick={{ fontSize: 11 }} />
           <Tooltip
             contentStyle={{
               background: "#0F172A",
               border: "1px solid #334155",
               borderRadius: "16px"
             }}
+            wrapperStyle={{ outline: "none" }}
           />
-          <Bar dataKey="performance" fill="#3B82F6" radius={[10, 10, 0, 0]} />
-          <Bar dataKey="accessibility" fill="#22C55E" radius={[10, 10, 0, 0]} />
-          <Bar dataKey="seo" fill="#F59E0B" radius={[10, 10, 0, 0]} />
+          <Bar dataKey="performance" fill="#3B82F6" radius={[10, 10, 0, 0]} maxBarSize={28} />
+          <Bar dataKey="accessibility" fill="#22C55E" radius={[10, 10, 0, 0]} maxBarSize={28} />
+          <Bar dataKey="seo" fill="#F59E0B" radius={[10, 10, 0, 0]} maxBarSize={28} />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -107,6 +107,20 @@ export interface Report {
   scan?: ScanResult;
 }
 
+export interface ReportAiCacheEntry {
+  id: string;
+  owner_user_id: string;
+  website_id: string;
+  scan_id: string;
+  cache_key: string;
+  section: string;
+  provider: "groq" | "gemini" | "template";
+  payload: Record<string, unknown>;
+  expires_at: string;
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface ScanSchedule {
   id: string;
   website_id: string;

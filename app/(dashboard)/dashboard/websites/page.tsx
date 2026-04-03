@@ -18,6 +18,7 @@ import type { Website } from "@/types";
 import { fetchJson } from "@/lib/api-client";
 import { getFriendlyScanFailureMessage } from "@/lib/scan-errors";
 import { useWebsites } from "@/hooks/useWebsites";
+import type { ScanResult } from "@/types";
 
 export default function WebsitesPage() {
   const { websites, loading, refetch } = useWebsites();
@@ -39,7 +40,7 @@ export default function WebsitesPage() {
     startTransition(async () => {
       setScanningWebsiteId(websiteId);
       try {
-        await fetchJson("/api/scan/run", {
+        await fetchJson<ScanResult>("/api/scan/run", {
           method: "POST",
           body: JSON.stringify({ websiteId })
         });

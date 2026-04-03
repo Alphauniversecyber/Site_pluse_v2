@@ -1,20 +1,25 @@
 import type { Metadata } from "next";
-import { Manrope, Space_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 
 import "@/app/globals.css";
 
+import { AnalyticsRoot } from "@/components/analytics/analytics-root";
 import { siteCopy } from "@/lib/copy";
 import { Providers } from "@/components/providers";
 import { themeScript } from "@/components/theme/theme-provider";
 
-const manrope = Manrope({
-  subsets: ["latin"],
-  variable: "--font-manrope"
+const manrope = localFont({
+  src: "./fonts/manrope-latin-wght-normal.woff2",
+  variable: "--font-manrope",
+  display: "swap",
+  weight: "200 800"
 });
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-space-grotesk"
+const spaceGrotesk = localFont({
+  src: "./fonts/space-grotesk-latin-wght-normal.woff2",
+  variable: "--font-space-grotesk",
+  display: "swap",
+  weight: "300 700"
 });
 
 export const metadata: Metadata = {
@@ -36,7 +41,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className={`${manrope.variable} ${spaceGrotesk.variable}`}>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <AnalyticsRoot />
+        </Providers>
       </body>
     </html>
   );

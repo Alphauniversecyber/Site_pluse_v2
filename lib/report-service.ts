@@ -1,6 +1,13 @@
 import "server-only";
 
-import type { AgencyBranding, Report, ScanResult, UserProfile, Website } from "@/types";
+import type {
+  AgencyBranding,
+  Report,
+  ScanResult,
+  ScanSchedule,
+  UserProfile,
+  Website
+} from "@/types";
 import { generateScanPdf } from "@/lib/pdf";
 import { sendCriticalAlertEmail, sendReportEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -36,19 +43,32 @@ async function loadReportContext(websiteId: string, scanId: string) {
     .eq("user_id", profile.id)
     .maybeSingle<AgencyBranding>();
 
+  const { data: schedule } = await admin
+    .from("scan_schedules")
+    .select("*")
+    .eq("website_id", website.id)
+    .maybeSingle<ScanSchedule>();
+
   const { data: history } = await admin
     .from("scan_results")
     .select("*")
     .eq("website_id", website.id)
+    .lte("scanned_at", scan.scanned_at)
     .order("scanned_at", { ascending: false })
-    .limit(4);
+    .limit(8);
+
+  const historyRows = ((history ?? []) as ScanResult[]).reverse();
+  const previousScan =
+    historyRows.length > 1 ? historyRows[historyRows.length - 2] : null;
 
   return {
     website,
     scan,
     profile,
     branding: branding ?? null,
-    history: ((history ?? []) as ScanResult[]).reverse()
+    history: historyRows,
+    previousScan,
+    schedule: schedule ?? null
   };
 }
 
@@ -68,7 +88,7 @@ function getRecipients(profile: UserProfile, website: Website, explicitEmail?: s
 
 export async function generateAndStoreReport(input: { websiteId: string; scanId: string }) {
   const admin = createSupabaseAdminClient();
-  const { website, scan, profile, branding, history } = await loadReportContext(
+  const { website, scan, profile, branding, history, previousScan, schedule } = await loadReportContext(
     input.websiteId,
     input.scanId
   );
@@ -81,7 +101,10 @@ export async function generateAndStoreReport(input: { websiteId: string; scanId:
     website,
     scan,
     branding,
-    history
+    history,
+    previousScan,
+    profile,
+    schedule
   });
 
   const storagePath = buildStoragePath(
