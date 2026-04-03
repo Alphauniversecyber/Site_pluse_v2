@@ -52,7 +52,7 @@ export function DashboardShell({
     pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
 
   const navItems = (
-    <nav className="mt-8 space-y-2">
+    <nav className="mt-8 space-y-2.5">
       {navigation.map((item) => {
         const Icon = item.icon;
         const active = isActive(item.href);
@@ -62,13 +62,13 @@ export function DashboardShell({
             key={item.href}
             href={item.href}
             className={cn(
-              "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition",
+              "flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-sm font-medium transition duration-200",
               active
-                ? "bg-card text-foreground shadow-[inset_0_0_0_1px_rgba(59,130,246,0.2)]"
-                : "text-muted-foreground hover:bg-card hover:text-foreground"
+                ? "bg-card text-foreground shadow-[inset_0_0_0_1px_rgba(59,130,246,0.2),0_18px_44px_-30px_rgba(15,23,42,0.35)]"
+                : "text-muted-foreground hover:bg-card/90 hover:text-foreground"
             )}
           >
-            <Icon className={cn("h-5 w-5", active ? "text-primary" : "")} />
+            <Icon className={cn("h-5 w-5 shrink-0", active ? "text-primary" : "")} />
             {item.label}
           </Link>
         );
@@ -78,36 +78,45 @@ export function DashboardShell({
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
-      <div className="mx-auto flex min-h-screen max-w-[1600px]">
-        <aside className="hidden w-72 border-r border-border bg-card/70 px-6 py-8 backdrop-blur lg:block">
-          <Link href="/" className="inline-flex max-w-full flex-col items-start gap-2">
-            <SitePulseLogo variant="light" className="h-10 w-[170px] max-w-full dark:hidden" />
-            <SitePulseLogo variant="dark" className="hidden h-10 w-[170px] max-w-full dark:inline-flex" />
-            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Built for agencies</p>
-          </Link>
-
-          <div className="theme-panel mt-10 rounded-3xl p-4">
-            <div className="flex items-center gap-3">
-              <Avatar>
-                <AvatarImage src={profile.profile_photo_url ?? undefined} alt={profile.full_name ?? profile.email} />
-                <AvatarFallback>{initials}</AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-medium">{profile.full_name || profile.email}</p>
-                <p className="text-sm text-muted-foreground">{profile.email}</p>
-              </div>
+      <div className="mx-auto flex min-h-screen w-full max-w-[1780px]">
+        <aside className="hidden border-r border-border/80 bg-card/65 backdrop-blur lg:block lg:w-[292px] xl:w-[316px] 2xl:w-[336px]">
+          <div className="sticky top-0 flex h-screen flex-col px-7 py-8 xl:px-8 xl:py-9 2xl:px-10">
+            <div className="border-b border-border/70 pb-8">
+              <Link href="/" className="inline-flex max-w-full flex-col items-start gap-2.5">
+                <SitePulseLogo variant="light" className="h-10 w-[176px] max-w-full dark:hidden" />
+                <SitePulseLogo variant="dark" className="hidden h-10 w-[176px] max-w-full dark:inline-flex" />
+                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Built for agencies</p>
+              </Link>
             </div>
-            <Badge className="mt-4" variant={profile.plan === "agency" ? "success" : profile.plan === "starter" ? "default" : "outline"}>
-              {profile.plan} plan
-            </Badge>
-          </div>
 
-          {navItems}
+            <div className="theme-panel mt-8 rounded-[1.75rem] p-5">
+              <div className="flex items-center gap-3.5">
+                <Avatar className="h-11 w-11">
+                  <AvatarImage src={profile.profile_photo_url ?? undefined} alt={profile.full_name ?? profile.email} />
+                  <AvatarFallback>{initials}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{profile.full_name || profile.email}</p>
+                  <p className="truncate text-sm text-muted-foreground">{profile.email}</p>
+                </div>
+              </div>
+              <Badge className="mt-4" variant={profile.plan === "agency" ? "success" : profile.plan === "starter" ? "default" : "outline"}>
+                {profile.plan} plan
+              </Badge>
+            </div>
+
+            <div className="mt-8 flex-1">
+              <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                Workspace
+              </p>
+              {navItems}
+            </div>
+          </div>
         </aside>
 
-        <main className="flex-1">
-          <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-xl transition-colors duration-300">
-            <div className="flex items-center justify-between gap-4 px-4 py-4 md:px-6 lg:px-8">
+        <main className="min-w-0 flex-1">
+          <header className="sticky top-0 z-30 border-b border-border/80 bg-background/80 backdrop-blur-xl transition-colors duration-300">
+            <div className="mx-auto flex w-full max-w-[1360px] items-center justify-between gap-4 px-4 py-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12">
               <div className="flex min-w-0 items-center gap-3">
                 <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
                   <SheetTrigger asChild>
@@ -163,7 +172,7 @@ export function DashboardShell({
                   <SitePulseLogo variant="dark" className="hidden h-9 w-[144px] max-w-full dark:inline-flex" />
                 </Link>
 
-                <div className="hidden lg:block">
+                <div className="hidden min-w-0 lg:block">
                   <p className="text-xs uppercase tracking-[0.24em] text-primary">Agency monitoring</p>
                   <p className="text-sm text-muted-foreground">Know when client sites break before they call.</p>
                 </div>
@@ -178,7 +187,9 @@ export function DashboardShell({
               </div>
             </div>
           </header>
-          <div className="page-shell px-4 py-6 md:px-6 md:py-8 lg:px-8">{children}</div>
+          <div className="page-shell mx-auto w-full max-w-[1360px] px-4 py-6 md:px-6 md:py-8 lg:px-8 xl:px-10 xl:py-10 2xl:px-12">
+            {children}
+          </div>
         </main>
       </div>
     </div>

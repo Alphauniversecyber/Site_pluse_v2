@@ -5,7 +5,7 @@ import { reportSendSchema } from "@/lib/validation";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const { supabase, errorResponse } = await requireApiUser();
+  const { supabase, user, errorResponse } = await requireApiUser();
   if (errorResponse) {
     return errorResponse;
   }
@@ -28,12 +28,35 @@ export async function POST(request: Request) {
   }
 
   try {
+    console.info("[api:reports/send] request", {
+      reportId: parsed.data.reportId,
+      requestedBy: user?.id,
+      overrideEmail: parsed.data.email ?? null
+    });
+
     const result = await sendStoredReportEmail({
       reportId: parsed.data.reportId,
       email: parsed.data.email
     });
+
+    console.info("[api:reports/send] success", {
+      reportId: parsed.data.reportId,
+      requestedBy: user?.id,
+      deliveries: result.deliveries.map((delivery) => ({
+        recipient: delivery.recipient,
+        messageId: delivery.messageId
+      }))
+    });
+
     return apiSuccess(result);
   } catch (error) {
+    console.error("[api:reports/send] error", {
+      reportId: parsed.data.reportId,
+      requestedBy: user?.id,
+      overrideEmail: parsed.data.email ?? null,
+      error: error instanceof Error ? error.message : "Unable to send report."
+    });
+
     return apiError(error instanceof Error ? error.message : "Unable to send report.", 500);
   }
 }

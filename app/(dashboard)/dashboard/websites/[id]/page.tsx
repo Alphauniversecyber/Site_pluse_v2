@@ -107,14 +107,18 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
           })
         });
 
-        await fetchJson("/api/reports/send", {
+        const result = await fetchJson<{ deliveries: Array<{ recipient: string; messageId: string }> }>("/api/reports/send", {
           method: "POST",
           body: JSON.stringify({
             reportId: report.id
           })
         });
 
-        toast.success("Report emailed.");
+        toast.success(
+          result.deliveries.length === 1
+            ? `Report emailed to ${result.deliveries[0]?.recipient}.`
+            : `Report emailed to ${result.deliveries.length} recipients.`
+        );
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to email report.");
       }
@@ -207,13 +211,13 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                   compact
                 />
                 <ScoreRing
-                  label="Access"
+                  label="Accessibility"
                   score={currentScan.accessibility_score}
                   delta={previousScan ? currentScan.accessibility_score - previousScan.accessibility_score : null}
                   compact
                 />
                 <ScoreRing
-                  label="Best"
+                  label="Best Practices"
                   score={currentScan.best_practices_score}
                   delta={previousScan ? currentScan.best_practices_score - previousScan.best_practices_score : null}
                   compact

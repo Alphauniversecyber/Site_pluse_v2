@@ -211,16 +211,45 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
   }
 
   const pdfBuffer = Buffer.from(await file.arrayBuffer());
+  const deliveries: Array<{
+    recipient: string;
+    messageId: string;
+    provider: "resend";
+  }> = [];
 
   for (const recipient of recipients) {
-    await sendReportEmail({
-      to: recipient,
-      website,
-      branding,
-      scan,
-      previousScan: (previousRows?.[0] as ScanResult | undefined) ?? null,
-      pdfBuffer
-    });
+    try {
+      const delivery = await sendReportEmail({
+        to: recipient,
+        website,
+        branding,
+        scan,
+        previousScan: (previousRows?.[0] as ScanResult | undefined) ?? null,
+        pdfBuffer
+      });
+
+      deliveries.push({
+        recipient,
+        messageId: delivery.messageId,
+        provider: delivery.provider
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown email delivery error.";
+
+      console.error("[reports:send] delivery_failed", {
+        reportId: report.id,
+        websiteId: website.id,
+        recipient,
+        deliveredRecipients: deliveries.map((item) => item.recipient),
+        error: message
+      });
+
+      throw new Error(
+        deliveries.length
+          ? `Report delivery failed for ${recipient} after ${deliveries.length} successful email(s). ${message}`
+          : `Report delivery failed for ${recipient}. ${message}`
+      );
+    }
   }
 
   const { data: updated, error } = await admin
@@ -245,11 +274,15 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
     body: `Weekly report sent to ${recipients.join(", ")}.`,
     severity: "low",
     metadata: {
-      reportId: report.id
+      reportId: report.id,
+      messageIds: deliveries.map((delivery) => delivery.messageId)
     }
   });
 
-  return updated as Report;
+  return {
+    report: updated as Report,
+    deliveries
+  };
 }
 
 function isDue(lastSentAt: string | null, frequency: UserProfile["email_report_frequency"]) {
@@ -337,11 +370,20 @@ export async function processDueEmailReports(limit = 20) {
         scanId: latestScan.id
       });
 
-      await sendStoredReportEmail({
-        reportId: report.id
-      });
+      try {
+        await sendStoredReportEmail({
+          reportId: report.id
+        });
 
-      sent.push(report.id);
+        sent.push(report.id);
+      } catch (error) {
+        console.error("[reports:cron] scheduled_delivery_failed", {
+          reportId: report.id,
+          websiteId: website.id,
+          userId: profile.id,
+          error: error instanceof Error ? error.message : "Unknown scheduled delivery error."
+        });
+      }
     }
   }
 

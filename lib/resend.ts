@@ -1,11 +1,21 @@
 import "server-only";
 
-import { Resend } from "resend";
+import { Resend, type CreateEmailOptions, type CreateEmailResponse } from "resend";
 
 import type { AgencyBranding, ScanResult, Website } from "@/types";
 import { formatDateTime, getBaseUrl } from "@/lib/utils";
 
 let resendClient: Resend | null = null;
+
+type EmailLogPayload = Record<string, unknown>;
+
+export type ConfirmedEmailDelivery = {
+  provider: "resend";
+  messageId: string;
+  to: string;
+  from: string;
+  subject: string;
+};
 
 function getResendClient() {
   if (!process.env.RESEND_API_KEY) {
@@ -17,6 +27,112 @@ function getResendClient() {
   }
 
   return resendClient;
+}
+
+function logEmailEvent(level: "info" | "error" | "warn", event: string, payload: EmailLogPayload) {
+  console[level](`[email:${event}]`, payload);
+}
+
+function getConfiguredFromEmail(kind: "report" | "alert") {
+  const configured =
+    (kind === "alert" ? process.env.ALERTS_FROM_EMAIL : undefined) ?? process.env.FROM_EMAIL;
+
+  if (!configured) {
+    throw new Error(
+      "Missing FROM_EMAIL. Configure a verified sender address in your environment before sending reports."
+    );
+  }
+
+  if (process.env.NODE_ENV === "production" && configured.toLowerCase().endsWith("@resend.dev")) {
+    throw new Error(
+      "FROM_EMAIL must use a verified sender domain in production. Update your Resend domain settings and Vercel environment variables."
+    );
+  }
+
+  return configured;
+}
+
+async function sendEmailWithConfirmation(input: {
+  kind: "report" | "alert";
+  to: string;
+  fromName: string;
+  subject: string;
+  html: string;
+  attachments?: CreateEmailOptions["attachments"];
+  metadata?: EmailLogPayload;
+}) {
+  const resend = getResendClient();
+  const fromEmail = getConfiguredFromEmail(input.kind);
+  const payload: CreateEmailOptions = {
+    from: `${input.fromName} <${fromEmail}>`,
+    to: input.to,
+    subject: input.subject,
+    html: input.html,
+    attachments: input.attachments
+  };
+
+  logEmailEvent("info", "request", {
+    kind: input.kind,
+    to: input.to,
+    from: fromEmail,
+    subject: input.subject,
+    attachments: input.attachments?.map((attachment) => attachment.filename) ?? [],
+    ...input.metadata
+  });
+
+  let response: CreateEmailResponse;
+
+  try {
+    response = await resend.emails.send(payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown email provider error.";
+
+    logEmailEvent("error", "exception", {
+      kind: input.kind,
+      to: input.to,
+      from: fromEmail,
+      subject: input.subject,
+      error: message,
+      ...input.metadata
+    });
+
+    throw new Error(`Unable to send email: ${message}`);
+  }
+
+  logEmailEvent("info", "response", {
+    kind: input.kind,
+    to: input.to,
+    from: fromEmail,
+    subject: input.subject,
+    data: response.data,
+    error: response.error,
+    ...input.metadata
+  });
+
+  if (response.error || !response.data?.id) {
+    const message =
+      response.error?.message ??
+      "Email provider did not return a message ID, so delivery could not be confirmed.";
+
+    logEmailEvent("error", "rejected", {
+      kind: input.kind,
+      to: input.to,
+      from: fromEmail,
+      subject: input.subject,
+      error: message,
+      ...input.metadata
+    });
+
+    throw new Error(`Unable to send email: ${message}`);
+  }
+
+  return {
+    provider: "resend" as const,
+    messageId: response.data.id,
+    to: input.to,
+    from: fromEmail,
+    subject: input.subject
+  };
 }
 
 function renderScoreSummary(scan: ScanResult) {
@@ -78,7 +194,6 @@ export async function sendReportEmail(input: {
   previousScan?: ScanResult | null;
   pdfBuffer: Buffer;
 }) {
-  const resend = getResendClient();
   const baseUrl = getBaseUrl();
   const issues = input.scan.issues.slice(0, 3);
   const fromName = input.branding?.email_from_name || input.branding?.agency_name || "SitePulse";
@@ -89,11 +204,18 @@ export async function sendReportEmail(input: {
     input.previousScan !== null && input.previousScan !== undefined
       ? input.scan.performance_score - input.previousScan.performance_score
       : null;
+  const subject = `[${input.website.label}] Weekly Report - SitePulse`;
 
-  return resend.emails.send({
-    from: `${fromName} <reports@resend.dev>`,
+  return sendEmailWithConfirmation({
+    kind: "report",
     to: input.to,
-    subject: `[${input.website.label}] Weekly Report - SitePulse`,
+    fromName,
+    subject,
+    metadata: {
+      websiteId: input.website.id,
+      scanId: input.scan.id,
+      recipient: input.to
+    },
     html: `
       <div style="font-family: Arial, sans-serif; background: #F8FAFC; padding: 32px 20px;">
         <div style="max-width: 1080px; margin: 0 auto; border-radius: 26px; overflow: hidden; border: 1px solid #E2E8F0; background: #FFFFFF; box-shadow: 0 30px 80px -40px rgba(15, 23, 42, 0.45);">
@@ -178,13 +300,19 @@ export async function sendCriticalAlertEmail(input: {
   reason: string;
   branding?: AgencyBranding | null;
 }) {
-  const resend = getResendClient();
   const fromName = input.branding?.email_from_name || input.branding?.agency_name || "SitePulse Alerts";
+  const subject = `Alert: ${input.website.label} needs attention`;
 
-  return resend.emails.send({
-    from: `${fromName} <alerts@resend.dev>`,
+  return sendEmailWithConfirmation({
+    kind: "alert",
     to: input.to,
-    subject: `Alert: ${input.website.label} needs attention`,
+    fromName,
+    subject,
+    metadata: {
+      websiteId: input.website.id,
+      scanId: input.scan.id,
+      reason: input.reason
+    },
     html: `
       <div style="font-family: Arial, sans-serif; background: #FFF7ED; padding: 32px;">
         <div style="max-width: 680px; margin: 0 auto; background: white; border-radius: 24px; padding: 32px; border: 1px solid #FED7AA;">

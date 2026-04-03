@@ -76,13 +76,17 @@ export default function ReportsPage() {
   const sendReport = (id: string) =>
     startTransition(async () => {
       try {
-        await fetchJson("/api/reports/send", {
+        const result = await fetchJson<{ deliveries: Array<{ recipient: string; messageId: string }> }>("/api/reports/send", {
           method: "POST",
           body: JSON.stringify({
             reportId: id
           })
         });
-        toast.success("Report emailed.");
+        toast.success(
+          result.deliveries.length === 1
+            ? `Report emailed to ${result.deliveries[0]?.recipient}.`
+            : `Report emailed to ${result.deliveries.length} recipients.`
+        );
         await refetch();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to send report.");
