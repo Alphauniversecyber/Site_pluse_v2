@@ -1,11 +1,53 @@
 import "server-only";
 
+import { createRequire } from "node:module";
+
 import axeCore from "axe-core";
-import pa11y from "pa11y";
-import puppeteer from "puppeteer";
 
 import type { ScanIssue, ScanRecommendation } from "@/types";
 import { ACCESSIBILITY_SCANNER_UNAVAILABLE_MESSAGE, isAccessibilityScannerUnavailableError } from "@/lib/scan-errors";
+
+const nodeRequire = createRequire(import.meta.url);
+
+type Pa11yRunner = (
+  url: string,
+  options: Record<string, unknown>
+) => Promise<{
+  issues: any[];
+}>;
+
+type PuppeteerModule = {
+  launch: (options: Record<string, unknown>) => Promise<any>;
+};
+
+let pa11yRunner: Pa11yRunner | null = null;
+let puppeteerModule: PuppeteerModule | null = null;
+
+function requireRuntimeDefault<T>(specifier: string): T {
+  const loaded = nodeRequire(specifier) as T | { default?: T };
+
+  if (loaded && typeof loaded === "object" && "default" in loaded && loaded.default) {
+    return loaded.default;
+  }
+
+  return loaded as T;
+}
+
+function getPa11yRunner() {
+  if (!pa11yRunner) {
+    pa11yRunner = requireRuntimeDefault<Pa11yRunner>("pa11y");
+  }
+
+  return pa11yRunner;
+}
+
+function getPuppeteerModule() {
+  if (!puppeteerModule) {
+    puppeteerModule = requireRuntimeDefault<PuppeteerModule>("puppeteer");
+  }
+
+  return puppeteerModule;
+}
 
 function mapImpactToSeverity(impact?: string | null): "low" | "medium" | "high" {
   if (impact === "critical" || impact === "serious") {
@@ -20,9 +62,12 @@ function mapImpactToSeverity(impact?: string | null): "low" | "medium" | "high" 
 }
 
 export async function runAccessibilityScan(url: string) {
-  let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
+  let browser: Awaited<ReturnType<PuppeteerModule["launch"]>> | null = null;
 
   try {
+    const puppeteer = getPuppeteerModule();
+    const pa11y = getPa11yRunner();
+
     browser = await puppeteer.launch({
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"]

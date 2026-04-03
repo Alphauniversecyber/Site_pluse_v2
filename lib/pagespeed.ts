@@ -3,6 +3,7 @@ import { getFriendlyScanFailureMessage, isPageSpeedRateLimitError } from "@/lib/
 
 const PAGE_SPEED_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 const AUDIT_DOCS_LINK = "https://developer.chrome.com/docs/lighthouse/overview/";
+const PAGE_SPEED_TIMEOUT_MS = 90000;
 
 type PageSpeedAudit = {
   title?: string;
@@ -179,7 +180,7 @@ async function fetchStrategyReport(url: string, strategy: "mobile" | "desktop") 
       Accept: "application/json"
     },
     cache: "no-store",
-    signal: AbortSignal.timeout(45000)
+    signal: AbortSignal.timeout(PAGE_SPEED_TIMEOUT_MS)
   });
 
   if (!response.ok) {

@@ -25,7 +25,9 @@ const PAGE_SPEED_RATE_LIMIT_PATTERNS = [
 const ACCESSIBILITY_SCANNER_UNAVAILABLE_PATTERNS = [
   /could not find chrome/i,
   /puppeteer browsers install chrome/i,
-  /cache path is incorrectly configured/i
+  /cache path is incorrectly configured/i,
+  /ENOENT: no such file or directory.*vendor-chunks[\\/]+runner\.js/i,
+  /vendor-chunks[\\/]+runner\.js/i
 ];
 
 export function isPageSpeedRateLimitError(message?: string | null) {
