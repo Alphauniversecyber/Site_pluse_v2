@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PauseCircle, PlayCircle, Plus, Search, Trash2, WandSparkles } from "lucide-react";
+import { ArrowUpRight, PauseCircle, PlayCircle, Plus, Search, Trash2, WandSparkles } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -117,7 +117,10 @@ export default function WebsitesPage() {
       {loading ? (
         <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr))] min-[1800px]:[grid-template-columns:repeat(auto-fit,minmax(28rem,1fr))]">
           {Array.from({ length: 4 }).map((_, index) => (
-            <Card key={index} className="h-full">
+            <Card
+              key={index}
+              className="h-full overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.96),rgba(15,23,42,0.94))] shadow-[0_24px_80px_-42px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]"
+            >
               <CardContent className="flex h-full flex-col p-6">
                 <Skeleton className="h-6 w-1/2" />
                 <Skeleton className="mt-4 h-4 w-2/3" />
@@ -158,18 +161,24 @@ export default function WebsitesPage() {
                     };
 
             return (
-              <Card key={website.id} className="h-full">
-                <CardContent className="flex h-full flex-col p-6">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <Card
+                key={website.id}
+                className="h-full overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.96),rgba(15,23,42,0.94))] shadow-[0_24px_80px_-42px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]"
+              >
+                <CardContent className="relative flex h-full flex-col p-6">
+                  <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+                  <div className="pointer-events-none absolute right-0 top-0 h-24 w-40 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.1),transparent_72%)] blur-2xl" />
+
+                  <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-start">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-3">
                         <h2 className="min-w-0 break-words font-display text-2xl font-semibold">{website.label}</h2>
                         <Badge variant={website.is_active ? "success" : "outline"}>
                           {website.is_active ? "Active" : "Paused"}
                         </Badge>
                       </div>
                       <p className="mt-2 break-all text-sm text-muted-foreground">{website.url}</p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <div className="mt-3 flex flex-wrap items-center gap-2.5">
                         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                           {website.schedule?.frequency ?? "weekly"} scans
                         </p>
@@ -185,43 +194,52 @@ export default function WebsitesPage() {
                         ) : null}
                       </div>
                     </div>
-                    <div className="grid w-full grid-cols-2 gap-2 xl:w-[15rem]">
-                      <Button asChild variant="outline" size="sm" className="col-span-1">
-                        <Link href={`/dashboard/websites/${website.id}`}>View</Link>
+
+                    <div className="grid w-full shrink-0 gap-2.5 sm:grid-cols-2 xl:grid-cols-2">
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="h-11 rounded-2xl border-border/80 bg-background/75 px-4 text-sm shadow-[0_16px_44px_-34px_rgba(15,23,42,0.82)]"
+                      >
+                        <Link href={`/dashboard/websites/${website.id}`}>
+                          <ArrowUpRight className="h-4 w-4 shrink-0" />
+                          View
+                        </Link>
                       </Button>
                       <Button
-                        variant="outline"
-                        size="sm"
+                        variant="default"
                         onClick={() => runScan(website.id)}
                         disabled={isPending}
-                        className="col-span-1"
+                        className="h-11 rounded-2xl px-4 text-sm shadow-[0_22px_54px_-34px_rgba(59,130,246,0.82)]"
                       >
-                        <WandSparkles className="mr-2 h-4 w-4" />
+                        <WandSparkles className="h-4 w-4 shrink-0" />
                         {isScanning ? "Scanning..." : "Scan now"}
                       </Button>
                       <Button
-                        variant="ghost"
-                        size="sm"
+                        variant="outline"
                         onClick={() => updateWebsite(website.id, { is_active: !website.is_active })}
                         disabled={isPending}
-                        className="col-span-1"
+                        className="h-10 rounded-2xl border-border/70 bg-background/55 px-4 text-sm text-foreground/80 hover:text-foreground"
                       >
                         {website.is_active ? (
                           <>
-                            <PauseCircle className="mr-2 h-4 w-4" />
+                            <PauseCircle className="h-4 w-4 shrink-0" />
                             Pause
                           </>
                         ) : (
                           <>
-                            <PlayCircle className="mr-2 h-4 w-4" />
+                            <PlayCircle className="h-4 w-4 shrink-0" />
                             Resume
                           </>
                         )}
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm" className="col-span-1">
-                            <Trash2 className="mr-2 h-4 w-4" />
+                          <Button
+                            variant="outline"
+                            className="h-10 rounded-2xl border-border/70 bg-background/55 px-4 text-sm text-foreground/80 hover:text-foreground"
+                          >
+                            <Trash2 className="h-4 w-4 shrink-0" />
                             Delete
                           </Button>
                         </AlertDialogTrigger>
@@ -243,7 +261,7 @@ export default function WebsitesPage() {
                     </div>
                   </div>
 
-                  <div className="mt-6 grid flex-1 gap-4 min-[1700px]:grid-cols-[minmax(0,216px)_minmax(0,1fr)] min-[2200px]:grid-cols-[minmax(0,228px)_minmax(0,1fr)]">
+                  <div className="relative mt-6 grid flex-1 gap-4 min-[1700px]:grid-cols-[minmax(0,216px)_minmax(0,1fr)] min-[2200px]:grid-cols-[minmax(0,228px)_minmax(0,1fr)]">
                     {hasValidScan ? (
                       <ScoreRing
                         label="Health Score"
@@ -265,7 +283,7 @@ export default function WebsitesPage() {
                       </div>
                     )}
 
-                    <div className="rounded-3xl border border-border bg-background p-5">
+                    <div className="rounded-3xl border border-border/80 bg-background/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Latest scan</p>
                       {hasValidScan ? (
                         <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10.5rem),1fr))]">
@@ -303,7 +321,7 @@ export default function WebsitesPage() {
                                 disabled={isPending}
                                 className="shrink-0"
                               >
-                                <WandSparkles className="mr-2 h-4 w-4" />
+                                <WandSparkles className="h-4 w-4 shrink-0" />
                                 Retry scan
                               </Button>
                             ) : null}
