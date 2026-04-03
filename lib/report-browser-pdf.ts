@@ -510,7 +510,7 @@ function recommendationCardHtml(recommendation: PdfRecommendation) {
     <article class="surface-card recommendation-card">
       <div class="card-header-row">
         ${badgeHtml(recommendation.priority, priorityTone(recommendation.priority))}
-        ${metaChipHtml(`${difficultyLabel(recommendation.effort)} • ${recommendation.time}`)}
+        ${metaChipHtml(`${difficultyLabel(recommendation.effort)} - ${recommendation.time}`)}
       </div>
       <h3 class="card-title card-title--sm">${escapeHtml(recommendation.title)}</h3>
       <div class="detail-stack">
@@ -688,7 +688,7 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
     .slice(0, 3)
     .map((week) =>
       planBoxHtml(
-        `${cleanCopy(week.phase)} — ${cleanCopy(week.focus)}`,
+        `${cleanCopy(week.phase)} - ${cleanCopy(week.focus)}`,
         week.expected_result,
         week.tasks.slice(0, 3)
       )
