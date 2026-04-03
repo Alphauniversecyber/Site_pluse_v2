@@ -23,26 +23,16 @@ export function ThemeToggle({ className }: { className?: string }) {
 
   if (!mounted) {
     return (
-      <div
-        className={cn(
-          "inline-flex h-11 items-center rounded-full border border-border bg-card/80 p-1 shadow-sm",
-          className
-        )}
-      >
-        <div className="h-9 w-[118px] rounded-full bg-muted/70" />
+      <div className={cn("flex items-center gap-2", className)}>
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="h-10 w-10 rounded-2xl border border-border bg-card/60" />
+        ))}
       </div>
     );
   }
 
   return (
-    <div
-      className={cn(
-        "inline-flex items-center rounded-full border border-border bg-card/80 p-1 shadow-[0_10px_40px_-28px_rgba(15,23,42,0.5)] backdrop-blur",
-        className
-      )}
-      role="group"
-      aria-label="Theme selector"
-    >
+    <div className={cn("flex items-center gap-2", className)} role="group" aria-label="Theme selector">
       {options.map((option) => {
         const Icon = option.icon;
         const active = option.value === theme;
@@ -52,20 +42,19 @@ export function ThemeToggle({ className }: { className?: string }) {
             key={option.value}
             type="button"
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => setTheme(option.value)}
             className={cn(
-              "h-9 rounded-full px-3 text-xs font-medium tracking-[0.08em]",
-              active
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+              "header-action-button motion-safe:hover:scale-100 motion-safe:active:scale-100",
+              active && "text-primary"
             )}
+            data-state={active ? "active" : "inactive"}
             aria-pressed={active}
             aria-label={option.label}
             title={option.label}
           >
-            <Icon className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{option.value}</span>
+            <Icon className="h-[18px] w-[18px]" strokeWidth={1.9} />
+            <span className="sr-only">{option.value}</span>
           </Button>
         );
       })}

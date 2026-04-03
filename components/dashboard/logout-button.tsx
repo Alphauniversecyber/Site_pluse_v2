@@ -7,15 +7,29 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
 
-export function LogoutButton() {
+export function LogoutButton({
+  iconOnly = false,
+  className
+}: {
+  iconOnly?: boolean;
+  className?: string;
+} = {}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   return (
     <Button
       variant="ghost"
-      size="sm"
+      size={iconOnly ? "icon" : "sm"}
+      className={cn(
+        iconOnly &&
+          "header-action-button motion-safe:hover:scale-100 motion-safe:active:scale-100",
+        className
+      )}
+      aria-label={iconOnly ? "Logout" : undefined}
+      title={iconOnly ? "Logout" : undefined}
       onClick={() =>
         startTransition(async () => {
           const supabase = createSupabaseBrowserClient();
@@ -33,8 +47,8 @@ export function LogoutButton() {
       }
       disabled={isPending}
     >
-      <LogOut className="h-4 w-4" />
-      Logout
+      <LogOut className="h-[18px] w-[18px]" strokeWidth={1.9} />
+      {iconOnly ? <span className="sr-only">Logout</span> : "Logout"}
     </Button>
   );
 }

@@ -187,11 +187,21 @@ export function DashboardShell({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-2.5 lg:gap-3">
                 <ThemeToggle />
+                <Link
+                  href="/dashboard/settings"
+                  className={cn("header-action-button hidden sm:inline-flex", isActive("/dashboard/settings") && "text-primary")}
+                  data-state={isActive("/dashboard/settings") ? "active" : "inactive"}
+                  aria-label="Open settings"
+                  title="Open settings"
+                >
+                  <Settings className="h-[18px] w-[18px]" strokeWidth={1.9} />
+                  <span className="sr-only">Open settings</span>
+                </Link>
                 <NotificationBell notifications={notifications} />
                 <div className="hidden sm:block">
-                  <LogoutButton />
+                  <LogoutButton iconOnly />
                 </div>
               </div>
             </div>

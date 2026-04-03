@@ -83,20 +83,21 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
     <div ref={containerRef} className="relative">
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
         size="icon"
         className={cn(
-          "relative border-border/80 bg-background/80 backdrop-blur",
-          open && "border-primary/40 bg-primary/5 text-primary"
+          "header-action-button relative motion-safe:hover:scale-100 motion-safe:active:scale-100",
+          open && "text-primary"
         )}
+        data-state={open ? "active" : "inactive"}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label="Open notifications"
         onClick={() => setOpen((current) => !current)}
       >
-        <Bell className="h-4 w-4" />
+        <Bell className="h-[18px] w-[18px]" strokeWidth={1.9} />
         {items.length ? (
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500" />
+          <span className="absolute right-[0.52rem] top-[0.52rem] h-2.5 w-2.5 rounded-full bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.55)]" />
         ) : null}
       </Button>
 
