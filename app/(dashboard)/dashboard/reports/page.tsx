@@ -1,20 +1,90 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Download, Mail, Search } from "lucide-react";
+import { ArrowUpRight, Download, Mail, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { Report } from "@/types";
-import { fetchJson } from "@/lib/api-client";
 import { useWebsites } from "@/hooks/useWebsites";
+import { fetchJson } from "@/lib/api-client";
+import { cn, formatRelativeTime } from "@/lib/utils";
+import type { Report } from "@/types";
+
+function getReportTimestamp(report: Report) {
+  return report.created_at ?? report.sent_at ?? null;
+}
+
+function splitDateParts(value: string | null) {
+  if (!value) {
+    return {
+      date: "Not available",
+      time: "",
+      relative: ""
+    };
+  }
+
+  const parsed = new Date(value);
+
+  return {
+    date: new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    }).format(parsed),
+    time: new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit"
+    }).format(parsed),
+    relative: formatRelativeTime(parsed)
+  };
+}
+
+function reportStatusMeta(report: Report) {
+  if (report.sent_at) {
+    return {
+      label: "Sent",
+      helper: "Delivered to recipients",
+      variant: "success" as const
+    };
+  }
+
+  return {
+    label: "Generated",
+    helper: "Ready to email",
+    variant: "outline" as const
+  };
+}
+
+function MetricPill({
+  label,
+  value,
+  tone = "default"
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "primary";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border px-4 py-3",
+        tone === "primary"
+          ? "border-primary/20 bg-primary/[0.08] shadow-[0_18px_44px_-34px_rgba(59,130,246,0.45)]"
+          : "border-border/80 bg-background/60"
+      )}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{label}</p>
+      <p className="mt-2 font-display text-2xl font-semibold">{value}</p>
+    </div>
+  );
+}
 
 export default function ReportsPage() {
   const { websites } = useWebsites();
@@ -53,15 +123,31 @@ export default function ReportsPage() {
     void refetch();
   }, []);
 
-  const filteredReports = useMemo(
-    () =>
-      reports.filter((report) => {
-        const website = websiteLabels.get(report.website_id);
-        const haystack = `${website?.label ?? ""} ${website?.url ?? ""}`.toLowerCase();
-        return haystack.includes(search.toLowerCase());
-      }),
-    [reports, search, websiteLabels]
-  );
+  const filteredReports = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return reports.filter((report) => {
+      const website = websiteLabels.get(report.website_id);
+      const haystack = `${website?.label ?? ""} ${website?.url ?? ""}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [reports, search, websiteLabels]);
+
+  const summary = useMemo(() => {
+    const generatedOnly = reports.filter((report) => !report.sent_at).length;
+    const sent = reports.filter((report) => Boolean(report.sent_at)).length;
+    const latestActivity = [...reports]
+      .map((report) => getReportTimestamp(report))
+      .filter((value): value is string => Boolean(value))
+      .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] ?? null;
+
+    return {
+      total: reports.length,
+      generatedOnly,
+      sent,
+      latestActivity
+    };
+  }, [reports]);
 
   const downloadReport = (id: string) =>
     startTransition(async () => {
@@ -94,77 +180,138 @@ export default function ReportsPage() {
     });
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <PageHeader
         eyebrow="Reports"
         title="White-label report library"
-        description="Download or resend generated PDF reports for every client site you monitor."
+        description="Review generated client reports, resend them quickly, and keep delivery status easy to scan at a glance."
       />
 
-      <Card>
-        <CardContent className="p-5">
-          <div className="relative mb-5">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="pl-11"
-              placeholder="Search reports by website name or URL"
-            />
+      <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.96),rgba(15,23,42,0.96))] shadow-[0_28px_90px_-44px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]">
+        <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+        <div className="pointer-events-none absolute left-0 top-0 h-28 w-56 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.12),transparent_72%)] blur-2xl" />
+
+        <CardHeader className="relative gap-5 pb-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <CardTitle>Report queue</CardTitle>
+              <CardDescription>
+                Keep downloads, send actions, and delivery status aligned so the library feels clean even as it grows.
+              </CardDescription>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[520px]">
+              <MetricPill label="Total reports" value={`${summary.total}`} tone="primary" />
+              <MetricPill label="Ready to send" value={`${summary.generatedOnly}`} />
+              <MetricPill
+                label="Latest activity"
+                value={summary.latestActivity ? formatRelativeTime(summary.latestActivity) : "None yet"}
+              />
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="relative space-y-5 p-5 pt-0 sm:p-6 sm:pt-0">
+          <div className="rounded-[1.75rem] border border-border/80 bg-background/60 p-4 sm:p-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+              <div className="max-w-xl">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Library controls</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Search by website and manage report delivery without the row layout falling apart on wider or tighter desktop screens.
+                </p>
+              </div>
+
+              <div className="w-full xl:max-w-[34rem]">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    className="h-14 rounded-2xl border-border/80 bg-card/70 pl-11"
+                    placeholder="Search reports by website name or URL"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           {loading ? (
             <div className="space-y-4">
               {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="rounded-3xl border border-border bg-background/70 p-4">
+                <div key={index} className="rounded-[1.75rem] border border-border/80 bg-background/70 p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1 space-y-3">
-                      <Skeleton className="h-5 w-40" />
-                      <Skeleton className="h-4 w-64 max-w-full" />
+                      <Skeleton className="h-6 w-40" />
+                      <Skeleton className="h-4 w-72 max-w-full" />
                     </div>
-                    <Skeleton className="h-7 w-24 rounded-full" />
+                    <Skeleton className="h-10 w-36 rounded-2xl" />
                   </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-10 w-full rounded-xl" />
+                  <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.7fr_0.8fr]">
+                    {Array.from({ length: 5 }).map((_, metricIndex) => (
+                      <Skeleton key={metricIndex} className="h-16 w-full rounded-2xl" />
+                    ))}
                   </div>
                 </div>
               ))}
             </div>
           ) : filteredReports.length ? (
             <>
-              <div className="space-y-4 md:hidden">
+              <div className="space-y-4 lg:hidden">
                 {filteredReports.map((report) => {
                   const website = websiteLabels.get(report.website_id);
+                  const createdMeta = splitDateParts(getReportTimestamp(report));
+                  const sentMeta = splitDateParts(report.sent_at);
+                  const status = reportStatusMeta(report);
+
                   return (
-                    <div key={report.id} className="rounded-3xl border border-border bg-background p-4">
+                    <div key={report.id} className="rounded-[1.75rem] border border-border/80 bg-background p-4 sm:p-5">
                       <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium">{website?.label ?? report.website_id}</p>
-                          <p className="mt-1 break-all text-xs text-muted-foreground">{website?.url}</p>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-lg font-semibold">{website?.label ?? report.website_id}</p>
+                            <Badge variant={status.variant}>{status.label}</Badge>
+                          </div>
+                          <p className="mt-2 truncate text-sm text-muted-foreground" title={website?.url}>
+                            {website?.url ?? "No website URL available"}
+                          </p>
                         </div>
-                        <Badge variant={report.sent_at ? "success" : "outline"}>
-                          {report.sent_at ? "Sent" : "Generated"}
-                        </Badge>
+                        <div className="rounded-full border border-primary/20 bg-primary/10 p-2 text-primary">
+                          <Sparkles className="h-4 w-4" />
+                        </div>
                       </div>
-                      <div className="mt-4 space-y-2 text-sm text-muted-foreground">
-                        <p>
-                          Generated:{" "}
-                          {report.created_at
-                            ? new Date(report.created_at).toLocaleString()
-                            : new Date(report.sent_at ?? Date.now()).toLocaleString()}
-                        </p>
-                        <p>Last sent: {report.sent_at ? new Date(report.sent_at).toLocaleString() : "Not yet sent"}</p>
+
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-border/70 bg-card/60 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Generated</p>
+                          <p className="mt-2 font-medium">{createdMeta.date}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">{createdMeta.time}</p>
+                        </div>
+                        <div className="rounded-2xl border border-border/70 bg-card/60 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Last sent</p>
+                          <p className="mt-2 font-medium">{report.sent_at ? sentMeta.date : "Not yet sent"}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {report.sent_at ? sentMeta.time : status.helper}
+                          </p>
+                        </div>
                       </div>
-                      <div className="mt-4 grid grid-cols-2 gap-2">
-                        <Button variant="outline" size="sm" onClick={() => downloadReport(report.id)} disabled={isPending}>
-                          <Download className="mr-2 h-4 w-4" />
-                          Download
+
+                      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                        <Button
+                          variant="outline"
+                          className="h-11 justify-center rounded-2xl"
+                          onClick={() => downloadReport(report.id)}
+                          disabled={isPending}
+                        >
+                          <Download className="h-4 w-4" />
+                          Download PDF
                         </Button>
-                        <Button size="sm" onClick={() => sendReport(report.id)} disabled={isPending}>
-                          <Mail className="mr-2 h-4 w-4" />
-                          Send
+                        <Button
+                          className="h-11 justify-center rounded-2xl"
+                          onClick={() => sendReport(report.id)}
+                          disabled={isPending}
+                        >
+                          <Mail className="h-4 w-4" />
+                          Send report
                         </Button>
                       </div>
                     </div>
@@ -172,54 +319,114 @@ export default function ReportsPage() {
                 })}
               </div>
 
-              <div className="hidden md:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Website</TableHead>
-                      <TableHead>Generated</TableHead>
-                      <TableHead>Last sent</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredReports.map((report) => {
-                      const website = websiteLabels.get(report.website_id);
-                      return (
-                        <TableRow key={report.id}>
-                          <TableCell>
-                            <p className="font-medium">{website?.label ?? report.website_id}</p>
-                            <p className="text-xs text-muted-foreground">{website?.url}</p>
-                          </TableCell>
-                          <TableCell>
-                            {report.created_at
-                              ? new Date(report.created_at).toLocaleString()
-                              : new Date(report.sent_at ?? Date.now()).toLocaleString()}
-                          </TableCell>
-                          <TableCell>{report.sent_at ? new Date(report.sent_at).toLocaleString() : "Not yet sent"}</TableCell>
-                          <TableCell>
-                            <Badge variant={report.sent_at ? "success" : "outline"}>
-                              {report.sent_at ? "Sent" : "Generated"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-2">
-                              <Button variant="outline" size="sm" onClick={() => downloadReport(report.id)} disabled={isPending}>
-                                <Download className="mr-2 h-4 w-4" />
-                                Download
-                              </Button>
-                              <Button size="sm" onClick={() => sendReport(report.id)} disabled={isPending}>
-                                <Mail className="mr-2 h-4 w-4" />
-                                Send
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+              <div className="hidden lg:block">
+                <div className="overflow-hidden rounded-[1.75rem] border border-border/80 bg-background/70">
+                  <Table>
+                    <TableHeader className="bg-card/70">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-[28%]">Website</TableHead>
+                        <TableHead className="w-[18%]">Generated</TableHead>
+                        <TableHead className="w-[18%]">Last sent</TableHead>
+                        <TableHead className="w-[16%]">Status</TableHead>
+                        <TableHead className="w-[20%] text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredReports.map((report) => {
+                        const website = websiteLabels.get(report.website_id);
+                        const createdMeta = splitDateParts(getReportTimestamp(report));
+                        const sentMeta = splitDateParts(report.sent_at);
+                        const status = reportStatusMeta(report);
+
+                        return (
+                          <TableRow
+                            key={report.id}
+                            className="border-border/80 bg-background/60 transition-[background-color,border-color] duration-200 hover:bg-card/50"
+                          >
+                            <TableCell className="py-6">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10 text-primary shadow-[0_16px_34px_-26px_rgba(59,130,246,0.65)]">
+                                    <Sparkles className="h-4 w-4" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-lg font-semibold">{website?.label ?? report.website_id}</p>
+                                    <p className="mt-1 truncate text-sm text-muted-foreground" title={website?.url}>
+                                      {website?.url ?? "No website URL available"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </TableCell>
+
+                            <TableCell className="py-6">
+                              <div className="space-y-1">
+                                <p className="font-medium text-foreground">{createdMeta.date}</p>
+                                <p className="text-sm text-muted-foreground">{createdMeta.time}</p>
+                                {createdMeta.relative ? (
+                                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{createdMeta.relative}</p>
+                                ) : null}
+                              </div>
+                            </TableCell>
+
+                            <TableCell className="py-6">
+                              <div className="space-y-1">
+                                <p className="font-medium text-foreground">
+                                  {report.sent_at ? sentMeta.date : "Not yet sent"}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {report.sent_at ? sentMeta.time : status.helper}
+                                </p>
+                                {report.sent_at ? (
+                                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                                    {sentMeta.relative}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </TableCell>
+
+                            <TableCell className="py-6">
+                              <div className="space-y-2">
+                                <Badge variant={status.variant} className="min-w-[7.5rem] justify-center">
+                                  {status.label}
+                                </Badge>
+                                <p className="text-sm text-muted-foreground">{status.helper}</p>
+                              </div>
+                            </TableCell>
+
+                            <TableCell className="py-6">
+                              <div className="ml-auto flex w-[10.5rem] flex-col items-stretch gap-2">
+                                <Button
+                                  variant="outline"
+                                  className="h-11 justify-between rounded-2xl px-4"
+                                  onClick={() => downloadReport(report.id)}
+                                  disabled={isPending}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <Download className="h-4 w-4" />
+                                    Download
+                                  </span>
+                                  <ArrowUpRight className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  className="h-11 justify-between rounded-2xl px-4"
+                                  onClick={() => sendReport(report.id)}
+                                  disabled={isPending}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <Mail className="h-4 w-4" />
+                                    Send
+                                  </span>
+                                  <ArrowUpRight className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </>
           ) : (
