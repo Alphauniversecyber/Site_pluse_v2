@@ -21,10 +21,9 @@ const navigation = [
   { href: "/dashboard/websites", label: "Websites", icon: Globe2 },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
-  { href: "/dashboard/branding", label: "Branding", icon: Palette }
+  { href: "/dashboard/branding", label: "Branding", icon: Palette },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ] as const;
-
-const settingsItem = { href: "/dashboard/settings", label: "Settings", icon: Settings } as const;
 
 export function DashboardShell({
   children,
@@ -52,10 +51,7 @@ export function DashboardShell({
   const isActive = (href: string) =>
     pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
 
-  const renderNavLink = (
-    item: (typeof navigation)[number] | typeof settingsItem,
-    options?: { emphasized?: boolean }
-  ) => {
+  const renderNavLink = (item: (typeof navigation)[number]) => {
     const Icon = item.icon;
     const active = isActive(item.href);
 
@@ -67,8 +63,7 @@ export function DashboardShell({
           "flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-semibold leading-none tracking-[0.01em] transition duration-200 xl:px-5 xl:py-4 xl:text-base",
           active
             ? "bg-card text-foreground shadow-[inset_0_0_0_1px_rgba(59,130,246,0.2),0_18px_44px_-30px_rgba(15,23,42,0.35)]"
-            : "text-foreground/78 hover:bg-card/90 hover:text-foreground",
-          options?.emphasized && !active && "bg-card/55 text-foreground/88"
+            : "text-foreground/78 hover:bg-card/90 hover:text-foreground"
         )}
       >
         <Icon className={cn("h-[18px] w-[18px] shrink-0 xl:h-5 xl:w-5", active ? "text-primary" : "text-foreground/72")} />
@@ -78,26 +73,17 @@ export function DashboardShell({
   };
 
   const navItems = (
-    <nav className="space-y-2.5 xl:space-y-3">
+    <nav className="space-y-2 xl:space-y-2.5">
       {navigation.map((item) => renderNavLink(item))}
     </nav>
-  );
-
-  const settingsShortcut = (
-    <div className="border-t border-border/70 pt-4">
-      <p className="mb-3 px-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-foreground/50">
-        Preferences
-      </p>
-      {renderNavLink(settingsItem, { emphasized: true })}
-    </div>
   );
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
       <div className="mx-auto flex min-h-screen w-full max-w-[2720px] [--dashboard-content-max:1600px] [--dashboard-sidebar-width:324px] xl:[--dashboard-sidebar-width:356px] 2xl:[--dashboard-sidebar-width:384px] min-[1800px]:[--dashboard-content-max:1760px] min-[1800px]:[--dashboard-sidebar-width:408px] min-[2200px]:[--dashboard-content-max:1960px] min-[2200px]:[--dashboard-sidebar-width:432px]">
         <aside className="hidden border-r border-border/80 bg-card/65 backdrop-blur lg:block lg:w-[var(--dashboard-sidebar-width)]">
-          <div className="sticky top-0 flex h-screen flex-col px-7 py-7 xl:px-9 xl:py-8 2xl:px-10 min-[1800px]:px-11 min-[2200px]:px-12">
-            <div className="border-b border-border/70 pb-7">
+          <div className="sticky top-0 flex h-screen flex-col px-7 py-6 xl:px-9 xl:py-7 2xl:px-10 min-[1800px]:px-11 min-[2200px]:px-12">
+            <div className="border-b border-border/70 pb-6">
               <Link href="/" className="inline-flex max-w-full flex-col items-start gap-2.5">
                 <SitePulseLogo variant="light" className="h-10 w-[184px] max-w-full dark:hidden xl:w-[192px] min-[1800px]:w-[204px]" />
                 <SitePulseLogo variant="dark" className="hidden h-10 w-[184px] max-w-full dark:inline-flex xl:w-[192px] min-[1800px]:w-[204px]" />
@@ -105,7 +91,7 @@ export function DashboardShell({
               </Link>
             </div>
 
-            <div className="theme-panel mt-6 rounded-[1.75rem] p-5 xl:p-6 min-[1800px]:p-7">
+            <div className="theme-panel mt-5 rounded-[1.75rem] p-5 xl:p-6 min-[1800px]:p-7">
               <div className="flex items-start gap-4">
                 <Avatar className="h-11 w-11 shrink-0 xl:h-12 xl:w-12">
                   <AvatarImage src={profile.profile_photo_url ?? undefined} alt={profile.full_name ?? profile.email} />
@@ -128,15 +114,12 @@ export function DashboardShell({
               </Badge>
             </div>
 
-            <div className="mt-6 flex min-h-0 flex-1 flex-col">
+            <div className="mt-5 flex min-h-0 flex-1 flex-col">
               <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-foreground/56">
                 Workspace
               </p>
-              <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
+              <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
                 {navItems}
-              </div>
-              <div className="mt-4 shrink-0">
-                {settingsShortcut}
               </div>
             </div>
           </div>
@@ -189,10 +172,6 @@ export function DashboardShell({
 
                     <div className="mt-6">
                       {navItems}
-                    </div>
-
-                    <div className="mt-6">
-                      {settingsShortcut}
                     </div>
 
                     <div className="mt-8 border-t border-border pt-6">
