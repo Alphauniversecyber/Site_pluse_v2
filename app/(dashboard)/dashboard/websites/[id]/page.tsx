@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
@@ -464,19 +464,25 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
               </div>
 
               <div className="grid gap-4 sm:gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-                <Card>
-                  <CardHeader className="pb-3 sm:pb-6">
+                <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.94),rgba(15,23,42,0.92))] shadow-[0_28px_90px_-44px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.06)]">
+                  <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+                  <div className="pointer-events-none absolute left-0 top-0 h-28 w-48 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.12),transparent_72%)] blur-2xl" />
+                  <CardHeader className="relative pb-3 sm:pb-5">
                     <CardTitle>Score trend (last 30 days)</CardTitle>
+                    <CardDescription>Performance, SEO, and accessibility movement across recent scans.</CardDescription>
                   </CardHeader>
-                  <CardContent className="px-2 pb-3 pt-0 sm:px-6 sm:pb-6">
+                  <CardContent className="relative px-3 pb-3 pt-0 sm:px-6 sm:pb-6">
                     <ScoreTrendChart scans={data.scans.slice(0, 30)} />
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader className="pb-3 sm:pb-6">
+                <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.94),rgba(15,23,42,0.92))] shadow-[0_28px_90px_-44px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.06)]">
+                  <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+                  <div className="pointer-events-none absolute right-0 top-0 h-28 w-44 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_72%)] blur-2xl" />
+                  <CardHeader className="relative pb-3 sm:pb-5">
                     <CardTitle>Mobile vs desktop</CardTitle>
+                    <CardDescription>Compare how your main audit scores land across device types.</CardDescription>
                   </CardHeader>
-                  <CardContent className="px-2 pb-3 pt-0 sm:px-6 sm:pb-6">
+                  <CardContent className="relative px-3 pb-3 pt-0 sm:px-6 sm:pb-6">
                     <DeviceScoreChart scan={currentScan} />
                   </CardContent>
                 </Card>
