@@ -1687,11 +1687,7 @@ export async function renderAiReportPdf(input: Context) {
     : null;
   const html = buildHtml(input, narrative, logo);
 
-  const { default: puppeteer } = await import("puppeteer");
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"]
-  });
+  const browser = await launchPdfBrowser();
 
   try {
     const page = await browser.newPage();
@@ -1709,4 +1705,43 @@ export async function renderAiReportPdf(input: Context) {
   } finally {
     await browser.close();
   }
+}
+
+async function launchPdfBrowser() {
+  const launchArgs = ["--no-sandbox", "--disable-setuid-sandbox"];
+  const useServerlessChromium =
+    process.env.VERCEL === "1" ||
+    process.env.VERCEL === "true" ||
+    Boolean(process.env.AWS_REGION) ||
+    process.platform === "linux";
+
+  if (useServerlessChromium) {
+    const [{ default: chromium }, { default: puppeteerCore }] = await Promise.all([
+      import("@sparticuz/chromium"),
+      import("puppeteer-core")
+    ]);
+
+    return puppeteerCore.launch({
+      headless: true,
+      args: [...chromium.args, ...launchArgs],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || (await chromium.executablePath()),
+      defaultViewport: {
+        width: 1200,
+        height: 1697,
+        deviceScaleFactor: 2
+      }
+    });
+  }
+
+  const { default: puppeteer } = await import("puppeteer");
+
+  return puppeteer.launch({
+    headless: true,
+    args: launchArgs,
+    defaultViewport: {
+      width: 1200,
+      height: 1697,
+      deviceScaleFactor: 2
+    }
+  });
 }
