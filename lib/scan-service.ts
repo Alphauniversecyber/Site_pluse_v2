@@ -5,7 +5,7 @@ import { ensureBrokenLinkCheck } from "@/lib/broken-links";
 import { ensureCruxData } from "@/lib/crux";
 import { runAccessibilityScan } from "@/lib/pa11y";
 import { runPageSpeedScan } from "@/lib/pagespeed";
-import { sendCriticalAlertEmail } from "@/lib/resend";
+import { trySendCriticalAlertEmail } from "@/lib/resend";
 import {
   FRIENDLY_SCAN_FAILURE_MESSAGE,
   getFriendlyScanFailureMessage,
@@ -147,7 +147,7 @@ async function maybeSendSslAlert(input: {
   });
 
   if (input.profile.email_notifications_enabled) {
-    await sendCriticalAlertEmail({
+    await trySendCriticalAlertEmail({
       to: input.profile.email,
       website: input.website,
       scan: input.scan,
@@ -378,7 +378,7 @@ export async function executeWebsiteScan(websiteId: string) {
     });
 
     if (profile.email_notifications_enabled) {
-      await sendCriticalAlertEmail({
+      await trySendCriticalAlertEmail({
         to: profile.email,
         website,
         scan: currentScan,
@@ -406,7 +406,7 @@ export async function executeWebsiteScan(websiteId: string) {
       });
 
       if (profile.email_notifications_enabled) {
-        await sendCriticalAlertEmail({
+        await trySendCriticalAlertEmail({
           to: profile.email,
           website,
           scan: currentScan,
@@ -432,7 +432,7 @@ export async function executeWebsiteScan(websiteId: string) {
       });
 
       if (profile.email_notifications_enabled) {
-        await sendCriticalAlertEmail({
+        await trySendCriticalAlertEmail({
           to: profile.email,
           website,
           scan: currentScan,

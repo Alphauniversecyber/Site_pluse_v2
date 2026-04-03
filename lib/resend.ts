@@ -332,3 +332,27 @@ export async function sendCriticalAlertEmail(input: {
     `
   });
 }
+
+export async function trySendCriticalAlertEmail(input: {
+  to: string;
+  website: Website;
+  scan: ScanResult;
+  reason: string;
+  branding?: AgencyBranding | null;
+}) {
+  try {
+    return await sendCriticalAlertEmail(input);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown alert delivery error.";
+
+    logEmailEvent("warn", "alert_skipped", {
+      to: input.to,
+      websiteId: input.website.id,
+      scanId: input.scan.id,
+      reason: input.reason,
+      error: message
+    });
+
+    return null;
+  }
+}

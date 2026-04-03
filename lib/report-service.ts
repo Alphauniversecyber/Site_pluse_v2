@@ -17,7 +17,7 @@ import type {
 } from "@/types";
 import { generateScanPdf } from "@/lib/pdf";
 import { buildHealthScore } from "@/lib/health-score";
-import { sendCriticalAlertEmail, sendReportEmail } from "@/lib/resend";
+import { sendReportEmail, trySendCriticalAlertEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { PLAN_LIMITS, buildStoragePath } from "@/lib/utils";
 
@@ -455,7 +455,7 @@ export async function processDueEmailReports(limit = 20) {
       const latestScan = (latestRows?.[0] as ScanResult | undefined) ?? null;
       if (!latestScan || latestScan.scan_status === "failed") {
         if (profile.email_notifications_enabled) {
-          await sendCriticalAlertEmail({
+          await trySendCriticalAlertEmail({
             to: profile.email,
             website,
             scan:

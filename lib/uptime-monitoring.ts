@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { ScanResult, UptimeCheckRecord, UserProfile, Website } from "@/types";
-import { sendCriticalAlertEmail } from "@/lib/resend";
+import { trySendCriticalAlertEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const UPTIME_CACHE_HOURS = 24;
@@ -87,7 +87,7 @@ async function createUptimeAlert(input: {
       scanned_at: new Date().toISOString()
     } as ScanResult;
 
-    await sendCriticalAlertEmail({
+    await trySendCriticalAlertEmail({
       to: input.profile.email,
       website: input.website,
       scan: syntheticScan,
