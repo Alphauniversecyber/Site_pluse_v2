@@ -115,10 +115,10 @@ export default function WebsitesPage() {
       </Card>
 
       {loading ? (
-        <div className="grid gap-6 xl:grid-cols-2 min-[1800px]:grid-cols-3">
+        <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr))] min-[1800px]:[grid-template-columns:repeat(auto-fit,minmax(28rem,1fr))]">
           {Array.from({ length: 4 }).map((_, index) => (
-            <Card key={index}>
-              <CardContent className="p-6">
+            <Card key={index} className="h-full">
+              <CardContent className="flex h-full flex-col p-6">
                 <Skeleton className="h-6 w-1/2" />
                 <Skeleton className="mt-4 h-4 w-2/3" />
                 <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -130,7 +130,7 @@ export default function WebsitesPage() {
           ))}
         </div>
       ) : filtered.length ? (
-        <div className="grid gap-6 xl:grid-cols-2 min-[1800px]:grid-cols-3">
+        <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr))] min-[1800px]:[grid-template-columns:repeat(auto-fit,minmax(28rem,1fr))]">
           {filtered.map((website) => {
             const latest = website.latest_scan;
             const isScanning = scanningWebsiteId === website.id;
@@ -158,22 +158,22 @@ export default function WebsitesPage() {
                     };
 
             return (
-              <Card key={website.id}>
-                <CardContent className="p-6">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div>
+              <Card key={website.id} className="h-full">
+                <CardContent className="flex h-full flex-col p-6">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0">
                       <div className="flex items-center gap-3">
-                        <h2 className="font-display text-2xl font-semibold">{website.label}</h2>
+                        <h2 className="min-w-0 break-words font-display text-2xl font-semibold">{website.label}</h2>
                         <Badge variant={website.is_active ? "success" : "outline"}>
                           {website.is_active ? "Active" : "Paused"}
                         </Badge>
                       </div>
-                      <p className="mt-2 text-sm text-muted-foreground">{website.url}</p>
+                      <p className="mt-2 break-all text-sm text-muted-foreground">{website.url}</p>
                       <p className="mt-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
                         {website.schedule?.frequency ?? "weekly"} scans
                       </p>
                     </div>
-                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+                    <div className="grid w-full grid-cols-2 gap-2 xl:w-[15rem]">
                       <Button asChild variant="outline" size="sm" className="col-span-1">
                         <Link href={`/dashboard/websites/${website.id}`}>View</Link>
                       </Button>
@@ -231,7 +231,7 @@ export default function WebsitesPage() {
                     </div>
                   </div>
 
-                  <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,220px)_minmax(0,1fr)] min-[1800px]:grid-cols-[minmax(0,236px)_minmax(0,1fr)]">
+                  <div className="mt-6 grid flex-1 gap-4 min-[1700px]:grid-cols-[minmax(0,216px)_minmax(0,1fr)] min-[2200px]:grid-cols-[minmax(0,228px)_minmax(0,1fr)]">
                     {hasValidScan ? (
                       <ScoreRing
                         label="Performance"
@@ -251,17 +251,23 @@ export default function WebsitesPage() {
                     <div className="rounded-3xl border border-border bg-background p-5">
                       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Latest scan</p>
                       {hasValidScan ? (
-                        <div className="mt-4 grid gap-3 min-[440px]:grid-cols-2">
+                        <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10.5rem),1fr))]">
                           {[
-                            { label: "SEO", value: latest?.seo_score ?? 0 },
-                            { label: "Accessibility", value: latest?.accessibility_score ?? 0 },
-                            { label: "Best Practices", value: latest?.best_practices_score ?? 0 },
+                            { label: "SEO", shortLabel: "SEO", value: latest?.seo_score ?? 0 },
+                            { label: "Accessibility", shortLabel: "Access.", value: latest?.accessibility_score ?? 0 },
+                            { label: "Best Practices", shortLabel: "Best Prac.", value: latest?.best_practices_score ?? 0 },
                             {
                               label: "Accessibility violations",
+                              shortLabel: "A11y Issues",
                               value: latest?.accessibility_violations?.length ?? 0
                             }
                           ].map((metric) => (
-                            <MetricTile key={metric.label} label={metric.label} value={metric.value} />
+                            <MetricTile
+                              key={metric.label}
+                              label={metric.label}
+                              shortLabel={metric.shortLabel}
+                              value={metric.value}
+                            />
                           ))}
                         </div>
                       ) : (

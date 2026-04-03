@@ -52,7 +52,7 @@ export function DashboardShell({
     pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
 
   const navItems = (
-    <nav className="mt-8 space-y-2.5 xl:space-y-3">
+    <nav className="mt-8 space-y-2.5 xl:space-y-3.5">
       {navigation.map((item) => {
         const Icon = item.icon;
         const active = isActive(item.href);
@@ -62,13 +62,13 @@ export function DashboardShell({
             key={item.href}
             href={item.href}
             className={cn(
-              "flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-sm font-medium transition duration-200 xl:px-5 xl:py-4",
+              "flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-semibold leading-none tracking-[0.01em] transition duration-200 xl:px-5 xl:py-4 xl:text-base",
               active
                 ? "bg-card text-foreground shadow-[inset_0_0_0_1px_rgba(59,130,246,0.2),0_18px_44px_-30px_rgba(15,23,42,0.35)]"
-                : "text-muted-foreground hover:bg-card/90 hover:text-foreground"
+                : "text-foreground/78 hover:bg-card/90 hover:text-foreground"
             )}
           >
-            <Icon className={cn("h-5 w-5 shrink-0", active ? "text-primary" : "")} />
+            <Icon className={cn("h-[18px] w-[18px] shrink-0 xl:h-5 xl:w-5", active ? "text-primary" : "text-foreground/72")} />
             {item.label}
           </Link>
         );
@@ -78,7 +78,7 @@ export function DashboardShell({
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
-      <div className="mx-auto flex min-h-screen w-full max-w-[2560px] [--dashboard-content-max:1520px] [--dashboard-sidebar-width:312px] xl:[--dashboard-sidebar-width:344px] 2xl:[--dashboard-sidebar-width:368px] min-[1800px]:[--dashboard-content-max:1680px] min-[1800px]:[--dashboard-sidebar-width:392px] min-[2200px]:[--dashboard-content-max:1840px] min-[2200px]:[--dashboard-sidebar-width:420px]">
+      <div className="mx-auto flex min-h-screen w-full max-w-[2720px] [--dashboard-content-max:1600px] [--dashboard-sidebar-width:324px] xl:[--dashboard-sidebar-width:356px] 2xl:[--dashboard-sidebar-width:384px] min-[1800px]:[--dashboard-content-max:1760px] min-[1800px]:[--dashboard-sidebar-width:408px] min-[2200px]:[--dashboard-content-max:1960px] min-[2200px]:[--dashboard-sidebar-width:432px]">
         <aside className="hidden border-r border-border/80 bg-card/65 backdrop-blur lg:block lg:w-[var(--dashboard-sidebar-width)]">
           <div className="sticky top-0 flex h-screen flex-col px-7 py-8 xl:px-9 xl:py-10 2xl:px-10 min-[1800px]:px-11 min-[2200px]:px-12">
             <div className="border-b border-border/70 pb-8">
@@ -89,17 +89,20 @@ export function DashboardShell({
               </Link>
             </div>
 
-            <div className="theme-panel mt-8 rounded-[1.75rem] p-5 xl:p-6">
+            <div className="theme-panel mt-8 rounded-[1.75rem] p-5 xl:p-6 min-[1800px]:p-7">
               <div className="flex items-start gap-4">
                 <Avatar className="h-11 w-11 shrink-0 xl:h-12 xl:w-12">
                   <AvatarImage src={profile.profile_photo_url ?? undefined} alt={profile.full_name ?? profile.email} />
                   <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium leading-5 text-foreground break-words xl:text-[15px]">
+                  <p className="text-sm font-semibold leading-5 text-foreground break-words xl:text-[15px]">
                     {profile.full_name || profile.email}
                   </p>
-                  <p className="mt-1 text-sm leading-5 text-muted-foreground break-words [overflow-wrap:anywhere]">
+                  <p
+                    className="mt-1 truncate whitespace-nowrap text-sm leading-5 text-foreground/68"
+                    title={profile.email}
+                  >
                     {profile.email}
                   </p>
                 </div>
@@ -110,7 +113,7 @@ export function DashboardShell({
             </div>
 
             <div className="mt-8 flex-1">
-              <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+              <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-foreground/56">
                 Workspace
               </p>
               {navItems}
@@ -178,7 +181,7 @@ export function DashboardShell({
 
                 <div className="hidden min-w-0 lg:block">
                   <p className="text-xs uppercase tracking-[0.24em] text-primary">Agency monitoring</p>
-                  <p className="text-sm text-muted-foreground xl:text-[15px]">
+                  <p className="text-sm text-foreground/66 xl:text-[15px]">
                     Know when client sites break before they call.
                   </p>
                 </div>
