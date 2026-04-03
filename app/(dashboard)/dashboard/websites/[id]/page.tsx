@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { DeviceScoreChart } from "@/components/charts/device-score-chart";
 import { ScoreTrendChart } from "@/components/charts/score-trend-chart";
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { LinkHealthPanel } from "@/components/dashboard/link-health-panel";
 import { MetricTile } from "@/components/dashboard/metric-tile";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScoreRing } from "@/components/dashboard/score-ring";
@@ -18,7 +19,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type {
-  BrokenLinkRecord,
   CompetitorScanRecord,
   CruxDataRecord,
   PlainLanguageDifficulty,
@@ -260,6 +260,7 @@ function badgeVariantForSeverity(severity: Severity) {
 }
 
 function WebsiteHealthSignalsEmptyStateCard(input: {
+  websiteUrl: string;
   seoAudit: Website["seo_audit"] | null;
   brokenLinks: Website["broken_links"] | null;
   sslCheck: Website["ssl_check"] | null;
@@ -274,6 +275,7 @@ function WebsiteHealthSignalsEmptyStateCard(input: {
   healthScore: Website["health_score"] | null;
 }) {
   const {
+    websiteUrl,
     seoAudit,
     brokenLinks,
     sslCheck,
@@ -407,51 +409,7 @@ function WebsiteHealthSignalsEmptyStateCard(input: {
           </TabsContent>
 
           <TabsContent value="link-health" className="mt-5">
-            {brokenLinks ? (
-              <div className="space-y-4">
-                <div className="grid gap-4 xl:grid-cols-3">
-                  <div className="rounded-2xl border border-border bg-background p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total links</p>
-                    <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.total_links}</p>
-                  </div>
-                  <div className="rounded-2xl border border-border bg-background p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Broken links</p>
-                    <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.broken_links}</p>
-                  </div>
-                  <div className="rounded-2xl border border-border bg-background p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Redirect chains</p>
-                    <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.redirect_chains}</p>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-border bg-background p-4">
-                  <p className="text-sm font-semibold">Broken URLs</p>
-                  <div className="mt-4 space-y-3">
-                    {brokenLinks.broken_urls.length ? (
-                      brokenLinks.broken_urls.map((item, index) => (
-                        <div key={`${item.url}-${index}`} className="rounded-2xl border border-border/80 bg-card p-4">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <p className="min-w-0 flex-1 break-all font-medium">{item.url}</p>
-                            <Badge variant="danger">{item.status}</Badge>
-                          </div>
-                          {item.parent_url ? (
-                            <p className="mt-2 break-all text-sm leading-6 text-muted-foreground">
-                              Found on: {item.parent_url}
-                            </p>
-                          ) : null}
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No broken internal links were found in the latest crawl.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
-                Link health data will appear here after the weekly broken-link crawl runs.
-              </p>
-            )}
+            <LinkHealthPanel brokenLinks={brokenLinks ?? null} websiteUrl={websiteUrl} />
           </TabsContent>
 
           <TabsContent value="security" className="mt-5">
@@ -1418,51 +1376,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                 </TabsContent>
 
                 <TabsContent value="link-health" className="mt-5">
-                  {brokenLinks ? (
-                    <div className="space-y-4">
-                      <div className="grid gap-4 xl:grid-cols-3">
-                        <div className="rounded-2xl border border-border bg-background p-4">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total links</p>
-                          <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.total_links}</p>
-                        </div>
-                        <div className="rounded-2xl border border-border bg-background p-4">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Broken links</p>
-                          <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.broken_links}</p>
-                        </div>
-                        <div className="rounded-2xl border border-border bg-background p-4">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Redirect chains</p>
-                          <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.redirect_chains}</p>
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-border bg-background p-4">
-                        <p className="text-sm font-semibold">Broken URLs</p>
-                        <div className="mt-4 space-y-3">
-                          {brokenLinks.broken_urls.length ? (
-                            brokenLinks.broken_urls.map((item, index) => (
-                              <div key={`${item.url}-${index}`} className="rounded-2xl border border-border/80 bg-card p-4">
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                  <p className="min-w-0 flex-1 break-all font-medium">{item.url}</p>
-                                  <Badge variant="danger">{item.status}</Badge>
-                                </div>
-                                {item.parent_url ? (
-                                  <p className="mt-2 break-all text-sm leading-6 text-muted-foreground">
-                                    Found on: {item.parent_url}
-                                  </p>
-                                ) : null}
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No broken internal links were found in the latest crawl.</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
-                      Link health data will appear here after the weekly broken-link crawl runs.
-                    </p>
-                  )}
+                  <LinkHealthPanel brokenLinks={brokenLinks} websiteUrl={data.url} />
                 </TabsContent>
 
                 <TabsContent value="security" className="mt-5">
@@ -1681,6 +1595,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             description="Run the first scan to generate scores, accessibility checks, and your first white-label report."
           />
           <WebsiteHealthSignalsEmptyStateCard
+            websiteUrl={data.url}
             seoAudit={seoAudit}
             brokenLinks={brokenLinks}
             sslCheck={sslCheck}
