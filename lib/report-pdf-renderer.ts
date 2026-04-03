@@ -9,7 +9,11 @@ import type {
   UserProfile,
   Website
 } from "@/types";
-import { buildReportNarrative, type ReportIssueGroup } from "@/lib/report-ai";
+import {
+  buildReportNarrative,
+  type ReportIssueGroup,
+  type ReportRecommendationGroup
+} from "@/lib/report-ai";
 import { formatDateTime } from "@/lib/utils";
 
 const PAGE_WIDTH = 595;
@@ -553,7 +557,7 @@ function drawIssueCard(input: {
   const color = hexToRgb(input.color);
   const bodyWidth = input.width - 36;
   const lineHeight = 14;
-  const titleHeight = estimateTextHeight(input.doc, input.issue.ai.plain_english_title, bodyWidth, 16);
+  const titleHeight = estimateTextHeight(input.doc, input.issue.ai.title, bodyWidth, 16);
   const metaText = [
     input.issue.insight.relatedIssues.length > 1
       ? `${input.issue.insight.relatedIssues.length} related findings`
@@ -571,10 +575,9 @@ function drawIssueCard(input: {
   const metaHeight = metaText ? 13 : 0;
   const textHeights =
     estimateTextHeight(input.doc, `What's happening: ${input.issue.ai.what_is_happening}`, bodyWidth, lineHeight) +
-    estimateTextHeight(input.doc, `Why it matters: ${input.issue.ai.business_impact}`, bodyWidth, lineHeight) +
-    estimateTextHeight(input.doc, `Root cause: ${input.issue.ai.root_cause}`, bodyWidth, lineHeight) +
-    estimateTextHeight(input.doc, `How to fix it: ${input.issue.ai.how_to_fix}`, bodyWidth, lineHeight);
-  const height = Math.max(192, 86 + titleHeight + metaHeight + textHeights);
+    estimateTextHeight(input.doc, `Why it matters: ${input.issue.ai.why_it_matters}`, bodyWidth, lineHeight) +
+    estimateTextHeight(input.doc, `Root cause: ${input.issue.ai.root_cause}`, bodyWidth, lineHeight);
+  const height = Math.max(178, 82 + titleHeight + metaHeight + textHeights);
 
   drawRoundedCard(input.doc, input.x, input.y, input.width, height, [255, 255, 255]);
   drawPill(input.doc, input.issue.insight.priority, input.x + 18, input.y + 16, [
@@ -586,7 +589,7 @@ function drawIssueCard(input: {
   input.doc.setFont("helvetica", "bold");
   input.doc.setFontSize(14);
   input.doc.setTextColor(15, 23, 42);
-  const titleLines = splitLines(input.doc, input.issue.ai.plain_english_title, bodyWidth);
+  const titleLines = splitLines(input.doc, input.issue.ai.title, bodyWidth);
   input.doc.text(titleLines, input.x + 18, input.y + 52, {
     maxWidth: bodyWidth
   });
@@ -612,7 +615,7 @@ function drawIssueCard(input: {
   cursorY += 6;
   cursorY = drawMultilineText({
     doc: input.doc,
-    text: `Why it matters: ${input.issue.ai.business_impact}`,
+    text: `Why it matters: ${input.issue.ai.why_it_matters}`,
     x: input.x + 18,
     y: cursorY,
     width: bodyWidth,
@@ -631,47 +634,13 @@ function drawIssueCard(input: {
     lineHeight,
     color: [51, 65, 85]
   });
-  cursorY += 6;
-  cursorY = drawMultilineText({
-    doc: input.doc,
-    text: `How to fix it: ${input.issue.ai.how_to_fix}`,
-    x: input.x + 18,
-    y: cursorY,
-    width: bodyWidth,
-    fontSize: 10.5,
-    lineHeight,
-    color: [51, 65, 85]
-  });
-
-  const footerY = input.y + height - 28;
-  drawPill(input.doc, `${input.issue.ai.estimated_score_improvement}`, input.x + 18, footerY - 18, [
-    15,
-    23,
-    42
-  ]);
-  input.doc.setFont("helvetica", "bold");
-  input.doc.setFontSize(10);
-  input.doc.setTextColor(71, 85, 105);
-  const footerMeta = truncateSingleLine(
-    input.doc,
-    `${input.issue.ai.difficulty} | ${input.issue.ai.time_to_fix}`,
-    bodyWidth - 148,
-    10
-  );
-  input.doc.text(
-    footerMeta,
-    input.x + input.width - 18,
-    footerY - 2,
-    { align: "right" }
-  );
-
   return height;
 }
 
 function measureIssueCardHeight(doc: PdfDoc, width: number, issue: ReportIssueGroup["issues"][number]) {
   const bodyWidth = width - 36;
   const lineHeight = 14;
-  const titleHeight = estimateTextHeight(doc, issue.ai.plain_english_title, bodyWidth, 16);
+  const titleHeight = estimateTextHeight(doc, issue.ai.title, bodyWidth, 16);
   const metaText = [
     issue.insight.relatedIssues.length > 1 ? `${issue.insight.relatedIssues.length} related findings` : "Single finding",
     issue.insight.device === "both"
@@ -687,11 +656,101 @@ function measureIssueCardHeight(doc: PdfDoc, width: number, issue: ReportIssueGr
   const metaHeight = metaText ? 13 : 0;
   const textHeights =
     estimateTextHeight(doc, `What's happening: ${issue.ai.what_is_happening}`, bodyWidth, lineHeight) +
-    estimateTextHeight(doc, `Why it matters: ${issue.ai.business_impact}`, bodyWidth, lineHeight) +
-    estimateTextHeight(doc, `Root cause: ${issue.ai.root_cause}`, bodyWidth, lineHeight) +
-    estimateTextHeight(doc, `How to fix it: ${issue.ai.how_to_fix}`, bodyWidth, lineHeight);
+    estimateTextHeight(doc, `Why it matters: ${issue.ai.why_it_matters}`, bodyWidth, lineHeight) +
+    estimateTextHeight(doc, `Root cause: ${issue.ai.root_cause}`, bodyWidth, lineHeight);
 
-  return Math.max(192, 86 + titleHeight + metaHeight + textHeights);
+  return Math.max(178, 82 + titleHeight + metaHeight + textHeights);
+}
+
+function drawRecommendationCard(input: {
+  doc: PdfDoc;
+  x: number;
+  y: number;
+  width: number;
+  recommendation: ReportRecommendationGroup["recommendations"][number];
+  color: string;
+}) {
+  const color = hexToRgb(input.color);
+  const bodyWidth = input.width - 36;
+  const lineHeight = 14;
+  const titleHeight = estimateTextHeight(input.doc, input.recommendation.ai.title, bodyWidth - 120, 16);
+  const actionHeight = estimateTextHeight(
+    input.doc,
+    `Action: ${input.recommendation.ai.action}`,
+    bodyWidth,
+    lineHeight
+  );
+  const impactHeight = estimateTextHeight(
+    input.doc,
+    `Expected impact: ${input.recommendation.ai.expected_impact}`,
+    bodyWidth,
+    lineHeight
+  );
+  const height = Math.max(174, 92 + titleHeight + actionHeight + impactHeight);
+
+  drawRoundedCard(input.doc, input.x, input.y, input.width, height, [255, 255, 255]);
+  drawPill(input.doc, input.recommendation.ai.priority, input.x + 18, input.y + 16, [
+    color.r,
+    color.g,
+    color.b
+  ], [255, 255, 255], 112);
+  drawPill(input.doc, input.recommendation.ai.effort, input.x + input.width - 106, input.y + 16, [
+    15,
+    23,
+    42
+  ], [255, 255, 255], 88);
+
+  input.doc.setFont("helvetica", "bold");
+  input.doc.setFontSize(14);
+  input.doc.setTextColor(15, 23, 42);
+  const titleLines = splitLines(input.doc, input.recommendation.ai.title, bodyWidth);
+  input.doc.text(titleLines, input.x + 18, input.y + 56, {
+    maxWidth: bodyWidth
+  });
+
+  let cursorY = input.y + 56 + titleLines.length * 16 + 8;
+  cursorY = drawMultilineText({
+    doc: input.doc,
+    text: `Action: ${input.recommendation.ai.action}`,
+    x: input.x + 18,
+    y: cursorY,
+    width: bodyWidth,
+    fontSize: 10.5,
+    lineHeight,
+    color: [51, 65, 85]
+  });
+  cursorY += 8;
+  drawMultilineText({
+    doc: input.doc,
+    text: `Expected impact: ${input.recommendation.ai.expected_impact}`,
+    x: input.x + 18,
+    y: cursorY,
+    width: bodyWidth,
+    fontSize: 10.5,
+    lineHeight,
+    color: [51, 65, 85]
+  });
+
+  return height;
+}
+
+function measureRecommendationCardHeight(
+  doc: PdfDoc,
+  width: number,
+  recommendation: ReportRecommendationGroup["recommendations"][number]
+) {
+  const bodyWidth = width - 36;
+  const lineHeight = 14;
+  const titleHeight = estimateTextHeight(doc, recommendation.ai.title, bodyWidth - 120, 16);
+  const actionHeight = estimateTextHeight(doc, `Action: ${recommendation.ai.action}`, bodyWidth, lineHeight);
+  const impactHeight = estimateTextHeight(
+    doc,
+    `Expected impact: ${recommendation.ai.expected_impact}`,
+    bodyWidth,
+    lineHeight
+  );
+
+  return Math.max(174, 92 + titleHeight + actionHeight + impactHeight);
 }
 
 export async function renderAiReportPdf(input: PdfContext) {
@@ -759,7 +818,7 @@ export async function renderAiReportPdf(input: PdfContext) {
     });
   };
 
-  startNewPage("Issues In Plain English", "What matters most, why it matters, and what to fix next");
+  startNewPage("Issues Found", "Grouped and prioritized so your client sees the real root problems first");
 
   cursorY = 120;
   const issueCardWidth = CONTENT_WIDTH;
@@ -778,7 +837,7 @@ export async function renderAiReportPdf(input: PdfContext) {
   } else {
     for (const group of narrative.groupedIssues) {
       if (cursorY > PAGE_HEIGHT - 140) {
-        startNewPage("Issues In Plain English", "Continued");
+        startNewPage("Issues Found", "Continued");
         cursorY = 120;
       }
 
@@ -794,7 +853,7 @@ export async function renderAiReportPdf(input: PdfContext) {
         const estimatedHeight = measureIssueCardHeight(doc, issueCardWidth, issue);
 
         if (cursorY + estimatedHeight > PAGE_HEIGHT - 60) {
-          startNewPage("Issues In Plain English", `${group.title} continued`);
+          startNewPage("Issues Found", `${group.title} continued`);
           cursorY = 120;
         }
 
@@ -804,6 +863,60 @@ export async function renderAiReportPdf(input: PdfContext) {
           y: cursorY,
           width: issueCardWidth,
           issue,
+          color: group.color
+        });
+        cursorY += height + 14;
+      }
+
+      cursorY += 8;
+    }
+  }
+
+  startNewPage("Recommendations", "Clear next steps mapped directly from the grouped issues above");
+
+  cursorY = 120;
+  const recommendationCardWidth = CONTENT_WIDTH;
+  if (!narrative.groupedRecommendations.length) {
+    drawRoundedCard(doc, MARGIN, cursorY, recommendationCardWidth, 94, [255, 255, 255]);
+    drawMultilineText({
+      doc,
+      text: "No major recommendations were needed for this scan. Your website is already in a healthy position.",
+      x: MARGIN + 20,
+      y: cursorY + 34,
+      width: recommendationCardWidth - 40,
+      fontSize: 12,
+      lineHeight: 18,
+      color: [51, 65, 85]
+    });
+  } else {
+    for (const group of narrative.groupedRecommendations) {
+      if (cursorY > PAGE_HEIGHT - 140) {
+        startNewPage("Recommendations", "Continued");
+        cursorY = 120;
+      }
+
+      const groupColor = hexToRgb(group.color);
+      drawPill(doc, group.title, MARGIN, cursorY, [
+        groupColor.r,
+        groupColor.g,
+        groupColor.b
+      ]);
+      cursorY += 36;
+
+      for (const recommendation of group.recommendations) {
+        const estimatedHeight = measureRecommendationCardHeight(doc, recommendationCardWidth, recommendation);
+
+        if (cursorY + estimatedHeight > PAGE_HEIGHT - 60) {
+          startNewPage("Recommendations", `${group.title} continued`);
+          cursorY = 120;
+        }
+
+        const height = drawRecommendationCard({
+          doc,
+          x: MARGIN,
+          y: cursorY,
+          width: recommendationCardWidth,
+          recommendation,
           color: group.color
         });
         cursorY += height + 14;

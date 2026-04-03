@@ -106,14 +106,14 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-[1240px] space-y-8 xl:max-w-[1360px] 2xl:max-w-[1480px] min-[1800px]:max-w-[1600px] min-[2200px]:max-w-[1720px]">
       <PageHeader
         eyebrow="Settings"
         title="Account settings"
         description="Update profile details, report delivery defaults, password, notifications, and account access."
       />
 
-      <Card className="max-w-4xl">
+      <Card>
         <CardContent className="p-6">
           <form
             className="space-y-6"
@@ -308,7 +308,7 @@ export default function SettingsPage() {
       </Card>
 
       {user.plan === "agency" ? (
-        <Card className="max-w-4xl">
+        <Card>
           <CardContent className="space-y-6 p-6">
             <div>
               <h2 className="font-display text-2xl font-semibold">Team access</h2>

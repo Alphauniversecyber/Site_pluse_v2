@@ -99,7 +99,7 @@ export default function BrandingPage() {
         description="Upload your agency logo, set a brand color, customize report sender details, and preview how client-facing reports will look."
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
+      <div className="grid gap-6 xl:grid-cols-[1fr_0.92fr] min-[1800px]:grid-cols-[1.05fr_0.95fr]">
         <Card>
           <CardHeader>
             <CardTitle>Brand settings</CardTitle>

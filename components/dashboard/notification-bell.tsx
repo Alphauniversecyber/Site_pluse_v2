@@ -1,13 +1,15 @@
 "use client";
 
 import { Bell, BellRing, ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname } from "next/navigation";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { NotificationItem } from "@/types";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { fetchJson } from "@/lib/api-client";
 
 const severityVariant: Record<NotificationItem["severity"], "outline" | "warning" | "danger"> = {
   low: "outline",
@@ -18,11 +20,17 @@ const severityVariant: Record<NotificationItem["severity"], "outline" | "warning
 export function NotificationBell({ notifications }: { notifications: NotificationItem[] }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [items, setItems] = useState(notifications);
+  const [isPending, startTransition] = useTransition();
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    setItems(notifications);
+  }, [notifications]);
 
   useEffect(() => {
     if (!open) {
@@ -52,6 +60,25 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
     };
   }, [open]);
 
+  function clearNotifications() {
+    startTransition(async () => {
+      try {
+        const result = await fetchJson<{ cleared: number }>("/api/notifications", {
+          method: "DELETE"
+        });
+
+        setItems([]);
+        toast.success(
+          result.cleared > 0
+            ? `Cleared ${result.cleared} notification${result.cleared === 1 ? "" : "s"}.`
+            : "Notifications already clear."
+        );
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to clear notifications.");
+      }
+    });
+  }
+
   return (
     <div ref={containerRef} className="relative">
       <Button
@@ -68,7 +95,7 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
         onClick={() => setOpen((current) => !current)}
       >
         <Bell className="h-4 w-4" />
-        {notifications.length ? (
+        {items.length ? (
           <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500" />
         ) : null}
       </Button>
@@ -81,17 +108,29 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
             : "pointer-events-none -translate-y-2 opacity-0"
         )}
       >
-        <div className="flex items-center justify-between gap-3">
-          <div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             <p className="font-display text-lg font-semibold">Notifications</p>
             <p className="text-sm text-muted-foreground">Stay ahead of score drops and scan failures.</p>
           </div>
-          <Badge variant="outline">{notifications.length}</Badge>
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge variant="outline">{items.length}</Badge>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={clearNotifications}
+              disabled={!items.length || isPending}
+            >
+              {isPending ? "Clearing..." : "Clear all"}
+            </Button>
+          </div>
         </div>
 
-        {notifications.length ? (
+        {items.length ? (
           <div className="mt-4 space-y-3">
-            {notifications.slice(0, 6).map((item) => (
+            {items.slice(0, 6).map((item) => (
               <div
                 key={item.id}
                 className="rounded-[1.35rem] border border-border bg-background/90 p-4 transition duration-200 hover:border-primary/25 hover:bg-background"

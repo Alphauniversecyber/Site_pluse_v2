@@ -37,7 +37,7 @@ export default function AddWebsitePage() {
         description="Paste the URL, give it a name, and choose whether reports should go out automatically for this site."
       />
 
-      <Card className="max-w-3xl">
+      <Card className="max-w-[960px] xl:max-w-[1080px] 2xl:max-w-[1200px] min-[1800px]:max-w-[1320px]">
         <CardContent className="p-6">
           <form
             className="space-y-6"

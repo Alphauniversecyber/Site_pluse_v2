@@ -22,15 +22,27 @@ const SYSTEM_PROMPT =
   "You are a friendly web consultant writing a report for a business owner who is NOT technical. Use simple language. No jargon. Be encouraging but honest. Keep each explanation under 3 sentences. Focus on business impact not technical details.";
 const BANNED_CLIENT_TERMS = /\b(LCP|FID|CLS|TBT|TTFB|INP)\b/gi;
 
-const issueNarrativeSchema = z.object({
-  plain_english_title: z.string().min(1),
+const reportIssueSchema = z.object({
+  insight_id: z.string().min(1),
+  title: z.string().min(1),
+  priority: z.enum(["Critical", "High", "Medium", "Low"]),
   what_is_happening: z.string().min(1),
-  business_impact: z.string().min(1),
-  root_cause: z.string().min(1),
-  how_to_fix: z.string().min(1),
-  difficulty: z.enum(["Easy", "Medium", "Hard"]),
-  time_to_fix: z.string().min(1),
-  estimated_score_improvement: z.string().min(1)
+  why_it_matters: z.string().min(1),
+  root_cause: z.string().min(1)
+});
+
+const reportRecommendationSchema = z.object({
+  insight_id: z.string().min(1),
+  title: z.string().min(1),
+  action: z.string().min(1),
+  expected_impact: z.string().min(1),
+  effort: z.enum(["Easy", "Medium", "Hard"]),
+  priority: z.enum(["Critical", "High", "Medium", "Low"])
+});
+
+const reportSectionsSchema = z.object({
+  issues: z.array(reportIssueSchema),
+  recommendations: z.array(reportRecommendationSchema)
 });
 
 const overviewSchema = z.object({
@@ -97,16 +109,17 @@ const overviewSchema = z.object({
 });
 
 type OverviewNarrative = z.infer<typeof overviewSchema>;
-type IssueNarrative = z.infer<typeof issueNarrativeSchema>;
+export type ReportSectionIssue = z.infer<typeof reportIssueSchema>;
+export type ReportSectionRecommendation = z.infer<typeof reportRecommendationSchema>;
+type ReportSectionsPayload = z.infer<typeof reportSectionsSchema>;
 export type ReportPriority = "Critical" | "High" | "Medium" | "Low";
 
 type InsightCategory =
-  | "loading"
-  | "images"
-  | "server"
+  | "speed-assets"
+  | "speed-delivery"
   | "seo-snippets"
   | "seo-discovery"
-  | "accessibility-names"
+  | "accessibility-content"
   | "accessibility-structure"
   | "stability"
   | "trust"
@@ -121,7 +134,7 @@ export type ReportInsight = {
   severity: ScanIssue["severity"];
   priority: ReportPriority;
   scoreImpact: number;
-  difficulty: IssueNarrative["difficulty"];
+  difficulty: ReportSectionRecommendation["effort"];
   timeToFix: string;
   device: "mobile" | "desktop" | "both" | null;
   relatedIssues: ScanIssue[];
@@ -134,14 +147,27 @@ export type ReportIssueGroup = {
   emoji?: string;
   issues: Array<{
     insight: ReportInsight;
-    ai: IssueNarrative;
+    ai: ReportSectionIssue;
+  }>;
+};
+
+export type ReportRecommendationGroup = {
+  title: "Fix This Week" | "Fix This Month" | "Nice To Have";
+  color: string;
+  emoji?: string;
+  recommendations: Array<{
+    insight: ReportInsight;
+    ai: ReportSectionRecommendation;
   }>;
 };
 
 export type ReportNarrative = {
   provider: "groq" | "gemini" | "template";
   overview: OverviewNarrative;
+  issues: ReportIssueGroup["issues"];
+  recommendations: ReportRecommendationGroup["recommendations"];
   groupedIssues: ReportIssueGroup[];
+  groupedRecommendations: ReportRecommendationGroup[];
 };
 
 function sanitizeClientText(value: string) {
@@ -213,16 +239,34 @@ function sanitizeOverview(value: OverviewNarrative): OverviewNarrative {
   };
 }
 
-function sanitizeIssueNarrative(value: IssueNarrative): IssueNarrative {
+function sanitizeReportIssue(value: ReportSectionIssue): ReportSectionIssue {
   return {
-    plain_english_title: sanitizeClientText(value.plain_english_title),
+    insight_id: sanitizeClientText(value.insight_id),
+    title: sanitizeClientText(value.title),
+    priority: value.priority,
     what_is_happening: clampToThreeSentences(value.what_is_happening),
-    business_impact: clampToThreeSentences(value.business_impact),
-    root_cause: clampToThreeSentences(value.root_cause),
-    how_to_fix: clampToThreeSentences(value.how_to_fix),
-    difficulty: value.difficulty,
-    time_to_fix: sanitizeClientText(value.time_to_fix),
-    estimated_score_improvement: sanitizeClientText(value.estimated_score_improvement)
+    why_it_matters: clampToThreeSentences(value.why_it_matters),
+    root_cause: clampToThreeSentences(value.root_cause)
+  };
+}
+
+function sanitizeReportRecommendation(
+  value: ReportSectionRecommendation
+): ReportSectionRecommendation {
+  return {
+    insight_id: sanitizeClientText(value.insight_id),
+    title: sanitizeClientText(value.title),
+    action: clampToThreeSentences(value.action),
+    expected_impact: clampToThreeSentences(value.expected_impact),
+    effort: value.effort,
+    priority: value.priority
+  };
+}
+
+function sanitizeReportSections(value: ReportSectionsPayload): ReportSectionsPayload {
+  return {
+    issues: value.issues.map(sanitizeReportIssue),
+    recommendations: value.recommendations.map(sanitizeReportRecommendation)
   };
 }
 
@@ -570,27 +614,20 @@ const insightCategoryConfig: Record<
   {
     title: string;
     rootCause: string;
-    difficulty: IssueNarrative["difficulty"];
+    difficulty: ReportSectionRecommendation["effort"];
     timeToFix: string;
     fixHint: string;
   }
 > = {
-  loading: {
-    title: "Too many files are slowing down the first impression",
-    rootCause: "Important scripts and styles are loading before visitors can comfortably see the page.",
+  "speed-assets": {
+    title: "Page load speed is being held back by heavy page assets",
+    rootCause: "Large images, extra scripts, and blocking files are competing with your main content on first load.",
     difficulty: "Medium",
-    timeToFix: "1-2 hours",
-    fixHint: "Ask your web developer to defer non-critical scripts and remove code that is not needed on first load."
+    timeToFix: "1-3 hours",
+    fixHint: "Ask your developer to compress oversized images, defer non-essential scripts, and remove code that is not needed before the page becomes visible."
   },
-  images: {
-    title: "Heavy images are making pages work harder than they should",
-    rootCause: "Your images are larger than they need to be or are loading earlier than necessary.",
-    difficulty: "Easy",
-    timeToFix: "30-90 mins",
-    fixHint: "Compress oversized images, serve modern formats, and lazy-load images that sit below the fold."
-  },
-  server: {
-    title: "Your hosting and delivery setup is leaving speed on the table",
+  "speed-delivery": {
+    title: "Your delivery setup is leaving performance on the table",
     rootCause: "Caching, compression, or server response time is not as efficient as it could be.",
     difficulty: "Medium",
     timeToFix: "1-3 hours",
@@ -610,7 +647,7 @@ const insightCategoryConfig: Record<
     timeToFix: "1-2 hours",
     fixHint: "Ask your developer to review robots rules, crawlability, canonicals, and other indexing signals."
   },
-  "accessibility-names": {
+  "accessibility-content": {
     title: "Some visitors may struggle to understand important buttons, links, or images",
     rootCause: "A few elements are missing clear labels or descriptions for assistive technology.",
     difficulty: "Easy",
@@ -651,23 +688,15 @@ function getInsightCategory(input: Pick<ScanIssue, "title" | "description" | "me
   const haystack = normalizeForGrouping(`${input.title} ${input.description} ${input.metric ?? ""}`);
 
   if (
-    /(render blocking|unused javascript|unused css|third party|main thread|legacy javascript|reduce javascript|critical request|network dependency|minify)/.test(
+    /(render blocking|unused javascript|unused css|third party|main thread|legacy javascript|reduce javascript|critical request|network dependency|minify|properly size images|image|next gen|offscreen|lazy load|encode images|responsive images|modern image formats)/.test(
       haystack
     )
   ) {
-    return "loading";
-  }
-
-  if (
-    /(properly size images|image|next gen|offscreen|lazy load|encode images|responsive images|modern image formats)/.test(
-      haystack
-    )
-  ) {
-    return "images";
+    return "speed-assets";
   }
 
   if (/(cache|server response|response time|compression|text compression|cdn|delivery)/.test(haystack)) {
-    return "server";
+    return "speed-delivery";
   }
 
   if (/(meta description|title element|document title|duplicate meta|snippet)/.test(haystack)) {
@@ -679,7 +708,7 @@ function getInsightCategory(input: Pick<ScanIssue, "title" | "description" | "me
   }
 
   if (/(alt text|accessible name|label|aria|button name|link name|form label)/.test(haystack)) {
-    return "accessibility-names";
+    return "accessibility-content";
   }
 
   if (/(contrast|heading|landmark|language|focus|keyboard|semantic|tab order)/.test(haystack)) {
@@ -706,10 +735,35 @@ function getInsightGroupKey(issue: ScanIssue) {
   return category === "other" ? `${category}:${getFallbackFingerprint(issue)}` : category;
 }
 
+function dedupeIssues(issues: ScanIssue[]) {
+  const seen = new Set<string>();
+  return issues.filter((issue) => {
+    const key = [
+      getInsightGroupKey(issue),
+      normalizeForGrouping(issue.title),
+      normalizeForGrouping(issue.description),
+      issue.device ?? "all"
+    ].join("|");
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
 function dedupeRecommendations(recommendations: ScanRecommendation[]) {
   const seen = new Set<string>();
   return recommendations.filter((recommendation) => {
-    const key = normalizeForGrouping(recommendation.title);
+    const key = [
+      getRecommendationCategory(recommendation),
+      normalizeForGrouping(recommendation.title),
+      normalizeForGrouping(recommendation.description).split(" ").slice(0, 8).join(" "),
+      recommendation.device ?? "all"
+    ].join("|");
+
     if (!key || seen.has(key)) {
       return false;
     }
@@ -777,20 +831,58 @@ function getInsightDevice(issues: ScanIssue[]) {
   return devices[0] as "mobile" | "desktop";
 }
 
+function isCoreVitalsFailing(scan: ScanResult) {
+  const lcpFailing = typeof scan.lcp === "number" && scan.lcp > 2500;
+  const fidFailing = typeof scan.fid === "number" && scan.fid > 100;
+  const clsFailing = typeof scan.cls === "number" && scan.cls > 0.1;
+
+  return lcpFailing || fidFailing || clsFailing;
+}
+
 function getInsightPriority(input: {
+  category: InsightCategory;
   severity: ScanIssue["severity"];
   scoreImpact: number;
-  difficulty: IssueNarrative["difficulty"];
+  difficulty: ReportSectionRecommendation["effort"];
   issueCount: number;
+  scan: ScanResult;
 }) {
   const severityScore = input.severity === "high" ? 4 : input.severity === "medium" ? 2 : 1;
   const impactScore = input.scoreImpact >= 14 ? 4 : input.scoreImpact >= 9 ? 3 : input.scoreImpact >= 5 ? 2 : 1;
   const easeScore = input.difficulty === "Easy" ? 2 : input.difficulty === "Medium" ? 1 : 0;
   const countScore = input.issueCount >= 4 ? 2 : input.issueCount >= 2 ? 1 : 0;
   const total = severityScore + impactScore + easeScore + countScore;
+  const coreVitalsFailing = isCoreVitalsFailing(input.scan);
+  const isPerformanceInsight =
+    input.category === "speed-assets" || input.category === "speed-delivery" || input.category === "stability";
+  const isAccessibilityInsight =
+    input.category === "accessibility-content" || input.category === "accessibility-structure";
 
-  if (input.severity === "high" && input.scoreImpact >= 12) {
+  if (
+    (input.category === "speed-assets" &&
+      (coreVitalsFailing || input.scan.performance_score < 70 || input.scoreImpact >= 10)) ||
+    (input.category === "stability" &&
+      typeof input.scan.cls === "number" &&
+      input.scan.cls > 0.1 &&
+      input.scoreImpact >= 8)
+  ) {
     return "Critical" as const;
+  }
+
+  if (isPerformanceInsight) {
+    return input.scoreImpact >= 6 || input.severity !== "low" ? "High" as const : "Medium" as const;
+  }
+
+  if (isAccessibilityInsight) {
+    return input.severity === "high" || input.scoreImpact >= 6 ? "High" as const : "Medium" as const;
+  }
+
+  if (input.category === "seo-snippets" || input.category === "seo-discovery" || input.category === "trust") {
+    if (input.severity === "high" || input.scoreImpact >= 9) {
+      return "High" as const;
+    }
+
+    return "Medium" as const;
   }
 
   if (total >= 8) {
@@ -814,6 +906,7 @@ function buildTechnicalSummary(issues: ScanIssue[]) {
 }
 
 function buildReportInsights(scan: ScanResult) {
+  const dedupedIssues = dedupeIssues(scan.issues);
   const dedupedRecommendations = dedupeRecommendations(scan.recommendations);
   const grouped = new Map<
     string,
@@ -823,7 +916,7 @@ function buildReportInsights(scan: ScanResult) {
     }
   >();
 
-  for (const issue of scan.issues) {
+  for (const issue of dedupedIssues) {
     const key = getInsightGroupKey(issue);
     const group = grouped.get(key) ?? { issues: [], recommendations: [] };
     group.issues.push(issue);
@@ -859,10 +952,12 @@ function buildReportInsights(scan: ScanResult) {
             : "low";
       const scoreImpact = getInsightScoreImpact(value.issues, value.recommendations);
       const priority = getInsightPriority({
+        category,
         severity,
         scoreImpact,
         difficulty: config.difficulty,
-        issueCount: value.issues.length
+        issueCount: value.issues.length,
+        scan
       });
 
       return {
@@ -895,33 +990,78 @@ function buildReportInsights(scan: ScanResult) {
     });
 }
 
-function fallbackIssueNarrative(insight: ReportInsight): IssueNarrative {
+function getInsightFallbackRecommendationTitle(insight: ReportInsight) {
+  if (insight.relatedRecommendations[0]?.title) {
+    return sanitizeClientText(insight.relatedRecommendations[0].title);
+  }
+
+  const titles: Record<InsightCategory, string> = {
+    "speed-assets": "Reduce heavy assets on first load",
+    "speed-delivery": "Improve caching and delivery settings",
+    "seo-snippets": "Rewrite key search snippets",
+    "seo-discovery": "Fix crawl and indexing signals",
+    "accessibility-content": "Add clearer labels and image descriptions",
+    "accessibility-structure": "Improve page structure and contrast",
+    stability: "Stabilize layout during load",
+    trust: "Clean up technical trust issues",
+    other: "Resolve the highest-impact technical cleanup"
+  };
+
+  return titles[insight.category];
+}
+
+function getInsightFallbackImpact(insight: ReportInsight) {
+  const impacts: Record<InsightCategory, string> = {
+    "speed-assets": "This should improve load speed, reduce bounce risk, and help more visitors stay engaged.",
+    "speed-delivery": "This should improve perceived speed, repeat visits, and overall reliability.",
+    "seo-snippets": "This should improve search visibility and make more people want to click through.",
+    "seo-discovery": "This should help search engines understand and surface the right pages more consistently.",
+    "accessibility-content": "This should make key actions clearer for more visitors and reduce usability risk.",
+    "accessibility-structure": "This should make the experience easier to follow and more trustworthy for all users.",
+    stability: "This should make the page feel steadier and reduce accidental taps or frustration.",
+    trust: "This should strengthen technical reliability and reduce avoidable confidence issues.",
+    other: "This should reduce friction and make the website easier to trust and maintain."
+  };
+
+  return impacts[insight.category];
+}
+
+function fallbackReportIssue(insight: ReportInsight): ReportSectionIssue {
   return {
-    plain_english_title: insight.title,
+    insight_id: insight.id,
+    title: insight.title,
+    priority: insight.priority,
     what_is_happening:
       insight.technicalSummary ||
-      "Your website is running into a technical problem that is making the experience less smooth than it should be.",
-    business_impact:
+      "Your website is running into a technical issue that is making the experience feel less smooth than it should.",
+    why_it_matters:
       insight.priority === "Critical" || insight.priority === "High"
-        ? "This is likely affecting visitor trust, conversions, or search visibility right now."
+        ? "This is likely affecting visitor confidence, conversions, or search visibility right now."
         : insight.priority === "Medium"
-          ? "This is worth fixing soon because it can quietly chip away at performance and conversions over time."
+          ? "This is worth fixing soon because it can quietly chip away at performance and trust over time."
           : "This is not urgent, but cleaning it up will make your website stronger and easier to maintain.",
-    root_cause: insight.rootCause,
-    how_to_fix:
-      insight.relatedRecommendations[0]?.title
-        ? `${sanitizeClientText(insight.relatedRecommendations[0].title)}. ${insightCategoryConfig[insight.category].fixHint}`
+    root_cause: insight.rootCause
+  };
+}
+
+function fallbackReportRecommendation(insight: ReportInsight): ReportSectionRecommendation {
+  return {
+    insight_id: insight.id,
+    title: getInsightFallbackRecommendationTitle(insight),
+    action:
+      insight.relatedRecommendations[0]?.description
+        ? clampToThreeSentences(insight.relatedRecommendations[0].description)
         : insightCategoryConfig[insight.category].fixHint,
-    difficulty: insight.difficulty,
-    time_to_fix: insight.timeToFix,
-    estimated_score_improvement: `+${Math.max(3, insight.scoreImpact)} points`
+    expected_impact: getInsightFallbackImpact(insight),
+    effort: insight.difficulty,
+    priority: insight.priority
   };
 }
 
 function buildFallbackActionPlan(scan: ScanResult, previousScan: ScanResult | null, insights: ReportInsight[]) {
   const quickWins = insights.filter((insight) => insight.difficulty === "Easy").slice(0, 3);
   const performanceWork = insights
-    .filter((insight) => ["loading", "images", "server", "stability"].includes(insight.category))
+    .filter((insight) => ["speed-assets", "speed-delivery", "stability"].includes(insight.category))
     .slice(0, 3);
   const polishWork = insights
     .filter((insight) => !quickWins.includes(insight) && !performanceWork.includes(insight))
@@ -1186,29 +1326,63 @@ Return JSON with this exact shape:
 Do not use technical acronyms like LCP, FID, CLS, TBT, TTFB in the JSON.`;
 }
 
-function buildIssuePrompt(insight: ReportInsight) {
-  return `Transform this grouped website insight into plain-English JSON for a business owner:
+function buildSectionsPrompt(input: {
+  website: Website;
+  scan: ScanResult;
+  insights: ReportInsight[];
+}) {
+  return `You are writing a structured website report for a non-technical business owner.
+
+Turn the normalized insights below into two JSON arrays:
+1. "issues" = one grouped consultant-style issue per insight
+2. "recommendations" = one concrete action per insight
+
+Rules:
+- Produce exactly one issue and one recommendation for every insight_id.
+- Do not repeat the same root problem in multiple titles.
+- Keep language plain-English, specific, and business-focused.
+- Do not copy raw Lighthouse wording directly.
+- Recommendation priority must match the issue priority.
+- Recommendation should clearly map to the matching issue via insight_id.
 
 ${JSON.stringify(
     {
-      insight_title: insight.title,
-      priority: insight.priority,
-      severity: insight.severity,
-      grouped_issue_count: insight.relatedIssues.length,
-      technical_description: insight.technicalSummary,
-      root_cause: insight.rootCause,
-      score_impact: insight.scoreImpact,
-      device: insight.device,
-      related_findings: insight.relatedIssues.slice(0, 5).map((issue) => ({
-        title: issue.title,
-        description: issue.description,
-        metric: issue.metric ?? null,
-        device: issue.device ?? null
-      })),
-      recommended_actions: insight.relatedRecommendations.slice(0, 4).map((recommendation) => ({
-        title: recommendation.title,
-        description: recommendation.description,
-        priority: recommendation.priority
+      website_url: input.website.url,
+      scores: {
+        performance: input.scan.performance_score,
+        seo: input.scan.seo_score,
+        accessibility: input.scan.accessibility_score,
+        best_practices: input.scan.best_practices_score
+      },
+      core_web_vitals_status: {
+        page_load_speed_seconds: Number(((input.scan.lcp ?? 0) / 1000).toFixed(2)),
+        click_response_ms: Math.round(input.scan.fid ?? 0),
+        visual_stability_score: Number((input.scan.cls ?? 0).toFixed(4))
+      },
+      grouped_insights: input.insights.map((insight) => ({
+        insight_id: insight.id,
+        category: insight.category,
+        title_hint: insight.title,
+        priority_hint: insight.priority,
+        severity: insight.severity,
+        score_impact: insight.scoreImpact,
+        difficulty_hint: insight.difficulty,
+        device: insight.device,
+        grouped_issue_count: insight.relatedIssues.length,
+        technical_summary: insight.technicalSummary,
+        root_cause_hint: insight.rootCause,
+        related_findings: insight.relatedIssues.slice(0, 5).map((issue) => ({
+          title: issue.title,
+          description: issue.description,
+          severity: issue.severity,
+          metric: issue.metric ?? null
+        })),
+        related_recommendations: insight.relatedRecommendations.slice(0, 4).map((recommendation) => ({
+          title: recommendation.title,
+          description: recommendation.description,
+          priority: recommendation.priority,
+          potential_savings_ms: recommendation.potentialSavingsMs ?? null
+        }))
       }))
     },
     null,
@@ -1217,44 +1391,101 @@ ${JSON.stringify(
 
 Return JSON with this exact shape:
 {
-  "plain_english_title": "...",
-  "what_is_happening": "...",
-  "business_impact": "...",
-  "root_cause": "...",
-  "how_to_fix": "...",
-  "difficulty": "Easy | Medium | Hard",
-  "time_to_fix": "...",
-  "estimated_score_improvement": "+8 points"
+  "issues": [
+    {
+      "insight_id": "...",
+      "title": "...",
+      "priority": "Critical | High | Medium | Low",
+      "what_is_happening": "...",
+      "why_it_matters": "...",
+      "root_cause": "..."
+    }
+  ],
+  "recommendations": [
+    {
+      "insight_id": "...",
+      "title": "...",
+      "action": "...",
+      "expected_impact": "...",
+      "effort": "Easy | Medium | Hard",
+      "priority": "Critical | High | Medium | Low"
+    }
+  ]
+}`;
 }
 
-Keep every field clear, short, and encouraging. Explain the root problem once instead of repeating similar issue titles. Do not use technical acronyms.`;
-}
-
-function buildIssueCacheKey(scanId: string, insight: ReportInsight) {
+function buildSectionsCacheKey(scanId: string, insights: ReportInsight[]) {
   const hash = createHash("sha256")
     .update(
-      JSON.stringify({
-        id: insight.id,
-        priority: insight.priority,
-        scoreImpact: insight.scoreImpact,
-        relatedIssues: insight.relatedIssues.map((issue) => ({
-          title: issue.title,
-          description: issue.description,
-          severity: issue.severity
-        })),
-        relatedRecommendations: insight.relatedRecommendations.map((item) => ({
-          title: item.title,
-          priority: item.priority
+      JSON.stringify(
+        insights.map((insight) => ({
+          id: insight.id,
+          category: insight.category,
+          priority: insight.priority,
+          scoreImpact: insight.scoreImpact,
+          relatedIssues: insight.relatedIssues.map((issue) => ({
+            title: issue.title,
+            description: issue.description,
+            severity: issue.severity
+          })),
+          relatedRecommendations: insight.relatedRecommendations.map((item) => ({
+            title: item.title,
+            description: item.description,
+            priority: item.priority
+          }))
         }))
-      })
+      )
     )
     .digest("hex")
     .slice(0, 12);
 
-  return `report-insight:v2:${scanId}:${hash}`;
+  return `report-sections:v3:${scanId}:${hash}`;
 }
 
-function groupIssuesByPriority(issues: Array<{ insight: ReportInsight; ai: IssueNarrative }>): ReportIssueGroup[] {
+function mergeSectionsWithFallback(
+  payload: ReportSectionsPayload,
+  insights: ReportInsight[]
+): ReportSectionsPayload {
+  const sanitizedPayload = sanitizeReportSections(payload);
+  const issueMap = new Map<string, ReportSectionIssue>();
+  const recommendationMap = new Map<string, ReportSectionRecommendation>();
+
+  for (const issue of sanitizedPayload.issues) {
+    if (!issueMap.has(issue.insight_id)) {
+      issueMap.set(issue.insight_id, issue);
+    }
+  }
+
+  for (const recommendation of sanitizedPayload.recommendations) {
+    if (!recommendationMap.has(recommendation.insight_id)) {
+      recommendationMap.set(recommendation.insight_id, recommendation);
+    }
+  }
+
+  return {
+    issues: insights.map((insight) => {
+      const issue = issueMap.get(insight.id) ?? fallbackReportIssue(insight);
+      return sanitizeReportIssue({
+        ...issue,
+        insight_id: insight.id,
+        priority: insight.priority
+      });
+    }),
+    recommendations: insights.map((insight) => {
+      const recommendation = recommendationMap.get(insight.id) ?? fallbackReportRecommendation(insight);
+      return sanitizeReportRecommendation({
+        ...recommendation,
+        insight_id: insight.id,
+        effort: recommendation.effort ?? insight.difficulty,
+        priority: insight.priority
+      });
+    })
+  };
+}
+
+function groupIssuesByPriority(
+  issues: Array<{ insight: ReportInsight; ai: ReportSectionIssue }>
+): ReportIssueGroup[] {
   const groups: ReportIssueGroup[] = [
     {
       title: "Fix This Week",
@@ -1277,6 +1508,35 @@ function groupIssuesByPriority(issues: Array<{ insight: ReportInsight; ai: Issue
   ];
 
   return groups.filter((group) => group.issues.length > 0);
+}
+
+function groupRecommendationsByPriority(
+  recommendations: Array<{ insight: ReportInsight; ai: ReportSectionRecommendation }>
+): ReportRecommendationGroup[] {
+  const groups: ReportRecommendationGroup[] = [
+    {
+      title: "Fix This Week",
+      emoji: "🔴",
+      color: "#EF4444",
+      recommendations: recommendations.filter(
+        (item) => item.insight.priority === "Critical" || item.insight.priority === "High"
+      )
+    },
+    {
+      title: "Fix This Month",
+      emoji: "🟡",
+      color: "#F59E0B",
+      recommendations: recommendations.filter((item) => item.insight.priority === "Medium")
+    },
+    {
+      title: "Nice To Have",
+      emoji: "🟢",
+      color: "#22C55E",
+      recommendations: recommendations.filter((item) => item.insight.priority === "Low")
+    }
+  ];
+
+  return groups.filter((group) => group.recommendations.length > 0);
 }
 
 export async function buildReportNarrative(input: {
@@ -1303,45 +1563,54 @@ export async function buildReportNarrative(input: {
     sanitize: sanitizeOverview
   });
 
-  const issueResults = await Promise.all(
-    insights.map(async (insight) => {
-      const result = await resolveStructuredSection({
-        cacheKey: buildIssueCacheKey(input.scan.id, insight),
-        section: "issue",
-        ownerUserId: input.profile.id,
-        websiteId: input.website.id,
-        scanId: input.scan.id,
-        prompt: buildIssuePrompt(insight),
-        schema: issueNarrativeSchema,
-        fallback: () => fallbackIssueNarrative(insight),
-        sanitize: sanitizeIssueNarrative
-      });
+  const sectionsResult = await resolveStructuredSection({
+    cacheKey: buildSectionsCacheKey(input.scan.id, insights),
+    section: "issues_recommendations",
+    ownerUserId: input.profile.id,
+    websiteId: input.website.id,
+    scanId: input.scan.id,
+    prompt: buildSectionsPrompt({
+      website: input.website,
+      scan: input.scan,
+      insights
+    }),
+    schema: reportSectionsSchema,
+    fallback: () => ({
+      issues: insights.map(fallbackReportIssue),
+      recommendations: insights.map(fallbackReportRecommendation)
+    }),
+    sanitize: (payload) => mergeSectionsWithFallback(payload, insights)
+  });
 
-      return {
-        insight,
-        ai: result.payload,
-        provider: result.provider
-      };
-    })
-  );
+  const issues = insights.map((insight) => ({
+    insight,
+    ai:
+      sectionsResult.payload.issues.find((item) => item.insight_id === insight.id) ??
+      fallbackReportIssue(insight)
+  }));
+  const recommendations = insights.map((insight) => ({
+    insight,
+    ai:
+      sectionsResult.payload.recommendations.find((item) => item.insight_id === insight.id) ??
+      fallbackReportRecommendation(insight)
+  }));
 
-  const groupedIssues = groupIssuesByPriority(
-    issueResults.map(({ insight, ai }) => ({
-      insight,
-      ai
-    }))
-  );
+  const groupedIssues = groupIssuesByPriority(issues);
+  const groupedRecommendations = groupRecommendationsByPriority(recommendations);
 
   const provider =
-    overviewResult.provider === "template" || issueResults.every((item) => item.provider === "template")
+    overviewResult.provider === "template" || sectionsResult.provider === "template"
       ? "template"
-      : overviewResult.provider === "groq" || issueResults.some((item) => item.provider === "groq")
+      : overviewResult.provider === "groq" || sectionsResult.provider === "groq"
         ? "groq"
         : "gemini";
 
   return {
     provider,
     overview: overviewResult.payload,
-    groupedIssues
+    issues,
+    recommendations,
+    groupedIssues,
+    groupedRecommendations
   };
 }

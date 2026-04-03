@@ -6,6 +6,7 @@ import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { MetricTile } from "@/components/dashboard/metric-tile";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -114,7 +115,7 @@ export default function WebsitesPage() {
       </Card>
 
       {loading ? (
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid gap-6 xl:grid-cols-2 min-[1800px]:grid-cols-3">
           {Array.from({ length: 4 }).map((_, index) => (
             <Card key={index}>
               <CardContent className="p-6">
@@ -129,7 +130,7 @@ export default function WebsitesPage() {
           ))}
         </div>
       ) : filtered.length ? (
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid gap-6 xl:grid-cols-2 min-[1800px]:grid-cols-3">
           {filtered.map((website) => {
             const latest = website.latest_scan;
             const isScanning = scanningWebsiteId === website.id;
@@ -230,7 +231,7 @@ export default function WebsitesPage() {
                     </div>
                   </div>
 
-                  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                  <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,220px)_minmax(0,1fr)] min-[1800px]:grid-cols-[minmax(0,236px)_minmax(0,1fr)]">
                     {hasValidScan ? (
                       <ScoreRing
                         label="Performance"
@@ -250,17 +251,17 @@ export default function WebsitesPage() {
                     <div className="rounded-3xl border border-border bg-background p-5">
                       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Latest scan</p>
                       {hasValidScan ? (
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div className="mt-4 grid gap-3 min-[440px]:grid-cols-2">
                           {[
-                            ["SEO", latest?.seo_score ?? 0],
-                            ["Accessibility", latest?.accessibility_score ?? 0],
-                            ["Best Practices", latest?.best_practices_score ?? 0],
-                            ["Accessibility violations", latest?.accessibility_violations?.length ?? 0]
-                          ].map(([label, value]) => (
-                            <div key={label} className="rounded-2xl border border-border bg-card p-3">
-                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-                              <p className="mt-2 font-display text-2xl font-semibold">{value}</p>
-                            </div>
+                            { label: "SEO", value: latest?.seo_score ?? 0 },
+                            { label: "Accessibility", value: latest?.accessibility_score ?? 0 },
+                            { label: "Best Practices", value: latest?.best_practices_score ?? 0 },
+                            {
+                              label: "Accessibility violations",
+                              value: latest?.accessibility_violations?.length ?? 0
+                            }
+                          ].map((metric) => (
+                            <MetricTile key={metric.label} label={metric.label} value={metric.value} />
                           ))}
                         </div>
                       ) : (

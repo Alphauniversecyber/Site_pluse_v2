@@ -37,6 +37,8 @@ export function DeviceScoreChart({ scan }: { scan: ScanResult }) {
           <XAxis dataKey="device" stroke="#94A3B8" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
           <YAxis stroke="#94A3B8" tickLine={false} axisLine={false} domain={[0, 100]} width={28} tick={{ fontSize: 11 }} />
           <Tooltip
+            shared={false}
+            cursor={false}
             contentStyle={{
               background: "#0F172A",
               border: "1px solid #334155",

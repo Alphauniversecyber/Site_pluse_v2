@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowRight, Globe2, LineChart, Radar } from "lucide-reac
 
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScoreRing } from "@/components/dashboard/score-ring";
+import { SnapshotStatCard } from "@/components/dashboard/snapshot-stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createSupabaseServerClient, requireAuthenticatedUser } from "@/lib/supabase-server";
@@ -78,27 +79,22 @@ export default async function DashboardOverviewPage() {
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)] min-[1800px]:grid-cols-[minmax(0,1.14fr)_minmax(420px,0.86fr)]">
         <Card>
           <CardHeader>
             <CardTitle>Agency health snapshot</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <CardContent className="grid auto-rows-fr gap-4 md:grid-cols-2 min-[1800px]:grid-cols-4">
             {snapshotStats.map((stat) => {
-              const StatIcon = stat.icon;
-
               return (
-                <div key={stat.label} className="flex min-h-[150px] flex-col rounded-3xl border border-border bg-background p-5">
-                  <div className="flex min-h-[52px] items-start gap-3">
-                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${stat.iconBg} ${stat.iconTone}`}>
-                      <StatIcon className="h-5 w-5" />
-                    </div>
-                    <span className="pt-1 text-sm leading-6 text-muted-foreground">{stat.label}</span>
-                  </div>
-                  <div className="mt-auto flex items-end pt-5">
-                    <p className="font-display text-4xl font-semibold leading-none">{stat.value}</p>
-                  </div>
-                </div>
+                <SnapshotStatCard
+                  key={stat.label}
+                  label={stat.label}
+                  value={stat.value}
+                  icon={stat.icon}
+                  iconTone={stat.iconTone}
+                  iconBg={stat.iconBg}
+                />
               );
             })}
           </CardContent>

@@ -59,7 +59,10 @@ async function loadReportContext(websiteId: string, scanId: string) {
 
   const historyRows = ((history ?? []) as ScanResult[]).reverse();
   const previousScan =
-    historyRows.length > 1 ? historyRows[historyRows.length - 2] : null;
+    historyRows
+      .slice()
+      .reverse()
+      .find((item) => item.id !== scan.id && item.scan_status !== "failed") ?? null;
 
   return {
     website,
