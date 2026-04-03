@@ -2,6 +2,8 @@ export type PlanKey = "free" | "starter" | "agency";
 export type ScanFrequency = "daily" | "weekly" | "monthly";
 export type Severity = "low" | "medium" | "high";
 export type NotificationType = "score_drop" | "critical_score" | "scan_failure" | "report_ready";
+export type PlainLanguageCategory = "Performance" | "SEO" | "Accessibility" | "Security";
+export type PlainLanguageDifficulty = "Easy" | "Medium" | "Complex";
 
 export interface UserProfile {
   id: string;
@@ -119,6 +121,56 @@ export interface ReportAiCacheEntry {
   expires_at: string;
   created_at: string;
   updated_at?: string;
+}
+
+export interface PlainLanguageIssue {
+  id: string;
+  title: string;
+  whats_happening: string;
+  business_impact: string;
+  how_to_fix: string;
+  severity: Severity;
+  difficulty: PlainLanguageDifficulty;
+  time_estimate: string;
+  category: PlainLanguageCategory;
+}
+
+export interface PlainLanguageRecommendation {
+  title: string;
+  description: string;
+  difficulty: PlainLanguageDifficulty;
+  time_estimate: string;
+  priority: Severity;
+}
+
+export interface PlainLanguageRawIssue {
+  id: string;
+  title: string;
+  description: string;
+  severity: Severity;
+  device: "mobile" | "desktop" | "both" | null;
+}
+
+export interface PlainLanguageRawRecommendation {
+  id: string;
+  title: string;
+  description: string;
+  priority: Severity;
+  device: "mobile" | "desktop" | "both" | null;
+}
+
+export interface WebsiteScanPlainEnglish {
+  provider: "groq" | "gemini" | "template";
+  summary: string;
+  severity_counts: {
+    high: number;
+    medium: number;
+    low: number;
+  };
+  issues: PlainLanguageIssue[];
+  recommendations: PlainLanguageRecommendation[];
+  raw_issues: PlainLanguageRawIssue[];
+  raw_recommendations: PlainLanguageRawRecommendation[];
 }
 
 export interface ScanSchedule {

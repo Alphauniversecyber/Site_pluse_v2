@@ -6,12 +6,19 @@ import { z } from "zod";
 
 import type {
   AgencyBranding,
+  PlainLanguageCategory,
+  PlainLanguageDifficulty,
+  PlainLanguageIssue,
+  PlainLanguageRawIssue,
+  PlainLanguageRawRecommendation,
+  PlainLanguageRecommendation,
   ReportAiCacheEntry,
   ScanIssue,
   ScanRecommendation,
   ScanResult,
   UserProfile,
-  Website
+  Website,
+  WebsiteScanPlainEnglish
 } from "@/types";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -20,7 +27,10 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 const CACHE_TTL_HOURS = 24;
 const SYSTEM_PROMPT =
   "You are a friendly web consultant writing a report for a business owner who is NOT technical. Use simple language. No jargon. Be encouraging but honest. Keep each explanation under 3 sentences. Focus on business impact not technical details.";
-const BANNED_CLIENT_TERMS = /\b(LCP|FID|CLS|TBT|TTFB|INP)\b/gi;
+const WEBSITE_DETAIL_SYSTEM_PROMPT =
+  "You are a friendly web consultant writing for non-technical business owners. Transform technical website issues into plain English. Never use technical terms like LCP, CLS, FID, TBT, DOM, API, CDN, HTTP, CSS, JS, render-blocking, viewport. Always focus on business impact. Keep each field SHORT and simple. Return ONLY valid JSON, nothing else.";
+const BANNED_CLIENT_TERMS = /\b(LCP|FID|CLS|TBT|TTFB|INP|DOM|API|CDN|HTTP|CSS|JS|viewport)\b|render-blocking/gi;
+const WEBSITE_DETAIL_TIME_OPTIONS = ["30 mins", "1-2 hours", "1-2 days", "1-2 weeks"] as const;
 
 const reportIssueSchema = z.object({
   insight_id: z.string().min(1),
@@ -45,8 +55,31 @@ const reportSectionsSchema = z.object({
   recommendations: z.array(reportRecommendationSchema)
 });
 
+const websiteDetailIssueSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  whats_happening: z.string().min(1),
+  business_impact: z.string().min(1),
+  how_to_fix: z.string().min(1),
+  severity: z.enum(["high", "medium", "low"]),
+  difficulty: z.enum(["Easy", "Medium", "Complex"]),
+  time_estimate: z.enum(WEBSITE_DETAIL_TIME_OPTIONS),
+  category: z.enum(["Performance", "SEO", "Accessibility", "Security"])
+});
+
+const websiteDetailRecommendationSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().min(1),
+  difficulty: z.enum(["Easy", "Medium", "Complex"]),
+  time_estimate: z.enum(WEBSITE_DETAIL_TIME_OPTIONS),
+  priority: z.enum(["high", "medium", "low"])
+});
+
+const websiteDetailIssuesSchema = z.array(websiteDetailIssueSchema);
+const websiteDetailRecommendationsSchema = z.array(websiteDetailRecommendationSchema);
+
 const overviewSchema = z.object({
-  overall_health: z.enum(["GOOD", "NEEDS ATTENTION", "CRITICAL"]),
+  overall_health: z.enum(["EXCELLENT", "GOOD", "NEEDS ATTENTION", "CRITICAL"]),
   executive_sentences: z.array(z.string().min(1)).length(2),
   score_summaries: z.object({
     performance: z.object({
@@ -178,40 +211,70 @@ function sanitizeClientText(value: string) {
     .trim();
 }
 
-function clampToThreeSentences(value: string) {
+function clampSentenceCount(value: string, count = 3) {
   const sentences = sanitizeClientText(value)
     .split(/(?<=[.!?])\s+/)
     .filter(Boolean)
-    .slice(0, 3);
+    .slice(0, count);
 
   return sentences.join(" ").trim();
+}
+
+function truncateAtBoundary(value: string, maxLength: number, sentenceCount = 3) {
+  const clean = clampSentenceCount(value, sentenceCount);
+
+  if (clean.length <= maxLength) {
+    return clean;
+  }
+
+  const sentenceFit = clean
+    .split(/(?<=[.!?])\s+/)
+    .filter(Boolean)
+    .reduce<string[]>((acc, sentence) => {
+      const candidate = [...acc, sentence].join(" ").trim();
+      return candidate.length <= maxLength ? [...acc, sentence] : acc;
+    }, []);
+
+  if (sentenceFit.length > 0) {
+    return sentenceFit.join(" ").trim();
+  }
+
+  const shortened = clean.slice(0, Math.max(0, maxLength - 3));
+  const boundary = shortened.search(/\s+\S*$/);
+  const safe = boundary > 24 ? shortened.slice(0, boundary) : shortened;
+
+  return `${safe.trim()}...`;
+}
+
+function clampToThreeSentences(value: string) {
+  return truncateAtBoundary(value, 220, 3);
 }
 
 function sanitizeOverview(value: OverviewNarrative): OverviewNarrative {
   return {
     ...value,
-    executive_sentences: value.executive_sentences.map(clampToThreeSentences),
+    executive_sentences: value.executive_sentences.map((sentence) => truncateAtBoundary(sentence, 100, 2)),
     score_summaries: {
       performance: {
-        label: sanitizeClientText(value.score_summaries.performance.label),
-        summary: clampToThreeSentences(value.score_summaries.performance.summary)
+        label: truncateAtBoundary(value.score_summaries.performance.label, 40, 1),
+        summary: truncateAtBoundary(value.score_summaries.performance.summary, 90, 1)
       },
       seo: {
-        label: sanitizeClientText(value.score_summaries.seo.label),
-        summary: clampToThreeSentences(value.score_summaries.seo.summary)
+        label: truncateAtBoundary(value.score_summaries.seo.label, 40, 1),
+        summary: truncateAtBoundary(value.score_summaries.seo.summary, 90, 1)
       },
       accessibility: {
-        label: sanitizeClientText(value.score_summaries.accessibility.label),
-        summary: clampToThreeSentences(value.score_summaries.accessibility.summary)
+        label: truncateAtBoundary(value.score_summaries.accessibility.label, 40, 1),
+        summary: truncateAtBoundary(value.score_summaries.accessibility.summary, 90, 1)
       },
       best_practices: {
-        label: sanitizeClientText(value.score_summaries.best_practices.label),
-        summary: clampToThreeSentences(value.score_summaries.best_practices.summary)
+        label: truncateAtBoundary(value.score_summaries.best_practices.label, 40, 1),
+        summary: truncateAtBoundary(value.score_summaries.best_practices.summary, 90, 1)
       }
     },
-    changes_summary: clampToThreeSentences(value.changes_summary),
-    action_plan_title: sanitizeClientText(value.action_plan_title),
-    action_plan_intro: clampToThreeSentences(value.action_plan_intro),
+    changes_summary: truncateAtBoundary(value.changes_summary, 180, 2),
+    action_plan_title: truncateAtBoundary(value.action_plan_title, 60, 1),
+    action_plan_intro: truncateAtBoundary(value.action_plan_intro, 180, 2),
     action_plan: value.action_plan.map((week) => ({
       ...week,
       phase: sanitizeClientText(week.phase),
@@ -222,31 +285,31 @@ function sanitizeOverview(value: OverviewNarrative): OverviewNarrative {
         time: sanitizeClientText(task.time)
       }))
     })),
-    projected_score_range: sanitizeClientText(value.projected_score_range),
-    projected_summary: clampToThreeSentences(value.projected_summary),
-    vitals_intro: clampToThreeSentences(value.vitals_intro),
+    projected_score_range: truncateAtBoundary(value.projected_score_range, 30, 1),
+    projected_summary: truncateAtBoundary(value.projected_summary, 180, 2),
+    vitals_intro: truncateAtBoundary(value.vitals_intro, 180, 2),
     vitals: value.vitals.map((metric) => ({
-      title: sanitizeClientText(metric.title),
-      value_label: sanitizeClientText(metric.value_label),
-      status_label: sanitizeClientText(metric.status_label),
-      explanation: clampToThreeSentences(metric.explanation)
+      title: truncateAtBoundary(metric.title, 30, 1),
+      value_label: truncateAtBoundary(metric.value_label, 30, 1),
+      status_label: truncateAtBoundary(metric.status_label, 20, 1),
+      explanation: truncateAtBoundary(metric.explanation, 100, 2)
     })),
-    vitals_overall: clampToThreeSentences(value.vitals_overall),
-    device_intro: clampToThreeSentences(value.device_intro),
-    mobile_summary: clampToThreeSentences(value.mobile_summary),
-    desktop_summary: clampToThreeSentences(value.desktop_summary),
-    device_tip: clampToThreeSentences(value.device_tip)
+    vitals_overall: truncateAtBoundary(value.vitals_overall, 180, 2),
+    device_intro: truncateAtBoundary(value.device_intro, 180, 2),
+    mobile_summary: truncateAtBoundary(value.mobile_summary, 100, 2),
+    desktop_summary: truncateAtBoundary(value.desktop_summary, 100, 2),
+    device_tip: truncateAtBoundary(value.device_tip, 180, 2)
   };
 }
 
 function sanitizeReportIssue(value: ReportSectionIssue): ReportSectionIssue {
   return {
     insight_id: sanitizeClientText(value.insight_id),
-    title: sanitizeClientText(value.title),
+    title: truncateAtBoundary(value.title, 50, 1),
     priority: value.priority,
-    what_is_happening: clampToThreeSentences(value.what_is_happening),
-    why_it_matters: clampToThreeSentences(value.why_it_matters),
-    root_cause: clampToThreeSentences(value.root_cause)
+    what_is_happening: truncateAtBoundary(value.what_is_happening, 120, 2),
+    why_it_matters: truncateAtBoundary(value.why_it_matters, 100, 1),
+    root_cause: truncateAtBoundary(value.root_cause, 100, 1)
   };
 }
 
@@ -255,9 +318,9 @@ function sanitizeReportRecommendation(
 ): ReportSectionRecommendation {
   return {
     insight_id: sanitizeClientText(value.insight_id),
-    title: sanitizeClientText(value.title),
-    action: clampToThreeSentences(value.action),
-    expected_impact: clampToThreeSentences(value.expected_impact),
+    title: truncateAtBoundary(value.title, 50, 1),
+    action: truncateAtBoundary(value.action, 120, 2),
+    expected_impact: truncateAtBoundary(value.expected_impact, 100, 1),
     effort: value.effort,
     priority: value.priority
   };
@@ -267,6 +330,462 @@ function sanitizeReportSections(value: ReportSectionsPayload): ReportSectionsPay
   return {
     issues: value.issues.map(sanitizeReportIssue),
     recommendations: value.recommendations.map(sanitizeReportRecommendation)
+  };
+}
+
+function cleanRawText(text: string, maxLength = 150) {
+  const cleaned = sanitizeClientText(
+    text
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/https?:\/\/[^\s)]+/g, "")
+      .replace(/[`*_#>~]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+
+  return truncateAtBoundary(cleaned, maxLength, 2);
+}
+
+function limitTitleWords(value: string, maxWords: number, maxLength: number) {
+  const words = cleanRawText(value, Math.max(maxLength, 80))
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, maxWords)
+    .join(" ");
+
+  return truncateAtBoundary(words, maxLength, 1);
+}
+
+function toDeviceScope<T extends { device?: "mobile" | "desktop" }>(
+  items: T[]
+): "mobile" | "desktop" | "both" | null {
+  const devices = Array.from(new Set(items.map((item) => item.device).filter(Boolean)));
+
+  if (devices.length === 0) {
+    return null;
+  }
+
+  if (devices.length > 1) {
+    return "both";
+  }
+
+  return devices[0] ?? null;
+}
+
+function severityRank(severity: "high" | "medium" | "low") {
+  return severity === "high" ? 3 : severity === "medium" ? 2 : 1;
+}
+
+function difficultyRank(difficulty: PlainLanguageDifficulty) {
+  return difficulty === "Easy" ? 1 : difficulty === "Medium" ? 2 : 3;
+}
+
+function normalizeTitleKey(value: string) {
+  return cleanRawText(value.toLowerCase(), 120).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function inferPlainCategory(title: string, description: string): PlainLanguageCategory {
+  const content = `${title} ${description}`.toLowerCase();
+
+  if (/(seo|meta|sitemap|robots|search|index|schema|heading|keyword|description)/.test(content)) {
+    return "SEO";
+  }
+
+  if (/(access|aria|contrast|keyboard|alt text|alt attribute|label|semantic|screen reader)/.test(content)) {
+    return "Accessibility";
+  }
+
+  if (/(security|unsafe|mixed content|https|privacy|cookie|headers|csp|best practice|vulnerab)/.test(content)) {
+    return "Security";
+  }
+
+  return "Performance";
+}
+
+function fallbackIssueDifficulty(severity: "high" | "medium" | "low"): PlainLanguageDifficulty {
+  return severity === "high" ? "Medium" : severity === "medium" ? "Easy" : "Easy";
+}
+
+function fallbackIssueTimeEstimate(
+  severity: "high" | "medium" | "low",
+  difficulty: PlainLanguageDifficulty
+) {
+  if (severity === "high" && difficulty === "Complex") {
+    return "1-2 weeks" as const;
+  }
+
+  if (severity === "high") {
+    return "1-2 days" as const;
+  }
+
+  if (difficulty === "Medium") {
+    return "1-2 days" as const;
+  }
+
+  return "1-2 hours" as const;
+}
+
+function fallbackRecommendationTimeEstimate(priority: "high" | "medium" | "low") {
+  return priority === "high" ? "1-2 days" : priority === "medium" ? "1-2 hours" : "30 mins";
+}
+
+function summarizeDeviceScope(scope: "mobile" | "desktop" | "both" | null) {
+  if (scope === "both") {
+    return "This affects both mobile and desktop.";
+  }
+
+  if (scope === "mobile") {
+    return "This mainly affects phone visitors.";
+  }
+
+  if (scope === "desktop") {
+    return "This mainly affects desktop visitors.";
+  }
+
+  return "";
+}
+
+function buildPlainLanguageSummary(counts: { high: number; medium: number; low: number }) {
+  if (counts.high > 0) {
+    return `Fix the ${counts.high} high priority issue${counts.high === 1 ? "" : "s"} first to see the biggest improvement.`;
+  }
+
+  if (counts.medium > 0) {
+    return `Start with the ${counts.medium} medium priority fix${counts.medium === 1 ? "" : "es"} to improve results steadily.`;
+  }
+
+  if (counts.low > 0) {
+    return `Your biggest items look healthy. The remaining low priority fixes are mostly polish.`;
+  }
+
+  return "This scan looks healthy overall, with no major issues needing urgent attention.";
+}
+
+function sanitizePlainIssue(value: PlainLanguageIssue): PlainLanguageIssue {
+  return {
+    id: cleanRawText(value.id, 80),
+    title: limitTitleWords(value.title, 5, 50),
+    whats_happening: truncateAtBoundary(cleanRawText(value.whats_happening, 120), 100, 1),
+    business_impact: truncateAtBoundary(cleanRawText(value.business_impact, 120), 100, 1),
+    how_to_fix: truncateAtBoundary(cleanRawText(value.how_to_fix, 120), 100, 1),
+    severity: value.severity,
+    difficulty: value.difficulty,
+    time_estimate: value.time_estimate,
+    category: value.category
+  };
+}
+
+function sanitizePlainRecommendation(
+  value: PlainLanguageRecommendation
+): PlainLanguageRecommendation {
+  return {
+    title: limitTitleWords(value.title, 5, 50),
+    description: truncateAtBoundary(cleanRawText(value.description, 120), 100, 1),
+    difficulty: value.difficulty,
+    time_estimate: value.time_estimate,
+    priority: value.priority
+  };
+}
+
+function dedupeWebsiteDetailIssues(issues: ScanIssue[]) {
+  const grouped = new Map<
+    string,
+    {
+      issue: ScanIssue;
+      device: "mobile" | "desktop" | "both" | null;
+    }
+  >();
+
+  for (const issue of issues) {
+    const key = normalizeTitleKey(issue.title);
+    const existing = grouped.get(key);
+
+    if (!existing) {
+      grouped.set(key, {
+        issue,
+        device: issue.device ?? null
+      });
+      continue;
+    }
+
+    const mergedDevice =
+      existing.device && issue.device && existing.device !== issue.device
+        ? "both"
+        : existing.device ?? issue.device ?? null;
+
+    const preferredIssue =
+      severityRank(issue.severity) > severityRank(existing.issue.severity) ||
+      issue.description.length > existing.issue.description.length
+        ? issue
+        : existing.issue;
+
+    grouped.set(key, {
+      issue: preferredIssue,
+      device: mergedDevice
+    });
+  }
+
+  return Array.from(grouped.values())
+    .sort((left, right) => severityRank(right.issue.severity) - severityRank(left.issue.severity))
+    .slice(0, 8);
+}
+
+function dedupeWebsiteDetailRecommendations(recommendations: ScanRecommendation[]) {
+  const grouped = new Map<
+    string,
+    {
+      recommendation: ScanRecommendation;
+      device: "mobile" | "desktop" | "both" | null;
+    }
+  >();
+
+  for (const recommendation of recommendations) {
+    const key = normalizeTitleKey(recommendation.title);
+    const existing = grouped.get(key);
+
+    if (!existing) {
+      grouped.set(key, {
+        recommendation,
+        device: recommendation.device ?? null
+      });
+      continue;
+    }
+
+    const mergedDevice =
+      existing.device && recommendation.device && existing.device !== recommendation.device
+        ? "both"
+        : existing.device ?? recommendation.device ?? null;
+
+    const preferredRecommendation =
+      severityRank(recommendation.priority) > severityRank(existing.recommendation.priority) ||
+      recommendation.description.length > existing.recommendation.description.length
+        ? recommendation
+        : existing.recommendation;
+
+    grouped.set(key, {
+      recommendation: preferredRecommendation,
+      device: mergedDevice
+    });
+  }
+
+  return Array.from(grouped.values())
+    .sort(
+      (left, right) =>
+        severityRank(right.recommendation.priority) - severityRank(left.recommendation.priority)
+    )
+    .slice(0, 5);
+}
+
+function buildFallbackPlainIssue(input: {
+  issue: ScanIssue;
+  device: "mobile" | "desktop" | "both" | null;
+}): PlainLanguageIssue {
+  const category = inferPlainCategory(input.issue.title, input.issue.description);
+  const difficulty = fallbackIssueDifficulty(input.issue.severity);
+  const deviceSummary = summarizeDeviceScope(input.device);
+
+  return sanitizePlainIssue({
+    id: input.issue.id,
+    title: input.issue.title || "Needs attention",
+    whats_happening:
+      cleanRawText(input.issue.description, 100) ||
+      "Parts of your website are making the experience slower or harder to use.",
+    business_impact:
+      truncateAtBoundary(
+        cleanRawText(
+          input.issue.severity === "high"
+            ? "This could push visitors away before they engage with your business."
+            : "This can make your website feel less trustworthy or less effective.",
+          100
+        ),
+        100,
+        1
+      ) || "This can make your website feel less effective for visitors.",
+    how_to_fix:
+      truncateAtBoundary(
+        cleanRawText(
+          `Ask your developer to review and fix this area. ${deviceSummary}`.trim(),
+          100
+        ),
+        100,
+        2
+      ) || "Ask your developer to review and fix this area.",
+    severity: input.issue.severity,
+    difficulty,
+    time_estimate: fallbackIssueTimeEstimate(input.issue.severity, difficulty),
+    category
+  });
+}
+
+function buildFallbackPlainRecommendation(input: {
+  recommendation: ScanRecommendation;
+  device: "mobile" | "desktop" | "both" | null;
+}): PlainLanguageRecommendation {
+  const difficulty: PlainLanguageDifficulty =
+    input.recommendation.priority === "high"
+      ? "Medium"
+      : input.recommendation.priority === "medium"
+        ? "Easy"
+        : "Easy";
+  const deviceSummary = summarizeDeviceScope(input.device);
+
+  return sanitizePlainRecommendation({
+    title: input.recommendation.title || "Quick win",
+    description:
+      truncateAtBoundary(
+        cleanRawText(
+          `${input.recommendation.description} ${deviceSummary}`.trim(),
+          100
+        ),
+        100,
+        1
+      ) || "This can improve speed, search visibility, or user experience.",
+    difficulty,
+    time_estimate: fallbackRecommendationTimeEstimate(input.recommendation.priority),
+    priority: input.recommendation.priority
+  });
+}
+
+function sanitizePlainIssues(value: PlainLanguageIssue[]) {
+  const deduped = new Map<string, PlainLanguageIssue>();
+
+  for (const issue of value.map(sanitizePlainIssue)) {
+    const key = normalizeTitleKey(issue.title);
+    if (!deduped.has(key)) {
+      deduped.set(key, issue);
+    }
+  }
+
+  return Array.from(deduped.values())
+    .sort((left, right) => severityRank(right.severity) - severityRank(left.severity))
+    .slice(0, 8);
+}
+
+function sanitizePlainRecommendations(value: PlainLanguageRecommendation[]) {
+  const deduped = new Map<string, PlainLanguageRecommendation>();
+
+  for (const recommendation of value.map(sanitizePlainRecommendation)) {
+    const key = normalizeTitleKey(recommendation.title);
+    if (!deduped.has(key)) {
+      deduped.set(key, recommendation);
+    }
+  }
+
+  return Array.from(deduped.values())
+    .sort(
+      (left, right) =>
+        severityRank(right.priority) - severityRank(left.priority) ||
+        difficultyRank(left.difficulty) - difficultyRank(right.difficulty)
+    )
+    .slice(0, 5);
+}
+
+function buildIssuePrompt(
+  issues: Array<{
+    issue: ScanIssue;
+    device: "mobile" | "desktop" | "both" | null;
+  }>
+) {
+  const payload = issues.map(({ issue, device }) => ({
+    id: issue.id,
+    title: cleanRawText(issue.title, 80),
+    description: cleanRawText(issue.description, 150),
+    severity: issue.severity,
+    category: inferPlainCategory(issue.title, issue.description),
+    device,
+    affects_both: device === "both"
+  }));
+
+  return `Transform these website issues into plain English for a business owner.
+
+Issues to transform:
+${JSON.stringify(payload)}
+
+Return a JSON array with this exact structure for each issue:
+[
+  {
+    "id": "original issue id",
+    "title": "Short plain English title (max 5 words)",
+    "whats_happening": "One sentence explaining the problem simply (max 100 chars)",
+    "business_impact": "One sentence on how this hurts the business (max 100 chars)",
+    "how_to_fix": "One simple action sentence (max 100 chars)",
+    "severity": "high/medium/low",
+    "difficulty": "Easy/Medium/Complex",
+    "time_estimate": "30 mins/1-2 hours/1-2 days/1-2 weeks",
+    "category": "Performance/SEO/Accessibility/Security"
+  }
+]
+
+Rules:
+- No URLs in any field
+- No technical jargon
+- Max 100 characters per field
+- Business owner should understand immediately
+- Be encouraging not scary
+- If device is "both", make it clear the issue affects both mobile and desktop versions`;
+}
+
+function buildRecommendationPrompt(
+  recommendations: Array<{
+    recommendation: ScanRecommendation;
+    device: "mobile" | "desktop" | "both" | null;
+  }>
+) {
+  const payload = recommendations.map(({ recommendation, device }) => ({
+    title: cleanRawText(recommendation.title, 80),
+    description: cleanRawText(recommendation.description, 150),
+    priority: recommendation.priority,
+    device,
+    affects_both: device === "both"
+  }));
+
+  return `Transform these technical recommendations into simple action items for a business owner.
+
+Recommendations:
+${JSON.stringify(payload)}
+
+Return JSON array:
+[
+  {
+    "title": "Action title (max 5 words)",
+    "description": "Why this helps (max 100 chars)",
+    "difficulty": "Easy/Medium/Complex",
+    "time_estimate": "30 mins/1-2 hours/1-2 days/1-2 weeks",
+    "priority": "high/medium/low"
+  }
+]
+
+Rules:
+- No URLs in any field
+- No technical jargon
+- Max 100 characters per field
+- Business owner should understand immediately
+- Be encouraging not scary`;
+}
+
+function toRawIssueEntry(input: {
+  issue: ScanIssue;
+  device: "mobile" | "desktop" | "both" | null;
+}): PlainLanguageRawIssue {
+  return {
+    id: input.issue.id,
+    title: cleanRawText(input.issue.title, 80),
+    description: cleanRawText(input.issue.description, 150),
+    severity: input.issue.severity,
+    device: input.device
+  };
+}
+
+function toRawRecommendationEntry(input: {
+  recommendation: ScanRecommendation;
+  device: "mobile" | "desktop" | "both" | null;
+}): PlainLanguageRawRecommendation {
+  return {
+    id: input.recommendation.id,
+    title: cleanRawText(input.recommendation.title, 80),
+    description: cleanRawText(input.recommendation.description, 150),
+    priority: input.recommendation.priority,
+    device: input.device
   };
 }
 
@@ -331,10 +850,16 @@ async function storeCachedSection(input: {
   );
 }
 
-async function callGroqJson<T>(prompt: string, schema: z.ZodType<T>) {
+async function callGroqJson<T>(
+  prompt: string,
+  schema: z.ZodType<T>,
+  options?: { systemPrompt?: string; responseFormat?: "json_object" | "json" }
+) {
   if (!process.env.GROQ_API_KEY) {
     throw new Error("Missing GROQ_API_KEY.");
   }
+
+  const responseFormat = options?.responseFormat ?? "json_object";
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -345,13 +870,17 @@ async function callGroqJson<T>(prompt: string, schema: z.ZodType<T>) {
     body: JSON.stringify({
       model: GROQ_MODEL,
       temperature: 0.2,
-      response_format: {
-        type: "json_object"
-      },
+      ...(responseFormat === "json_object"
+        ? {
+            response_format: {
+              type: "json_object"
+            }
+          }
+        : {}),
       messages: [
         {
           role: "system",
-          content: SYSTEM_PROMPT
+          content: options?.systemPrompt ?? SYSTEM_PROMPT
         },
         {
           role: "user",
@@ -379,7 +908,11 @@ async function callGroqJson<T>(prompt: string, schema: z.ZodType<T>) {
   return parseJsonContent(content, schema);
 }
 
-async function callGeminiJson<T>(prompt: string, schema: z.ZodType<T>) {
+async function callGeminiJson<T>(
+  prompt: string,
+  schema: z.ZodType<T>,
+  options?: { systemPrompt?: string; responseFormat?: "json_object" | "json" }
+) {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error("Missing GEMINI_API_KEY.");
   }
@@ -397,7 +930,7 @@ async function callGeminiJson<T>(prompt: string, schema: z.ZodType<T>) {
             role: "user",
             parts: [
               {
-                text: `${SYSTEM_PROMPT}\n\n${prompt}\n\nReturn valid JSON only.`
+                text: `${options?.systemPrompt ?? SYSTEM_PROMPT}\n\n${prompt}\n\nReturn valid JSON only.`
               }
             ]
           }
@@ -438,6 +971,8 @@ async function resolveStructuredSection<T>(input: {
   schema: z.ZodType<T>;
   fallback: () => T;
   sanitize: (value: T) => T;
+  systemPrompt?: string;
+  responseFormat?: "json_object" | "json";
 }): Promise<{ provider: "groq" | "gemini" | "template"; payload: T }> {
   const cached = await getCachedSection(input.cacheKey, input.schema);
   if (cached) {
@@ -446,7 +981,11 @@ async function resolveStructuredSection<T>(input: {
 
   const providers: Array<{
     name: "groq" | "gemini";
-    fn: (prompt: string, schema: z.ZodType<T>) => Promise<T>;
+    fn: (
+      prompt: string,
+      schema: z.ZodType<T>,
+      options?: { systemPrompt?: string; responseFormat?: "json_object" | "json" }
+    ) => Promise<T>;
   }> = [
     { name: "groq", fn: callGroqJson },
     { name: "gemini", fn: callGeminiJson }
@@ -454,7 +993,12 @@ async function resolveStructuredSection<T>(input: {
 
   for (const provider of providers) {
     try {
-      const payload = input.sanitize(await provider.fn(input.prompt, input.schema));
+      const payload = input.sanitize(
+        await provider.fn(input.prompt, input.schema, {
+          systemPrompt: input.systemPrompt,
+          responseFormat: input.responseFormat
+        })
+      );
       await storeCachedSection({
         cacheKey: input.cacheKey,
         section: input.section,
@@ -499,6 +1043,10 @@ function toOverallScore(scan: ScanResult) {
 
 function getOverallHealth(scan: ScanResult) {
   const overall = toOverallScore(scan);
+
+  if (overall >= 90 && scan.performance_score >= 85) {
+    return "EXCELLENT" as const;
+  }
 
   if (overall >= 85 && scan.performance_score >= 75) {
     return "GOOD" as const;
@@ -1277,7 +1825,7 @@ ${JSON.stringify(
 
 Return JSON with this exact shape:
 {
-  "overall_health": "GOOD | NEEDS ATTENTION | CRITICAL",
+  "overall_health": "EXCELLENT | GOOD | NEEDS ATTENTION | CRITICAL",
   "executive_sentences": ["sentence 1", "sentence 2"],
   "score_summaries": {
     "performance": { "label": "...", "summary": "..." },
@@ -1537,6 +2085,88 @@ function groupRecommendationsByPriority(
   ];
 
   return groups.filter((group) => group.recommendations.length > 0);
+}
+
+export async function buildWebsiteScanPlainEnglish(input: {
+  scan: ScanResult;
+  profile: UserProfile;
+  websiteId: string;
+}): Promise<WebsiteScanPlainEnglish> {
+  const deduplicatedIssues = dedupeWebsiteDetailIssues(input.scan.issues ?? []);
+  const deduplicatedRecommendations = dedupeWebsiteDetailRecommendations(input.scan.recommendations ?? []);
+  const rawIssues = deduplicatedIssues.map(toRawIssueEntry);
+  const rawRecommendations = deduplicatedRecommendations.map(toRawRecommendationEntry);
+
+  const issuesResult =
+    deduplicatedIssues.length > 0
+      ? await resolveStructuredSection({
+          cacheKey: `issues_${input.scan.id}`,
+          section: "website_detail_issues",
+          ownerUserId: input.profile.id,
+          websiteId: input.websiteId,
+          scanId: input.scan.id,
+          prompt: buildIssuePrompt(deduplicatedIssues),
+          schema: websiteDetailIssuesSchema,
+          fallback: () => deduplicatedIssues.map(buildFallbackPlainIssue),
+          sanitize: sanitizePlainIssues,
+          systemPrompt: WEBSITE_DETAIL_SYSTEM_PROMPT,
+          responseFormat: "json"
+        })
+      : {
+          provider: "template" as const,
+          payload: [] as PlainLanguageIssue[]
+        };
+
+  const issueMap = new Map(issuesResult.payload.map((issue) => [issue.id, sanitizePlainIssue(issue)]));
+  const issues = deduplicatedIssues.map(({ issue, device }) => issueMap.get(issue.id) ?? buildFallbackPlainIssue({ issue, device }));
+
+  const recommendationsResult =
+    deduplicatedRecommendations.length > 0
+      ? await resolveStructuredSection({
+          cacheKey: `recommendations_${input.scan.id}`,
+          section: "website_detail_recommendations",
+          ownerUserId: input.profile.id,
+          websiteId: input.websiteId,
+          scanId: input.scan.id,
+          prompt: buildRecommendationPrompt(deduplicatedRecommendations),
+          schema: websiteDetailRecommendationsSchema,
+          fallback: () => deduplicatedRecommendations.map(buildFallbackPlainRecommendation),
+          sanitize: sanitizePlainRecommendations,
+          systemPrompt: WEBSITE_DETAIL_SYSTEM_PROMPT,
+          responseFormat: "json"
+        })
+      : {
+          provider: "template" as const,
+          payload: [] as PlainLanguageRecommendation[]
+        };
+
+  const recommendations = deduplicatedRecommendations.map(
+    ({ recommendation, device }, index) =>
+      recommendationsResult.payload[index] ?? buildFallbackPlainRecommendation({ recommendation, device })
+  );
+
+  const severityCounts = {
+    high: issues.filter((issue) => issue.severity === "high").length,
+    medium: issues.filter((issue) => issue.severity === "medium").length,
+    low: issues.filter((issue) => issue.severity === "low").length
+  };
+
+  const provider =
+    issuesResult.provider === "groq" || recommendationsResult.provider === "groq"
+      ? "groq"
+      : issuesResult.provider === "gemini" || recommendationsResult.provider === "gemini"
+        ? "gemini"
+        : "template";
+
+  return {
+    provider,
+    summary: buildPlainLanguageSummary(severityCounts),
+    severity_counts: severityCounts,
+    issues,
+    recommendations,
+    raw_issues: rawIssues,
+    raw_recommendations: rawRecommendations
+  };
 }
 
 export async function buildReportNarrative(input: {

@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { AgencyBranding, ScanResult, ScanSchedule, UserProfile, Website } from "@/types";
-import { renderAiReportPdf } from "@/lib/report-pdf-renderer";
+import { renderAiReportPdf } from "@/lib/report-browser-pdf";
 
 export async function generateScanPdf(input: {
   website: Website;

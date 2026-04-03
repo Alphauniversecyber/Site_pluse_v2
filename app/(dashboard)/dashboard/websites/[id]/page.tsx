@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { AlertTriangle, ArrowUpRight, FileDown, Mail, ShieldAlert, WandSparkles } from "lucide-react";
+import { AlertTriangle, FileDown, Mail, WandSparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { DeviceScoreChart } from "@/components/charts/device-score-chart";
@@ -14,7 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { ScanResult, Website } from "@/types";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type {
+  PlainLanguageDifficulty,
+  ScanResult,
+  Severity,
+  Website,
+  WebsiteScanPlainEnglish
+} from "@/types";
 import { fetchJson } from "@/lib/api-client";
 import { getFriendlyScanFailureMessage } from "@/lib/scan-errors";
 
@@ -22,9 +29,208 @@ type WebsiteDetailResponse = Website & {
   scans: ScanResult[];
 };
 
+function cleanRawText(text: string, maxLength = 150) {
+  const cleaned = text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/https?:\/\/[^\s)]+/g, "")
+    .replace(/[`*_#>~]/g, " ")
+    .replace(/\b(LCP|FID|CLS|TBT|TTFB|INP|DOM|API|CDN|HTTP|CSS|JS|viewport)\b|render-blocking/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (cleaned.length <= maxLength) {
+    return cleaned;
+  }
+
+  const shortened = cleaned.slice(0, Math.max(0, maxLength - 3));
+  const boundary = shortened.search(/\s+\S*$/);
+  const safe = boundary > 24 ? shortened.slice(0, boundary) : shortened;
+
+  return `${safe.trim()}...`;
+}
+
+function normalizeTitleKey(value: string) {
+  return cleanRawText(value.toLowerCase(), 120).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function severityRank(severity: Severity) {
+  return severity === "high" ? 3 : severity === "medium" ? 2 : 1;
+}
+
+function difficultyStars(difficulty: PlainLanguageDifficulty) {
+  return difficulty === "Easy" ? "⭐" : difficulty === "Medium" ? "⭐⭐" : "⭐⭐⭐";
+}
+
+function buildFallbackSummary(counts: { high: number; medium: number; low: number }) {
+  if (counts.high > 0) {
+    return `Fix the ${counts.high} high priority issue${counts.high === 1 ? "" : "s"} first to see the biggest improvement.`;
+  }
+
+  if (counts.medium > 0) {
+    return `Start with the ${counts.medium} medium priority fix${counts.medium === 1 ? "" : "es"} to improve the site steadily.`;
+  }
+
+  if (counts.low > 0) {
+    return "Your website looks healthy overall. The remaining low priority items are mostly polish.";
+  }
+
+  return "This scan looks healthy overall, with no major issues needing urgent attention.";
+}
+
+function buildLocalPlainLanguage(scan: ScanResult): WebsiteScanPlainEnglish {
+  const issueMap = new Map<
+    string,
+    {
+      id: string;
+      title: string;
+      description: string;
+      severity: Severity;
+      device: "mobile" | "desktop" | "both" | null;
+    }
+  >();
+
+  for (const issue of scan.issues ?? []) {
+    const key = normalizeTitleKey(issue.title);
+    const existing = issueMap.get(key);
+
+    if (!existing) {
+      issueMap.set(key, {
+        id: issue.id,
+        title: cleanRawText(issue.title, 70) || "Needs attention",
+        description: cleanRawText(issue.description, 150),
+        severity: issue.severity,
+        device: issue.device ?? null
+      });
+      continue;
+    }
+
+    issueMap.set(key, {
+      id: existing.id,
+      title: existing.title,
+      description:
+        existing.description.length >= issue.description.length
+          ? existing.description
+          : cleanRawText(issue.description, 150),
+      severity: severityRank(issue.severity) > severityRank(existing.severity) ? issue.severity : existing.severity,
+      device:
+        existing.device && issue.device && existing.device !== issue.device
+          ? "both"
+          : existing.device ?? issue.device ?? null
+    });
+  }
+
+  const recommendationMap = new Map<
+    string,
+    {
+      id: string;
+      title: string;
+      description: string;
+      priority: Severity;
+      device: "mobile" | "desktop" | "both" | null;
+    }
+  >();
+
+  for (const recommendation of scan.recommendations ?? []) {
+    const key = normalizeTitleKey(recommendation.title);
+    const existing = recommendationMap.get(key);
+
+    if (!existing) {
+      recommendationMap.set(key, {
+        id: recommendation.id,
+        title: cleanRawText(recommendation.title, 70) || "Quick win",
+        description: cleanRawText(recommendation.description, 150),
+        priority: recommendation.priority,
+        device: recommendation.device ?? null
+      });
+      continue;
+    }
+
+    recommendationMap.set(key, {
+      id: existing.id,
+      title: existing.title,
+      description:
+        existing.description.length >= recommendation.description.length
+          ? existing.description
+          : cleanRawText(recommendation.description, 150),
+      priority:
+        severityRank(recommendation.priority) > severityRank(existing.priority)
+          ? recommendation.priority
+          : existing.priority,
+      device:
+        existing.device && recommendation.device && existing.device !== recommendation.device
+          ? "both"
+          : existing.device ?? recommendation.device ?? null
+    });
+  }
+
+  const rawIssues = Array.from(issueMap.values())
+    .sort((left, right) => severityRank(right.severity) - severityRank(left.severity))
+    .slice(0, 8);
+  const rawRecommendations = Array.from(recommendationMap.values())
+    .sort((left, right) => severityRank(right.priority) - severityRank(left.priority))
+    .slice(0, 5);
+
+  const issues = rawIssues.map((issue) => ({
+    id: issue.id,
+    title: issue.title,
+    whats_happening: cleanRawText(issue.description, 100) || "Part of your website needs attention.",
+    business_impact:
+      issue.severity === "high"
+        ? "Visitors may leave before taking action."
+        : "This can make the site feel less polished or effective.",
+    how_to_fix:
+      issue.device === "both"
+        ? "Ask your developer to fix this for both mobile and desktop."
+        : "Ask your developer to review and fix this area.",
+    severity: issue.severity,
+    difficulty: issue.severity === "high" ? "Medium" : "Easy",
+    time_estimate: issue.severity === "high" ? "1-2 days" : "1-2 hours",
+    category:
+      /seo|meta|search|robots|sitemap/i.test(`${issue.title} ${issue.description}`)
+        ? "SEO"
+        : /access|aria|alt|label|keyboard|contrast/i.test(`${issue.title} ${issue.description}`)
+          ? "Accessibility"
+          : /security|https|cookie|privacy|best practice/i.test(`${issue.title} ${issue.description}`)
+            ? "Security"
+            : "Performance"
+  })) satisfies WebsiteScanPlainEnglish["issues"];
+
+  const recommendations = rawRecommendations.map((recommendation) => ({
+    title: recommendation.title,
+    description:
+      cleanRawText(recommendation.description, 100) ||
+      "This will improve speed, visibility, or user experience.",
+    difficulty: recommendation.priority === "high" ? "Medium" : "Easy",
+    time_estimate: recommendation.priority === "high" ? "1-2 days" : "1-2 hours",
+    priority: recommendation.priority
+  })) satisfies WebsiteScanPlainEnglish["recommendations"];
+
+  const severityCounts = {
+    high: issues.filter((issue) => issue.severity === "high").length,
+    medium: issues.filter((issue) => issue.severity === "medium").length,
+    low: issues.filter((issue) => issue.severity === "low").length
+  };
+
+  return {
+    provider: "template",
+    summary: buildFallbackSummary(severityCounts),
+    severity_counts: severityCounts,
+    issues,
+    recommendations,
+    raw_issues: rawIssues,
+    raw_recommendations: rawRecommendations
+  };
+}
+
+function badgeVariantForSeverity(severity: Severity) {
+  return severity === "high" ? "danger" : severity === "medium" ? "warning" : "success";
+}
+
 export default function WebsiteDetailPage({ params }: { params: { id: string } }) {
   const [data, setData] = useState<WebsiteDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [plainLanguage, setPlainLanguage] = useState<WebsiteScanPlainEnglish | null>(null);
+  const [plainLanguageLoading, setPlainLanguageLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const refetch = async () => {
@@ -53,6 +259,39 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
     () => currentScan?.accessibility_violations ?? [],
     [currentScan]
   );
+
+  useEffect(() => {
+    if (!currentScan || currentScanFailed) {
+      setPlainLanguage(null);
+      setPlainLanguageLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    setPlainLanguageLoading(true);
+
+    void fetchJson<WebsiteScanPlainEnglish>(`/api/scan/${currentScan.id}/plain-language`)
+      .then((response) => {
+        if (!cancelled) {
+          setPlainLanguage(response);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPlainLanguage(buildLocalPlainLanguage(currentScan));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPlainLanguageLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentScan?.id, currentScanFailed]);
 
   const runScan = () =>
     startTransition(async () => {
@@ -301,88 +540,230 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             </>
           )}
 
-          <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+          {!currentScanFailed ? (
             <Card>
-              <CardHeader className="pb-3 sm:pb-6">
-                <CardTitle>Issues found</CardTitle>
+              <CardHeader className="gap-4 pb-3 sm:pb-6">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-1">
+                    <CardTitle>AI scan review</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Plain-English issues, quick wins, and a cleaned developer view for this scan.
+                    </p>
+                  </div>
+                  {plainLanguage ? (
+                    <Badge variant={plainLanguage.provider === "template" ? "outline" : "default"} className="self-start">
+                      {plainLanguage.provider === "template" ? "Clean fallback" : "AI translated"}
+                    </Badge>
+                  ) : null}
+                </div>
               </CardHeader>
-              <CardContent className="space-y-3 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
-                {currentScan.issues.length ? (
-                  currentScan.issues.map((issue) => (
-                    <div key={issue.id} className="rounded-2xl border border-border bg-background p-3 sm:p-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-500 sm:h-10 sm:w-10 sm:rounded-2xl">
-                            <AlertTriangle className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
+              <CardContent className="px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+                {plainLanguageLoading ? (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-border bg-background p-4">
+                      <p className="text-sm font-medium">AI is analyzing your website...</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Turning technical scan data into plain-English issues and quick wins.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 xl:grid-cols-3">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <Skeleton key={index} className="h-52 w-full rounded-2xl" />
+                      ))}
+                    </div>
+                  </div>
+                ) : plainLanguage ? (
+                  <div className="space-y-5">
+                    <div className="rounded-3xl border border-border bg-background p-4 sm:p-5">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                        <div className="flex flex-wrap gap-2">
+                          <div className="rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-rose-500 dark:text-rose-400">
+                            🔴 {plainLanguage.severity_counts.high} High
                           </div>
-                          <div>
-                            <p className="font-medium">{issue.title}</p>
-                            <p className="mt-2 text-sm leading-6 text-muted-foreground">{issue.description}</p>
+                          <div className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">
+                            🟡 {plainLanguage.severity_counts.medium} Medium
+                          </div>
+                          <div className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-500 dark:text-emerald-400">
+                            🟢 {plainLanguage.severity_counts.low} Low
                           </div>
                         </div>
-                        <Badge
-                          variant={issue.severity === "high" ? "danger" : issue.severity === "medium" ? "warning" : "outline"}
-                          className="self-start"
-                        >
-                          {issue.severity}
-                        </Badge>
+                        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{plainLanguage.summary}</p>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <p className="rounded-2xl border border-border bg-background p-3 text-sm text-muted-foreground sm:p-4">
-                    No notable issues were found in the latest scan.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader className="pb-3 sm:pb-6">
-                <CardTitle>Recommendations</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
-                {currentScan.recommendations.length ? (
-                  currentScan.recommendations.map((recommendation) => (
-                    <div key={recommendation.id} className="rounded-2xl border border-border bg-background p-3 sm:p-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary sm:h-10 sm:w-10 sm:rounded-2xl">
-                            <ShieldAlert className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
+                    <Tabs defaultValue="issues" className="w-full">
+                      <TabsList className="grid h-auto w-full grid-cols-3">
+                        <TabsTrigger value="issues">Issues</TabsTrigger>
+                        <TabsTrigger value="quick-wins">Quick Wins</TabsTrigger>
+                        <TabsTrigger value="raw-data">Raw Data</TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="issues" className="mt-5">
+                        {plainLanguage.issues.length ? (
+                          <div className="grid gap-4 xl:grid-cols-2">
+                            {plainLanguage.issues.map((issue) => (
+                              <div key={issue.id} className="rounded-2xl border border-border bg-background p-4 sm:p-5">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                  <div className="space-y-1 min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant={badgeVariantForSeverity(issue.severity)} className="self-start">
+                                        {issue.severity}
+                                      </Badge>
+                                      <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                                        {issue.category}
+                                      </span>
+                                    </div>
+                                    <p className="text-lg font-semibold leading-tight">{issue.title}</p>
+                                  </div>
+                                </div>
+
+                                <div className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
+                                  <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">
+                                      What&apos;s happening
+                                    </p>
+                                    <p>{issue.whats_happening}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">
+                                      Why it matters
+                                    </p>
+                                    <p>{issue.business_impact}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">
+                                      How to fix
+                                    </p>
+                                    <p>{issue.how_to_fix}</p>
+                                  </div>
+                                </div>
+
+                                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                                  <span>⏱️ {issue.time_estimate}</span>
+                                  <span>
+                                    {difficultyStars(issue.difficulty)} {issue.difficulty}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                          <div>
-                            <p className="font-medium">{recommendation.title}</p>
-                            <p className="mt-2 text-sm leading-6 text-muted-foreground">{recommendation.description}</p>
-                            {recommendation.link ? (
-                              <a
-                                href={recommendation.link}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
-                              >
-                                Open guidance
-                                <ArrowUpRight className="h-4 w-4" />
-                              </a>
-                            ) : null}
+                        ) : (
+                          <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+                            No notable issues were found in the latest scan.
+                          </p>
+                        )}
+                      </TabsContent>
+
+                      <TabsContent value="quick-wins" className="mt-5">
+                        {plainLanguage.recommendations.length ? (
+                          <div className="grid gap-4 xl:grid-cols-2">
+                            {plainLanguage.recommendations.map((recommendation, index) => (
+                              <div key={`${recommendation.title}-${index}`} className="rounded-2xl border border-border bg-background p-4 sm:p-5">
+                                <div className="flex items-start gap-3">
+                                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                                    <WandSparkles className="h-5 w-5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                                      ⚡ Quick Win
+                                    </p>
+                                    <p className="mt-1 text-lg font-semibold leading-tight">{recommendation.title}</p>
+                                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{recommendation.description}</p>
+                                    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                                      <span>
+                                        {difficultyStars(recommendation.difficulty)} {recommendation.difficulty}
+                                      </span>
+                                      <span>⏱️ {recommendation.time_estimate}</span>
+                                      <Badge variant={badgeVariantForSeverity(recommendation.priority)} className="self-start">
+                                        {recommendation.priority}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+                            No extra quick wins were generated for this scan.
+                          </p>
+                        )}
+                      </TabsContent>
+
+                      <TabsContent value="raw-data" className="mt-5">
+                        <div className="rounded-2xl border border-dashed border-border bg-background p-4">
+                          <p className="text-sm font-medium">Developer view</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Original scan output is cleaned for readability here, with links and noisy syntax removed.
+                          </p>
+                        </div>
+
+                        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                          <div className="space-y-3">
+                            <p className="text-sm font-semibold">Raw issues</p>
+                            {plainLanguage.raw_issues.length ? (
+                              plainLanguage.raw_issues.map((issue) => (
+                                <div key={issue.id} className="rounded-2xl border border-border bg-background p-4">
+                                  <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <p className="min-w-0 flex-1 font-medium leading-6">{issue.title}</p>
+                                    <Badge variant={badgeVariantForSeverity(issue.severity)} className="self-start">
+                                      {issue.severity}
+                                    </Badge>
+                                  </div>
+                                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{issue.description}</p>
+                                  {issue.device ? (
+                                    <p className="mt-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                                      {issue.device === "both" ? "Mobile + desktop" : issue.device}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ))
+                            ) : (
+                              <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+                                No raw issues were returned for this scan.
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-3">
+                            <p className="text-sm font-semibold">Raw recommendations</p>
+                            {plainLanguage.raw_recommendations.length ? (
+                              plainLanguage.raw_recommendations.map((recommendation) => (
+                                <div key={recommendation.id} className="rounded-2xl border border-border bg-background p-4">
+                                  <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <p className="min-w-0 flex-1 font-medium leading-6">{recommendation.title}</p>
+                                    <Badge variant={badgeVariantForSeverity(recommendation.priority)} className="self-start">
+                                      {recommendation.priority}
+                                    </Badge>
+                                  </div>
+                                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                                    {recommendation.description}
+                                  </p>
+                                  {recommendation.device ? (
+                                    <p className="mt-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                                      {recommendation.device === "both" ? "Mobile + desktop" : recommendation.device}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ))
+                            ) : (
+                              <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+                                No raw recommendations were returned for this scan.
+                              </p>
+                            )}
                           </div>
                         </div>
-                        <Badge
-                          variant={recommendation.priority === "high" ? "danger" : recommendation.priority === "medium" ? "warning" : "outline"}
-                          className="self-start"
-                        >
-                          {recommendation.priority}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))
+                      </TabsContent>
+                    </Tabs>
+                  </div>
                 ) : (
-                  <p className="rounded-2xl border border-border bg-background p-3 text-sm text-muted-foreground sm:p-4">
-                    No extra recommendations were generated for this scan.
+                  <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+                    No scan insights are available yet for this website.
                   </p>
                 )}
               </CardContent>
             </Card>
-          </div>
+          ) : null}
 
           <Card>
             <CardHeader className="pb-3 sm:pb-6">
