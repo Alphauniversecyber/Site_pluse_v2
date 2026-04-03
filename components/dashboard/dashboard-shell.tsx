@@ -60,7 +60,7 @@ export function DashboardShell({
         key={item.href}
         href={item.href}
         className={cn(
-          "flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-semibold leading-none tracking-[0.01em] transition duration-200 xl:px-5 xl:py-4 xl:text-base",
+          "flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-[15px] font-semibold leading-none tracking-[0.01em] transition duration-200 xl:px-5 xl:py-4 xl:text-base [@media(max-height:900px)]:py-[0.6875rem] [@media(max-height:820px)]:py-2.5",
           active
             ? "bg-card text-foreground shadow-[inset_0_0_0_1px_rgba(59,130,246,0.2),0_18px_44px_-30px_rgba(15,23,42,0.35)]"
             : "text-foreground/78 hover:bg-card/90 hover:text-foreground"
@@ -73,7 +73,7 @@ export function DashboardShell({
   };
 
   const navItems = (
-    <nav className="space-y-2 xl:space-y-2.5">
+    <nav className="space-y-2 xl:space-y-2.5 [@media(max-height:900px)]:space-y-1.5 [@media(max-height:820px)]:space-y-1">
       {navigation.map((item) => renderNavLink(item))}
     </nav>
   );
@@ -82,8 +82,8 @@ export function DashboardShell({
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
       <div className="mx-auto flex min-h-screen w-full max-w-[2720px] [--dashboard-content-max:1600px] [--dashboard-sidebar-width:324px] xl:[--dashboard-sidebar-width:356px] 2xl:[--dashboard-sidebar-width:384px] min-[1800px]:[--dashboard-content-max:1760px] min-[1800px]:[--dashboard-sidebar-width:408px] min-[2200px]:[--dashboard-content-max:1960px] min-[2200px]:[--dashboard-sidebar-width:432px]">
         <aside className="hidden border-r border-border/80 bg-card/65 backdrop-blur lg:block lg:w-[var(--dashboard-sidebar-width)]">
-          <div className="sticky top-0 flex h-screen flex-col px-7 py-6 xl:px-9 xl:py-7 2xl:px-10 min-[1800px]:px-11 min-[2200px]:px-12">
-            <div className="border-b border-border/70 pb-6">
+          <div className="sticky top-0 flex h-screen flex-col px-7 py-6 xl:px-9 xl:py-7 2xl:px-10 min-[1800px]:px-11 min-[2200px]:px-12 [@media(max-height:900px)]:py-5 [@media(max-height:820px)]:py-4">
+            <div className="border-b border-border/70 pb-6 [@media(max-height:900px)]:pb-5 [@media(max-height:820px)]:pb-4">
               <Link href="/" className="inline-flex max-w-full flex-col items-start gap-2.5">
                 <SitePulseLogo variant="light" className="h-10 w-[184px] max-w-full dark:hidden xl:w-[192px] min-[1800px]:w-[204px]" />
                 <SitePulseLogo variant="dark" className="hidden h-10 w-[184px] max-w-full dark:inline-flex xl:w-[192px] min-[1800px]:w-[204px]" />
@@ -91,7 +91,7 @@ export function DashboardShell({
               </Link>
             </div>
 
-            <div className="theme-panel mt-5 rounded-[1.75rem] p-5 xl:p-6 min-[1800px]:p-7">
+            <div className="theme-panel mt-5 rounded-[1.75rem] p-5 xl:p-6 min-[1800px]:p-7 [@media(max-height:900px)]:mt-4 [@media(max-height:900px)]:p-4 [@media(max-height:820px)]:mt-3 [@media(max-height:820px)]:p-3.5">
               <div className="flex items-start gap-4">
                 <Avatar className="h-11 w-11 shrink-0 xl:h-12 xl:w-12">
                   <AvatarImage src={profile.profile_photo_url ?? undefined} alt={profile.full_name ?? profile.email} />
@@ -114,11 +114,11 @@ export function DashboardShell({
               </Badge>
             </div>
 
-            <div className="mt-5 flex min-h-0 flex-1 flex-col">
+            <div className="mt-5 flex min-h-0 flex-1 flex-col [@media(max-height:900px)]:mt-4 [@media(max-height:820px)]:mt-3">
               <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-foreground/56">
                 Workspace
               </p>
-              <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+              <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1 [@media(max-height:900px)]:mt-3 [@media(max-height:820px)]:mt-2.5">
                 {navItems}
               </div>
             </div>
