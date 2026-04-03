@@ -21,8 +21,7 @@ const navigation = [
   { href: "/dashboard/websites", label: "Websites", icon: Globe2 },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
-  { href: "/dashboard/branding", label: "Branding", icon: Palette },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings }
+  { href: "/dashboard/branding", label: "Branding", icon: Palette }
 ] as const;
 
 export function DashboardShell({
@@ -147,7 +146,7 @@ export function DashboardShell({
                       </Link>
                       <SheetTitle className="pt-4">Dashboard navigation</SheetTitle>
                       <SheetDescription>
-                        Jump between websites, reports, branding, billing, and settings on smaller screens.
+                        Jump between websites, reports, branding, and billing on smaller screens.
                       </SheetDescription>
                     </SheetHeader>
 
