@@ -2,11 +2,19 @@ import "server-only";
 
 import type {
   AgencyBranding,
+  BrokenLinkRecord,
+  CompetitorScanRecord,
+  CruxDataRecord,
   ScanResult,
   ScanSchedule,
+  SecurityHeadersRecord,
+  SeoAuditRecord,
+  SslCheckRecord,
+  UptimeCheckRecord,
   UserProfile,
   Website
 } from "@/types";
+import { buildCruxSummary, buildHealthScore, buildLinkHealthSummary, buildUptimeSummary } from "@/lib/health-score";
 import { buildReportNarrative, type ReportNarrative, type ReportPriority } from "@/lib/report-ai";
 import { formatDateTime } from "@/lib/utils";
 
@@ -54,6 +62,13 @@ type Context = {
   branding?: AgencyBranding | null;
   profile: UserProfile;
   schedule?: ScanSchedule | null;
+  seoAudit?: SeoAuditRecord | null;
+  sslCheck?: SslCheckRecord | null;
+  securityHeaders?: SecurityHeadersRecord | null;
+  cruxData?: CruxDataRecord | null;
+  brokenLinks?: BrokenLinkRecord | null;
+  uptimeChecks?: UptimeCheckRecord[];
+  competitorScans?: CompetitorScanRecord[];
 };
 
 type PdfPage = {
@@ -604,6 +619,66 @@ function deviceCardHtml(input: {
   `;
 }
 
+function metricRowHtml(label: string, value: string, status?: string, statusTone?: Tone) {
+  return `
+    <div class="metric-row">
+      <div class="metric-row__copy">
+        <p class="metric-row__label">${escapeHtml(label)}</p>
+        <p class="metric-row__value">${escapeHtml(value)}</p>
+      </div>
+      ${status && statusTone ? badgeHtml(status, statusTone, "pill--meta") : ""}
+    </div>
+  `;
+}
+
+function statusToneFromBoolean(value: boolean) {
+  return value ? tone(GREEN, GREEN_SOFT) : tone(RED, RED_SOFT);
+}
+
+function smallSignalCardHtml(input: {
+  title: string;
+  value: string;
+  subtitle: string;
+  tone?: Tone;
+}) {
+  return `
+    <article class="surface-card signal-card">
+      <div class="signal-card__top">
+        <p class="signal-card__title">${escapeHtml(input.title)}</p>
+        ${input.tone ? badgeHtml(input.value, input.tone, "pill--meta") : `<p class="signal-card__value">${escapeHtml(input.value)}</p>`}
+      </div>
+      <p class="signal-card__subtitle">${escapeHtml(cleanCopy(input.subtitle))}</p>
+    </article>
+  `;
+}
+
+function competitorCardHtml(input: {
+  competitorUrl: string;
+  performance: number;
+  seo: number;
+  accessibility: number;
+  bestPractices: number;
+}) {
+  const overall = Math.round(
+    (input.performance + input.seo + input.accessibility + input.bestPractices) / 4
+  );
+
+  return `
+    <article class="surface-card competitor-card">
+      <div class="card-header-row">
+        <p class="device-card__title">${escapeHtml(input.competitorUrl.replace(/^https?:\/\//, ""))}</p>
+        ${badgeHtml(`${overall}/100`, scoreTone(overall).tone)}
+      </div>
+      <div class="competitor-metrics">
+        ${metricRowHtml("Performance", `${input.performance}`, undefined, undefined)}
+        ${metricRowHtml("SEO", `${input.seo}`, undefined, undefined)}
+        ${metricRowHtml("Accessibility", `${input.accessibility}`, undefined, undefined)}
+        ${metricRowHtml("Best Practices", `${input.bestPractices}`, undefined, undefined)}
+      </div>
+    </article>
+  `;
+}
+
 function buildHtml(input: Context, narrative: ReportNarrative, logo: string | null) {
   const name = brandName(input);
   const email = contactEmail(input);
@@ -611,6 +686,27 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
   const health = healthLabel(input.scan, narrative.overview);
   const healthStatusTone = healthTone(health);
   const overall = overallScore(input.scan);
+  const healthScore = buildHealthScore({
+    scan: input.scan,
+    seoAudit: input.seoAudit,
+    sslCheck: input.sslCheck,
+    securityHeaders: input.securityHeaders,
+    uptimeChecks: input.uptimeChecks ?? []
+  });
+  const linkHealth = buildLinkHealthSummary(input.brokenLinks);
+  const uptimeSummary = buildUptimeSummary(input.uptimeChecks ?? []);
+  const cruxSummary = buildCruxSummary(input.cruxData);
+  const latestCompetitors = Array.from(
+    (input.competitorScans ?? [])
+      .filter((item) => item.scan_status === "success")
+      .reduce((map, item) => {
+        if (!map.has(item.competitor_url)) {
+          map.set(item.competitor_url, item);
+        }
+        return map;
+      }, new Map<string, CompetitorScanRecord>())
+      .values()
+  ).slice(0, 3);
   const summary = takeSentences(
     `${narrative.overview.executive_sentences.join(" ")} ${narrative.overview.projected_summary}`,
     3
@@ -736,6 +832,191 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
     ? `<img class="contact-logo contact-logo--white" src="${logo}" alt="${escapeHtml(name)} logo" />`
     : `<div class="contact-wordmark">${escapeHtml(name)}</div>`;
 
+  const seoAuditSection = input.seoAudit
+    ? `
+        <section class="surface-card section-card">
+          <div class="section-card__header">
+            <h2>On-Page SEO Audit</h2>
+            <p>Quick checks from the page HTML so you can see what search engines and visitors find immediately.</p>
+          </div>
+          <div class="two-column-grid">
+            ${metricRowHtml("Title tag", `${input.seoAudit.title_tag.status} • ${input.seoAudit.title_tag.length ?? 0} chars`, input.seoAudit.title_tag.exists ? "Pass" : "Fail", statusToneFromBoolean(input.seoAudit.title_tag.exists))}
+            ${metricRowHtml("Meta description", `${input.seoAudit.meta_description.status} • ${input.seoAudit.meta_description.length ?? 0} chars`, input.seoAudit.meta_description.exists ? "Pass" : "Fail", statusToneFromBoolean(input.seoAudit.meta_description.exists))}
+            ${metricRowHtml("Heading structure", `${input.seoAudit.headings.status} • H1 ${input.seoAudit.headings.h1_count}, H2 ${input.seoAudit.headings.h2_count}, H3 ${input.seoAudit.headings.h3_count}`)}
+            ${metricRowHtml("Images missing alt text", `${input.seoAudit.images_missing_alt}`)}
+            ${metricRowHtml("Open Graph tags", input.seoAudit.og_tags.title && input.seoAudit.og_tags.description && input.seoAudit.og_tags.image ? "Complete" : "Needs attention")}
+            ${metricRowHtml("Canonical tag", input.seoAudit.canonical.status)}
+          </div>
+          ${
+            input.seoAudit.fix_suggestions.length
+              ? `<div class="tag-list">${input.seoAudit.fix_suggestions
+                  .slice(0, 4)
+                  .map((item) => badgeHtml(item.title, priorityTone(item.severity === "high" ? "High" : item.severity === "medium" ? "Medium" : "Low"), "pill--meta"))
+                  .join("")}</div>`
+              : ""
+          }
+        </section>
+      `
+    : "";
+
+  const linkHealthSection = linkHealth
+    ? `
+        <section class="surface-card section-card">
+          <div class="section-card__header">
+            <h2>Link Health</h2>
+            <p>Internal link quality from the latest weekly crawl.</p>
+          </div>
+          <div class="signal-grid">
+            ${smallSignalCardHtml({
+              title: "Total links checked",
+              value: `${linkHealth.totalLinks}`,
+              subtitle: "Internal links scanned from your website."
+            })}
+            ${smallSignalCardHtml({
+              title: "Broken links",
+              value: `${linkHealth.brokenLinks}`,
+              subtitle: linkHealth.brokenLinks ? "Broken links should be fixed to avoid frustrating visitors." : "No broken internal links were found."
+            })}
+            ${smallSignalCardHtml({
+              title: "Redirect chains",
+              value: `${linkHealth.redirectChains}`,
+              subtitle: "Long redirect paths can slow visitors down and dilute trust."
+            })}
+          </div>
+          ${
+            linkHealth.brokenUrls.length
+              ? `<div class="list-block">${linkHealth.brokenUrls
+                  .slice(0, 5)
+                  .map((item) => `<p><strong>${escapeHtml(item.status.toString())}</strong> ${escapeHtml(item.url)}</p>`)
+                  .join("")}</div>`
+              : ""
+          }
+        </section>
+      `
+    : "";
+
+  const securitySection = `
+    <section class="surface-card section-card">
+      <div class="section-card__header">
+        <h2>Security & SSL</h2>
+        <p>Certificate health and key response headers that help browsers trust your site.</p>
+      </div>
+      <div class="signal-grid">
+        ${smallSignalCardHtml({
+          title: "SSL status",
+          value: input.sslCheck
+            ? input.sslCheck.grade === "green"
+              ? "Healthy"
+              : input.sslCheck.grade === "orange"
+                ? "Renew soon"
+                : input.sslCheck.grade === "red"
+                  ? "Urgent"
+                  : "Critical"
+            : "Unknown",
+          subtitle: input.sslCheck
+            ? input.sslCheck.days_until_expiry === null
+              ? "No valid SSL expiry was detected."
+              : `${input.sslCheck.days_until_expiry} day(s) until expiry with ${input.sslCheck.issuer ?? "unknown issuer"}.`
+            : "No SSL check data is available yet.",
+          tone: input.sslCheck ? priorityTone(input.sslCheck.grade === "green" ? "Low" : input.sslCheck.grade === "orange" ? "Medium" : "Critical") : neutralTone()
+        })}
+        ${smallSignalCardHtml({
+          title: "Security headers",
+          value: input.securityHeaders?.grade ?? "N/A",
+          subtitle: input.securityHeaders
+            ? `${[
+                input.securityHeaders.hsts,
+                input.securityHeaders.csp,
+                input.securityHeaders.x_frame_options,
+                input.securityHeaders.x_content_type,
+                input.securityHeaders.referrer_policy,
+                input.securityHeaders.permissions_policy
+              ].filter(Boolean).length} of 6 headers are present.`
+            : "Header audit data is not available yet.",
+          tone: input.securityHeaders ? priorityTone(input.securityHeaders.grade === "A" ? "Low" : input.securityHeaders.grade === "B" ? "Medium" : input.securityHeaders.grade === "C" ? "High" : "Critical") : neutralTone()
+        })}
+        ${smallSignalCardHtml({
+          title: "Health score security",
+          value: `${healthScore.breakdown.security}/100`,
+          subtitle: "Combined score from SSL certificate status and security headers."
+        })}
+      </div>
+      ${
+        input.securityHeaders
+          ? `<div class="two-column-grid">
+              ${metricRowHtml("HSTS", input.securityHeaders.hsts_value || "Missing", input.securityHeaders.hsts ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.hsts))}
+              ${metricRowHtml("Content Security Policy", input.securityHeaders.csp_value || "Missing", input.securityHeaders.csp ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.csp))}
+              ${metricRowHtml("X-Frame-Options", input.securityHeaders.x_frame_options_value || "Missing", input.securityHeaders.x_frame_options ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.x_frame_options))}
+              ${metricRowHtml("Referrer-Policy", input.securityHeaders.referrer_policy_value || "Missing", input.securityHeaders.referrer_policy ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.referrer_policy))}
+            </div>`
+          : ""
+      }
+    </section>
+  `;
+
+  const uptimeAndCruxSection = `
+    <section class="surface-card section-card">
+      <div class="section-card__header">
+        <h2>Uptime & Real User Data</h2>
+        <p>A quick view of availability plus how real visitors experience the website outside the lab.</p>
+      </div>
+      <div class="signal-grid">
+        ${smallSignalCardHtml({
+          title: "30-day uptime",
+          value: `${uptimeSummary.percentage}%`,
+          subtitle:
+            uptimeSummary.averageResponseMs !== null
+              ? `Average response time: ${uptimeSummary.averageResponseMs} ms.`
+              : "Waiting for more uptime samples to calculate response time."
+        })}
+        ${smallSignalCardHtml({
+          title: "Recent incidents",
+          value: `${uptimeSummary.incidents.length}`,
+          subtitle: uptimeSummary.incidents.length ? "These are the most recent downtime events captured in the last 30 days." : "No downtime incidents were captured in the latest period."
+        })}
+        ${smallSignalCardHtml({
+          title: "Real-user speed",
+          value: cruxSummary ? `${cruxSummary.lcp.good}% good` : "No data",
+          subtitle: cruxSummary ? "Share of real visitors seeing good loading performance." : "CrUX data is not available for this origin yet."
+        })}
+      </div>
+      ${
+        cruxSummary
+          ? `<div class="two-column-grid">
+              ${metricRowHtml("Loading performance", `${cruxSummary.lcp.good}% good / ${cruxSummary.lcp.poor}% poor`)}
+              ${metricRowHtml("Layout stability", `${cruxSummary.cls.good}% good / ${cruxSummary.cls.poor}% poor`)}
+              ${metricRowHtml("Interaction speed", `${cruxSummary.inp.good}% good / ${cruxSummary.inp.poor}% poor`)}
+              ${metricRowHtml("Time to first byte", `${cruxSummary.ttfb.good}% good / ${cruxSummary.ttfb.poor}% poor`)}
+            </div>`
+          : ""
+      }
+    </section>
+  `;
+
+  const competitorSection = latestCompetitors.length
+    ? `
+        <section class="surface-card section-card">
+          <div class="section-card__header">
+            <h2>Competitor Comparison</h2>
+            <p>How your website currently compares against the competitor URLs you are tracking.</p>
+          </div>
+          <div class="recommendation-stack">
+            ${latestCompetitors
+              .map((item) =>
+                competitorCardHtml({
+                  competitorUrl: item.competitor_url,
+                  performance: item.performance,
+                  seo: item.seo,
+                  accessibility: item.accessibility,
+                  bestPractices: item.best_practices
+                })
+              )
+              .join("")}
+          </div>
+        </section>
+      `
+    : "";
+
   const pages: PdfPage[] = [
     {
       dark: true,
@@ -758,6 +1039,10 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
             <div>
               <p class="meta-label">Prepared by</p>
               <p class="meta-value">${escapeHtml(name)}</p>
+            </div>
+            <div>
+              <p class="meta-label">Health score</p>
+              <p class="meta-value">${healthScore.overall}/100</p>
             </div>
             <div class="meta-divider"></div>
             <div>
@@ -814,6 +1099,20 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
               </div>
             </article>
           </section>
+        </div>
+      `
+    },
+    {
+      content: `
+        <div class="page-stack">
+          ${sectionHeaderHtml({
+            eyebrow: "Website Signals",
+            title: "SEO, Links, and Security",
+            subtitle: "Additional checks beyond performance to show how the site is structured, trusted, and maintained."
+          })}
+          ${seoAuditSection}
+          ${linkHealthSection}
+          ${securitySection}
         </div>
       `
     },
@@ -895,6 +1194,7 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
               takeSentences(`${narrative.overview.vitals_overall}`, 2)
             )}</p>
           </section>
+          ${uptimeAndCruxSection}
         </div>
       `
     },
@@ -921,6 +1221,7 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
           <section class="surface-card summary-card">
             <p>${escapeHtml(cleanCopy(narrative.overview.device_tip))}</p>
           </section>
+          ${competitorSection}
         </div>
       `
     },
@@ -1496,6 +1797,99 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       font-size: 18px;
       font-weight: 700;
       color: ${SLATE_950};
+    }
+    .signal-grid,
+    .two-column-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .signal-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 20px;
+    }
+    .signal-card__top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .signal-card__title,
+    .metric-row__label {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: ${SLATE_600};
+    }
+    .signal-card__value,
+    .metric-row__value {
+      margin: 6px 0 0;
+      font-size: 24px;
+      line-height: 1.1;
+      font-weight: 800;
+      color: ${SLATE_950};
+    }
+    .signal-card__subtitle {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.65;
+      color: ${SLATE_700};
+    }
+    .metric-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid ${BORDER};
+      background: ${SURFACE_SOFT};
+    }
+    .metric-row__copy {
+      min-width: 0;
+    }
+    .metric-row__value {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.55;
+      color: ${SLATE_900};
+    }
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .list-block {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid ${BORDER};
+      background: ${SURFACE_SOFT};
+    }
+    .list-block p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.65;
+      color: ${SLATE_700};
+    }
+    .competitor-card {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .competitor-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
     }
     .page-footer {
       display: flex;

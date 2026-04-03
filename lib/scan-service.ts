@@ -1,6 +1,8 @@
 import "server-only";
 
-import type { ScanResult, UserProfile, Website } from "@/types";
+import type { ScanResult, SslCheckRecord, UserProfile, Website } from "@/types";
+import { ensureBrokenLinkCheck } from "@/lib/broken-links";
+import { ensureCruxData } from "@/lib/crux";
 import { runAccessibilityScan } from "@/lib/pa11y";
 import { runPageSpeedScan } from "@/lib/pagespeed";
 import { sendCriticalAlertEmail } from "@/lib/resend";
@@ -10,6 +12,9 @@ import {
   isPageSpeedRateLimitError,
   shouldUseFriendlyScanFailureMessage
 } from "@/lib/scan-errors";
+import { ensureSeoAudit } from "@/lib/seo-audit";
+import { ensureSecurityHeadersCheck } from "@/lib/security-headers-checker";
+import { ensureSslCheck, getSslAlertThreshold } from "@/lib/ssl-checker";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { PLAN_LIMITS } from "@/lib/utils";
 
@@ -18,7 +23,8 @@ type NotificationType =
   | "critical_score"
   | "scan_failure"
   | "report_ready"
-  | "accessibility_regression";
+  | "accessibility_regression"
+  | "ssl_expiry";
 
 async function createNotification(input: {
   userId: string;
@@ -78,6 +84,78 @@ async function getWebsiteContext(websiteId: string) {
   };
 }
 
+async function maybeSendSslAlert(input: {
+  profile: UserProfile;
+  website: Website;
+  scan: ScanResult;
+  sslCheck: SslCheckRecord | null;
+}) {
+  if (!input.sslCheck) {
+    return;
+  }
+
+  const threshold = getSslAlertThreshold(input.sslCheck);
+  if (!threshold) {
+    return;
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data: priorAlerts } = await admin
+    .from("notifications")
+    .select("metadata")
+    .eq("user_id", input.profile.id)
+    .eq("website_id", input.website.id)
+    .eq("type", "ssl_expiry")
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const alreadyAlerted = (priorAlerts ?? []).some((item) => {
+    const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+    return (
+      metadata.threshold === threshold &&
+      metadata.expiryDate === (input.sslCheck?.expiry_date ?? null)
+    );
+  });
+
+  if (alreadyAlerted) {
+    return;
+  }
+
+  const reason =
+    threshold === "expired"
+      ? `${input.website.label} has an expired SSL certificate. Visitors may see security warnings right now.`
+      : threshold === "7_days"
+        ? `${input.website.label}'s SSL certificate expires in ${input.sslCheck.days_until_expiry} day(s). Renew it urgently to avoid downtime warnings.`
+        : `${input.website.label}'s SSL certificate expires in ${input.sslCheck.days_until_expiry} day(s). Plan the renewal now to avoid service disruption.`;
+
+  await createNotification({
+    userId: input.profile.id,
+    websiteId: input.website.id,
+    type: "ssl_expiry",
+    title:
+      threshold === "expired"
+        ? `SSL expired for ${input.website.label}`
+        : `SSL renewal needed for ${input.website.label}`,
+    body: reason,
+    severity: threshold === "30_days" ? "medium" : "high",
+    metadata: {
+      threshold,
+      expiryDate: input.sslCheck.expiry_date,
+      daysUntilExpiry: input.sslCheck.days_until_expiry,
+      issuer: input.sslCheck.issuer
+    }
+  });
+
+  if (input.profile.email_notifications_enabled) {
+    await sendCriticalAlertEmail({
+      to: input.profile.email,
+      website: input.website,
+      scan: input.scan,
+      reason
+    });
+  }
+}
+
 function getNextScanAt(frequency: "daily" | "weekly" | "monthly") {
   const next = new Date();
 
@@ -117,9 +195,17 @@ export async function executeWebsiteScan(websiteId: string) {
 
   const previousScan = (priorRows?.[0] as ScanResult | undefined) ?? null;
 
-  const [pageSpeedResult, accessibilityResult] = await Promise.allSettled([
+  const [pageSpeedResult, accessibilityResult, sslCheckResult, securityHeadersResult] = await Promise.allSettled([
     runPageSpeedScan(website.url),
-    runAccessibilityScan(website.url)
+    runAccessibilityScan(website.url),
+    ensureSslCheck({
+      websiteId: website.id,
+      url: website.url
+    }),
+    ensureSecurityHeadersCheck({
+      websiteId: website.id,
+      url: website.url
+    })
   ]);
 
   const pageSpeed =
@@ -229,6 +315,46 @@ export async function executeWebsiteScan(websiteId: string) {
   }
 
   const currentScan = scan as ScanResult;
+  const seoAuditResult = await Promise.allSettled([
+    ensureSeoAudit({
+      websiteId: website.id,
+      scanId: currentScan.id,
+      url: website.url
+    })
+  ]);
+  const brokenLinksResult = await Promise.allSettled([
+    ensureBrokenLinkCheck({
+      websiteId: website.id,
+      url: website.url,
+      scanId: currentScan.id
+    })
+  ]);
+  const cruxDataResult = await Promise.allSettled([
+    ensureCruxData({
+      websiteId: website.id,
+      url: website.url
+    })
+  ]);
+  const sslCheck =
+    sslCheckResult.status === "fulfilled"
+      ? sslCheckResult.value
+      : null;
+  const seoAudit =
+    seoAuditResult[0]?.status === "fulfilled"
+      ? seoAuditResult[0].value
+      : null;
+  const cruxData =
+    cruxDataResult[0]?.status === "fulfilled"
+      ? cruxDataResult[0].value
+      : null;
+  const brokenLinks =
+    brokenLinksResult[0]?.status === "fulfilled"
+      ? brokenLinksResult[0].value
+      : null;
+  const securityHeaders =
+    securityHeadersResult.status === "fulfilled"
+      ? securityHeadersResult.value
+      : null;
   const currentAccessibilityCount =
     currentScan.accessibility_violations?.length ??
     ((currentScan.raw_data as { accessibility?: { accessibilityViolations?: unknown[] } }).accessibility
@@ -332,12 +458,26 @@ export async function executeWebsiteScan(websiteId: string) {
     }
   }
 
+  if (sslCheck) {
+    await maybeSendSslAlert({
+      profile,
+      website,
+      scan: currentScan,
+      sslCheck
+    });
+  }
+
   await pruneHistory(website.id, profile.plan);
 
   return {
     website,
     profile,
-    scan: currentScan
+    scan: currentScan,
+    sslCheck,
+    securityHeaders,
+    seoAudit,
+    cruxData,
+    brokenLinks
   };
 }
 

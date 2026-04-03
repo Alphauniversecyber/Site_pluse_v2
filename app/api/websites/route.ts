@@ -1,4 +1,5 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
+import { buildHealthScore } from "@/lib/health-score";
 import { PLAN_LIMITS, normalizeUrl } from "@/lib/utils";
 import { websiteSchema } from "@/lib/validation";
 
@@ -19,13 +20,49 @@ export async function GET() {
 
   const websiteIds = (websites ?? []).map((website) => website.id);
 
-  const [{ data: schedules }, { data: scanRows }] = await Promise.all([
+  const [
+    { data: schedules },
+    { data: scanRows },
+    { data: seoAudits },
+    { data: sslChecks },
+    { data: securityHeaders },
+    { data: uptimeChecks },
+    { data: brokenLinks }
+  ] = await Promise.all([
     websiteIds.length
       ? supabase.from("scan_schedules").select("*").in("website_id", websiteIds)
       : Promise.resolve({ data: [] }),
     websiteIds.length
       ? supabase
           .from("scan_results")
+          .select("*")
+          .in("website_id", websiteIds)
+          .order("scanned_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    websiteIds.length
+      ? supabase.from("seo_audit").select("*").in("website_id", websiteIds).order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    websiteIds.length
+      ? supabase.from("ssl_checks").select("*").in("website_id", websiteIds).order("checked_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    websiteIds.length
+      ? supabase
+          .from("security_headers")
+          .select("*")
+          .in("website_id", websiteIds)
+          .order("checked_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    websiteIds.length
+      ? supabase
+          .from("uptime_checks")
+          .select("*")
+          .in("website_id", websiteIds)
+          .order("checked_at", { ascending: false })
+          .limit(300)
+      : Promise.resolve({ data: [] }),
+    websiteIds.length
+      ? supabase
+          .from("broken_links")
           .select("*")
           .in("website_id", websiteIds)
           .order("scanned_at", { ascending: false })
@@ -44,11 +81,56 @@ export async function GET() {
     scheduleMap.set(schedule.website_id, schedule);
   }
 
+  const latestSeoAuditMap = new Map<string, any>();
+  for (const audit of seoAudits ?? []) {
+    if (!latestSeoAuditMap.has(audit.website_id)) {
+      latestSeoAuditMap.set(audit.website_id, audit);
+    }
+  }
+
+  const latestSslMap = new Map<string, any>();
+  for (const check of sslChecks ?? []) {
+    if (!latestSslMap.has(check.website_id)) {
+      latestSslMap.set(check.website_id, check);
+    }
+  }
+
+  const latestSecurityHeadersMap = new Map<string, any>();
+  for (const record of securityHeaders ?? []) {
+    if (!latestSecurityHeadersMap.has(record.website_id)) {
+      latestSecurityHeadersMap.set(record.website_id, record);
+    }
+  }
+
+  const uptimeMap = new Map<string, any[]>();
+  for (const check of uptimeChecks ?? []) {
+    const current = uptimeMap.get(check.website_id) ?? [];
+    current.push(check);
+    uptimeMap.set(check.website_id, current);
+  }
+
+  const latestBrokenLinksMap = new Map<string, any>();
+  for (const record of brokenLinks ?? []) {
+    if (!latestBrokenLinksMap.has(record.website_id)) {
+      latestBrokenLinksMap.set(record.website_id, record);
+    }
+  }
+
   return apiSuccess(
     (websites ?? []).map((website) => ({
       ...website,
       latest_scan: latestScanMap.get(website.id) ?? null,
-      schedule: scheduleMap.get(website.id) ?? null
+      schedule: scheduleMap.get(website.id) ?? null,
+      ssl_check: latestSslMap.get(website.id) ?? null,
+      security_headers: latestSecurityHeadersMap.get(website.id) ?? null,
+      broken_links: latestBrokenLinksMap.get(website.id) ?? null,
+      health_score: buildHealthScore({
+        scan: latestScanMap.get(website.id) ?? null,
+        seoAudit: latestSeoAuditMap.get(website.id) ?? null,
+        sslCheck: latestSslMap.get(website.id) ?? null,
+        securityHeaders: latestSecurityHeadersMap.get(website.id) ?? null,
+        uptimeChecks: uptimeMap.get(website.id) ?? []
+      })
     }))
   );
 }
@@ -89,7 +171,8 @@ export async function POST(request: Request) {
       url: normalizedUrl,
       label: parsed.data.label,
       email_reports_enabled: profile.plan !== "free" ? parsed.data.email_reports_enabled : false,
-      report_recipients: profile.plan !== "free" ? parsed.data.report_recipients : []
+      report_recipients: profile.plan !== "free" ? parsed.data.report_recipients : [],
+      competitor_urls: parsed.data.competitor_urls ?? []
     })
     .select("*")
     .single();

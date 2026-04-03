@@ -45,7 +45,8 @@ export const websiteSchema = z.object({
     }, "Enter a valid website URL."),
   label: z.string().trim().min(2, "A website label is required."),
   email_reports_enabled: z.boolean().optional().default(false),
-  report_recipients: z.array(z.string().email("Use valid email addresses.")).optional().default([])
+  report_recipients: z.array(z.string().email("Use valid email addresses.")).optional().default([]),
+  competitor_urls: z.array(z.string().url("Use valid competitor URLs.")).max(3, "Add up to 3 competitor URLs only.").optional().default([])
 });
 
 export const websiteUpdateSchema = z.object({
@@ -53,11 +54,18 @@ export const websiteUpdateSchema = z.object({
   is_active: z.boolean().optional(),
   frequency: z.enum(["daily", "weekly", "monthly"]).optional(),
   email_reports_enabled: z.boolean().optional(),
-  report_recipients: z.array(z.string().email()).optional()
+  report_recipients: z.array(z.string().email()).optional(),
+  competitor_urls: z.array(z.string().url()).max(3).optional()
 });
 
 export const scanRunSchema = z.object({
   websiteId: z.string().uuid("Invalid website id.")
+});
+
+export const linkScanSchema = z.object({
+  websiteId: z.string().uuid("Invalid website id."),
+  scanId: z.string().uuid().optional(),
+  force: z.boolean().optional().default(false)
 });
 
 export const reportGenerationSchema = z.object({
@@ -82,6 +90,7 @@ export const settingsSchema = z.object({
   email_reports_enabled: z.boolean(),
   email_notifications_enabled: z.boolean(),
   profile_photo_url: z.string().url().optional().or(z.literal("")),
+  uptimerobot_api_key: z.string().trim().optional().or(z.literal("")),
   extra_report_recipients: z.array(z.string().email()).optional().default([])
 });
 

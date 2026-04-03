@@ -2,13 +2,21 @@ import "server-only";
 
 import type {
   AgencyBranding,
+  BrokenLinkRecord,
+  CompetitorScanRecord,
+  CruxDataRecord,
   Report,
   ScanResult,
   ScanSchedule,
+  SecurityHeadersRecord,
+  SeoAuditRecord,
+  SslCheckRecord,
+  UptimeCheckRecord,
   UserProfile,
   Website
 } from "@/types";
 import { generateScanPdf } from "@/lib/pdf";
+import { buildHealthScore } from "@/lib/health-score";
 import { sendCriticalAlertEmail, sendReportEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { PLAN_LIMITS, buildStoragePath } from "@/lib/utils";
@@ -49,13 +57,80 @@ async function loadReportContext(websiteId: string, scanId: string) {
     .eq("website_id", website.id)
     .maybeSingle<ScanSchedule>();
 
-  const { data: history } = await admin
-    .from("scan_results")
-    .select("*")
-    .eq("website_id", website.id)
-    .lte("scanned_at", scan.scanned_at)
-    .order("scanned_at", { ascending: false })
-    .limit(8);
+  const [
+    { data: history },
+    { data: seoAuditByScan },
+    { data: latestSeoAudit },
+    { data: sslCheck },
+    { data: securityHeaders },
+    { data: cruxData },
+    { data: brokenLinks },
+    { data: uptimeChecks },
+    { data: competitorScans }
+  ] = await Promise.all([
+    admin
+      .from("scan_results")
+      .select("*")
+      .eq("website_id", website.id)
+      .lte("scanned_at", scan.scanned_at)
+      .order("scanned_at", { ascending: false })
+      .limit(8),
+    admin
+      .from("seo_audit")
+      .select("*")
+      .eq("website_id", website.id)
+      .eq("scan_id", scan.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<SeoAuditRecord>(),
+    admin
+      .from("seo_audit")
+      .select("*")
+      .eq("website_id", website.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<SeoAuditRecord>(),
+    admin
+      .from("ssl_checks")
+      .select("*")
+      .eq("website_id", website.id)
+      .order("checked_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<SslCheckRecord>(),
+    admin
+      .from("security_headers")
+      .select("*")
+      .eq("website_id", website.id)
+      .order("checked_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<SecurityHeadersRecord>(),
+    admin
+      .from("crux_data")
+      .select("*")
+      .eq("website_id", website.id)
+      .order("fetched_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<CruxDataRecord>(),
+    admin
+      .from("broken_links")
+      .select("*")
+      .eq("website_id", website.id)
+      .order("scanned_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<BrokenLinkRecord>(),
+    admin
+      .from("uptime_checks")
+      .select("*")
+      .eq("website_id", website.id)
+      .order("checked_at", { ascending: false })
+      .limit(120),
+    admin
+      .from("competitor_scans")
+      .select("*")
+      .eq("website_id", website.id)
+      .order("scanned_at", { ascending: false })
+      .limit(30)
+  ]);
 
   const historyRows = ((history ?? []) as ScanResult[]).reverse();
   const previousScan =
@@ -71,7 +146,14 @@ async function loadReportContext(websiteId: string, scanId: string) {
     branding: branding ?? null,
     history: historyRows,
     previousScan,
-    schedule: schedule ?? null
+    schedule: schedule ?? null,
+    seoAudit: seoAuditByScan ?? latestSeoAudit ?? null,
+    sslCheck: sslCheck ?? null,
+    securityHeaders: securityHeaders ?? null,
+    cruxData: cruxData ?? null,
+    brokenLinks: brokenLinks ?? null,
+    uptimeChecks: (uptimeChecks ?? []) as UptimeCheckRecord[],
+    competitorScans: (competitorScans ?? []) as CompetitorScanRecord[]
   };
 }
 
@@ -91,7 +173,22 @@ function getRecipients(profile: UserProfile, website: Website, explicitEmail?: s
 
 export async function generateAndStoreReport(input: { websiteId: string; scanId: string }) {
   const admin = createSupabaseAdminClient();
-  const { website, scan, profile, branding, history, previousScan, schedule } = await loadReportContext(
+  const {
+    website,
+    scan,
+    profile,
+    branding,
+    history,
+    previousScan,
+    schedule,
+    seoAudit,
+    sslCheck,
+    securityHeaders,
+    cruxData,
+    brokenLinks,
+    uptimeChecks,
+    competitorScans
+  } = await loadReportContext(
     input.websiteId,
     input.scanId
   );
@@ -107,7 +204,14 @@ export async function generateAndStoreReport(input: { websiteId: string; scanId:
     history,
     previousScan,
     profile,
-    schedule
+    schedule,
+    seoAudit,
+    sslCheck,
+    securityHeaders,
+    cruxData,
+    brokenLinks,
+    uptimeChecks,
+    competitorScans
   });
 
   const storagePath = buildStoragePath(
@@ -194,7 +298,16 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
     throw new Error("Report not found.");
   }
 
-  const { website, scan, profile, branding } = await loadReportContext(report.website_id, report.scan_id);
+  const {
+    website,
+    scan,
+    profile,
+    branding,
+    seoAudit,
+    sslCheck,
+    securityHeaders,
+    uptimeChecks
+  } = await loadReportContext(report.website_id, report.scan_id);
   const { data: previousRows } = await admin
     .from("scan_results")
     .select("*")
@@ -214,6 +327,13 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
   }
 
   const pdfBuffer = Buffer.from(await file.arrayBuffer());
+  const healthScore = buildHealthScore({
+    scan,
+    seoAudit,
+    sslCheck,
+    securityHeaders,
+    uptimeChecks
+  }).overall;
   const deliveries: Array<{
     recipient: string;
     messageId: string;
@@ -228,6 +348,7 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
         branding,
         scan,
         previousScan: (previousRows?.[0] as ScanResult | undefined) ?? null,
+        healthScore,
         pdfBuffer
       });
 

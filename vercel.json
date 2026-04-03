@@ -5,6 +5,18 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/cron/process-uptime",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/sync-uptimerobot",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/process-competitors",
+      "schedule": "0 9 * * *"
+    },
+    {
       "path": "/api/cron/process-reports",
       "schedule": "0 8 * * *"
     }

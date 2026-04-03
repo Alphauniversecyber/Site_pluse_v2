@@ -169,9 +169,21 @@ export default function WebsitesPage() {
                         </Badge>
                       </div>
                       <p className="mt-2 break-all text-sm text-muted-foreground">{website.url}</p>
-                      <p className="mt-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                        {website.schedule?.frequency ?? "weekly"} scans
-                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          {website.schedule?.frequency ?? "weekly"} scans
+                        </p>
+                        {website.broken_links ? (
+                          <Badge variant={website.broken_links.broken_links > 0 ? "warning" : "success"}>
+                            {website.broken_links.broken_links} broken links
+                          </Badge>
+                        ) : null}
+                        {website.security_headers ? (
+                          <Badge variant={website.security_headers.grade === "A" ? "success" : website.security_headers.grade === "B" ? "warning" : "danger"}>
+                            Security {website.security_headers.grade}
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
                     <div className="grid w-full grid-cols-2 gap-2 xl:w-[15rem]">
                       <Button asChild variant="outline" size="sm" className="col-span-1">
@@ -234,9 +246,14 @@ export default function WebsitesPage() {
                   <div className="mt-6 grid flex-1 gap-4 min-[1700px]:grid-cols-[minmax(0,216px)_minmax(0,1fr)] min-[2200px]:grid-cols-[minmax(0,228px)_minmax(0,1fr)]">
                     {hasValidScan ? (
                       <ScoreRing
-                        label="Performance"
-                        score={latest?.performance_score ?? 0}
+                        label="Health Score"
+                        score={website.health_score?.overall ?? latest?.performance_score ?? 0}
                         delta={null}
+                        statusLabel={
+                          website.health_score
+                            ? `${website.health_score.breakdown.security}/100 security`
+                            : null
+                        }
                       />
                     ) : (
                       <div className="flex flex-col justify-between rounded-3xl border border-border bg-background p-6">
@@ -253,6 +270,7 @@ export default function WebsitesPage() {
                       {hasValidScan ? (
                         <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10.5rem),1fr))]">
                           {[
+                            { label: "Performance", shortLabel: "Perf.", value: latest?.performance_score ?? 0 },
                             { label: "SEO", shortLabel: "SEO", value: latest?.seo_score ?? 0 },
                             { label: "Accessibility", shortLabel: "Access.", value: latest?.accessibility_score ?? 0 },
                             { label: "Best Practices", shortLabel: "Best Prac.", value: latest?.best_practices_score ?? 0 },

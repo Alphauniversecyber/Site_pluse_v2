@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { DeviceScoreChart } from "@/components/charts/device-score-chart";
 import { ScoreTrendChart } from "@/components/charts/score-trend-chart";
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { MetricTile } from "@/components/dashboard/metric-tile";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { Badge } from "@/components/ui/badge";
@@ -15,19 +16,51 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import type {
+  BrokenLinkRecord,
+  CompetitorScanRecord,
+  CruxDataRecord,
   PlainLanguageDifficulty,
   ScanResult,
+  SecurityHeadersRecord,
   Severity,
   Website,
   WebsiteScanPlainEnglish
 } from "@/types";
 import { fetchJson } from "@/lib/api-client";
+import { buildUptimeSummary } from "@/lib/health-score";
 import { getFriendlyScanFailureMessage } from "@/lib/scan-errors";
 
 type WebsiteDetailResponse = Website & {
   scans: ScanResult[];
 };
+
+function latestCompetitorEntries(scans: CompetitorScanRecord[] = []) {
+  const map = new Map<string, CompetitorScanRecord>();
+
+  for (const scan of scans) {
+    if (scan.scan_status !== "success") {
+      continue;
+    }
+
+    if (!map.has(scan.competitor_url)) {
+      map.set(scan.competitor_url, scan);
+    }
+  }
+
+  return Array.from(map.values()).slice(0, 3);
+}
+
+function gradeVariant(grade: string) {
+  if (grade === "A" || grade === "green") return "success" as const;
+  if (grade === "B" || grade === "orange") return "warning" as const;
+  return "danger" as const;
+}
+
+function statusFromBoolean(value: boolean) {
+  return value ? "Pass" : "Fail";
+}
 
 function cleanRawText(text: string, maxLength = 150) {
   const cleaned = text
@@ -231,6 +264,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const [loading, setLoading] = useState(true);
   const [plainLanguage, setPlainLanguage] = useState<WebsiteScanPlainEnglish | null>(null);
   const [plainLanguageLoading, setPlainLanguageLoading] = useState(false);
+  const [competitorInput, setCompetitorInput] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const refetch = async () => {
@@ -249,11 +283,23 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
     void refetch();
   }, [params.id]);
 
+  useEffect(() => {
+    setCompetitorInput((data?.competitor_urls ?? []).join("\n"));
+  }, [data?.competitor_urls]);
+
   const currentScan = data?.scans?.[0] ?? null;
   const previousScan = data?.scans?.[1] ?? null;
   const currentScanFailed = currentScan?.scan_status === "failed";
   const scoreDelta =
     currentScan && previousScan ? currentScan.performance_score - previousScan.performance_score : null;
+  const healthScore = data?.health_score ?? null;
+  const seoAudit = data?.seo_audit ?? null;
+  const sslCheck = data?.ssl_check ?? null;
+  const securityHeaders = data?.security_headers ?? null;
+  const cruxData = data?.crux_data ?? null;
+  const brokenLinks = data?.broken_links ?? null;
+  const uptimeSummary = buildUptimeSummary(data?.uptime_checks ?? []);
+  const competitorEntries = latestCompetitorEntries(data?.competitor_scans ?? []);
 
   const accessibilityViolations = useMemo(
     () => currentScan?.accessibility_violations ?? [],
@@ -363,6 +409,26 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
       }
     });
 
+  const saveCompetitors = () =>
+    startTransition(async () => {
+      try {
+        await fetchJson(`/api/websites/${params.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            competitor_urls: competitorInput
+              .split(/[\n,]+/)
+              .map((item) => item.trim())
+              .filter(Boolean)
+              .slice(0, 3)
+          })
+        });
+        toast.success("Competitor URLs updated.");
+        await refetch();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to update competitor URLs.");
+      }
+    });
+
   if (loading) {
     return (
       <div className="space-y-6 sm:space-y-8">
@@ -411,6 +477,92 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
           </div>
         }
       />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Overall health</p>
+            <div className="mt-4 flex items-end justify-between gap-4">
+              <div>
+                <p className="font-display text-4xl font-semibold">{healthScore?.overall ?? "--"}</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Weighted across performance, SEO, security, uptime, and accessibility.
+                </p>
+              </div>
+              {healthScore ? (
+                <Badge variant={healthScore.overall >= 85 ? "success" : healthScore.overall >= 60 ? "warning" : "danger"}>
+                  {healthScore.overall >= 85 ? "Strong" : healthScore.overall >= 60 ? "Watch" : "Needs work"}
+                </Badge>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">SSL</p>
+            <div className="mt-4 flex items-end justify-between gap-4">
+              <div>
+                <p className="font-display text-2xl font-semibold">
+                  {sslCheck?.days_until_expiry !== null && sslCheck?.days_until_expiry !== undefined
+                    ? `${sslCheck.days_until_expiry} days`
+                    : "Unknown"}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {sslCheck?.expiry_date
+                    ? `Expires ${new Date(sslCheck.expiry_date).toLocaleDateString()}`
+                    : "No SSL expiry date recorded yet."}
+                </p>
+              </div>
+              {sslCheck ? (
+                <Badge variant={gradeVariant(sslCheck.grade)}>
+                  {sslCheck.grade === "green"
+                    ? "Healthy"
+                    : sslCheck.grade === "orange"
+                      ? "Renew soon"
+                      : sslCheck.grade === "red"
+                        ? "Urgent"
+                        : "Critical"}
+                </Badge>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Security headers</p>
+            <div className="mt-4 flex items-end justify-between gap-4">
+              <div>
+                <p className="font-display text-4xl font-semibold">{securityHeaders?.grade ?? "--"}</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {securityHeaders ? "Grade based on six key browser security headers." : "Header audit not available yet."}
+                </p>
+              </div>
+              {securityHeaders ? <Badge variant={gradeVariant(securityHeaders.grade)}>{securityHeaders.grade}</Badge> : null}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">30-day uptime</p>
+            <div className="mt-4 flex items-end justify-between gap-4">
+              <div>
+                <p className="font-display text-4xl font-semibold">{uptimeSummary.percentage}%</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {uptimeSummary.averageResponseMs !== null
+                    ? `Average response ${uptimeSummary.averageResponseMs} ms`
+                    : "Waiting for enough uptime samples."}
+                </p>
+              </div>
+              <Badge variant={uptimeSummary.percentage >= 99 ? "success" : uptimeSummary.percentage >= 95 ? "warning" : "danger"}>
+                {uptimeSummary.incidents.length} incidents
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {currentScan ? (
         <>
@@ -770,6 +922,351 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
               </CardContent>
             </Card>
           ) : null}
+
+          <Card>
+            <CardHeader className="gap-4 pb-3 sm:pb-6">
+              <div className="space-y-1">
+                <CardTitle>Website health signals</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  On-page SEO, link health, security, uptime, real user data, and competitor tracking in one place.
+                </p>
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+              <Tabs defaultValue="seo-audit" className="w-full">
+                <TabsList className="grid h-auto w-full grid-cols-2 lg:grid-cols-5">
+                  <TabsTrigger value="seo-audit">SEO Audit</TabsTrigger>
+                  <TabsTrigger value="link-health">Link Health</TabsTrigger>
+                  <TabsTrigger value="security">Security</TabsTrigger>
+                  <TabsTrigger value="real-users">Real Users</TabsTrigger>
+                  <TabsTrigger value="competitors">Competitors</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="seo-audit" className="mt-5">
+                  {seoAudit ? (
+                    <div className="space-y-4">
+                      <div className="grid gap-4 xl:grid-cols-2">
+                        {[
+                          {
+                            label: "Title tag",
+                            value: `${seoAudit.title_tag.status} • ${seoAudit.title_tag.length ?? 0} chars`,
+                            pass: seoAudit.title_tag.exists
+                          },
+                          {
+                            label: "Meta description",
+                            value: `${seoAudit.meta_description.status} • ${seoAudit.meta_description.length ?? 0} chars`,
+                            pass: seoAudit.meta_description.exists
+                          },
+                          {
+                            label: "Headings",
+                            value: `${seoAudit.headings.status} • H1 ${seoAudit.headings.h1_count}, H2 ${seoAudit.headings.h2_count}, H3 ${seoAudit.headings.h3_count}`,
+                            pass: seoAudit.headings.status === "Good"
+                          },
+                          {
+                            label: "Canonical",
+                            value: seoAudit.canonical.status,
+                            pass: seoAudit.canonical.exists && seoAudit.canonical.self_referencing
+                          },
+                          {
+                            label: "Open Graph",
+                            value:
+                              seoAudit.og_tags.title && seoAudit.og_tags.description && seoAudit.og_tags.image
+                                ? "Complete"
+                                : "Needs attention",
+                            pass:
+                              seoAudit.og_tags.title && seoAudit.og_tags.description && seoAudit.og_tags.image
+                          },
+                          {
+                            label: "Schema markup",
+                            value: seoAudit.schema_present
+                              ? seoAudit.schema_types.join(", ") || "Detected"
+                              : "Missing",
+                            pass: seoAudit.schema_present
+                          }
+                        ].map((item) => (
+                          <div key={item.label} className="rounded-2xl border border-border bg-background p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                  {item.label}
+                                </p>
+                                <p className="mt-2 text-sm leading-6 text-foreground">{item.value}</p>
+                              </div>
+                              <Badge variant={item.pass ? "success" : "danger"}>{statusFromBoolean(Boolean(item.pass))}</Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+                        <div className="rounded-2xl border border-border bg-background p-4">
+                          <p className="text-sm font-semibold">Images missing alt text</p>
+                          <p className="mt-2 font-display text-3xl font-semibold">{seoAudit.images_missing_alt}</p>
+                          <div className="mt-4 space-y-2">
+                            {seoAudit.images_missing_alt_urls.length ? (
+                              seoAudit.images_missing_alt_urls.map((url) => (
+                                <p key={url} className="break-all text-sm leading-6 text-muted-foreground">
+                                  {url}
+                                </p>
+                              ))
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No missing alt text found on the first audited images.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-border bg-background p-4">
+                          <p className="text-sm font-semibold">Fix suggestions</p>
+                          <div className="mt-4 space-y-3">
+                            {seoAudit.fix_suggestions.length ? (
+                              seoAudit.fix_suggestions.map((suggestion, index) => (
+                                <div key={`${suggestion.title}-${index}`} className="rounded-2xl border border-border/80 bg-card p-4">
+                                  <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <p className="font-medium">{suggestion.title}</p>
+                                    <Badge variant={badgeVariantForSeverity(suggestion.severity)}>{suggestion.severity}</Badge>
+                                  </div>
+                                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{suggestion.description}</p>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-muted-foreground">The latest SEO audit did not flag any immediate fixes.</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+                      SEO audit data will appear here after the next completed scan.
+                    </p>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="link-health" className="mt-5">
+                  {brokenLinks ? (
+                    <div className="space-y-4">
+                      <div className="grid gap-4 xl:grid-cols-3">
+                        <div className="rounded-2xl border border-border bg-background p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total links</p>
+                          <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.total_links}</p>
+                        </div>
+                        <div className="rounded-2xl border border-border bg-background p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Broken links</p>
+                          <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.broken_links}</p>
+                        </div>
+                        <div className="rounded-2xl border border-border bg-background p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Redirect chains</p>
+                          <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.redirect_chains}</p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-border bg-background p-4">
+                        <p className="text-sm font-semibold">Broken URLs</p>
+                        <div className="mt-4 space-y-3">
+                          {brokenLinks.broken_urls.length ? (
+                            brokenLinks.broken_urls.map((item, index) => (
+                              <div key={`${item.url}-${index}`} className="rounded-2xl border border-border/80 bg-card p-4">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <p className="min-w-0 flex-1 break-all font-medium">{item.url}</p>
+                                  <Badge variant="danger">{item.status}</Badge>
+                                </div>
+                                {item.parent_url ? (
+                                  <p className="mt-2 break-all text-sm leading-6 text-muted-foreground">
+                                    Found on: {item.parent_url}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No broken internal links were found in the latest crawl.</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+                      Link health data will appear here after the weekly broken-link crawl runs.
+                    </p>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="security" className="mt-5">
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <div className="rounded-2xl border border-border bg-background p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold">SSL certificate</p>
+                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                            {sslCheck
+                              ? `${sslCheck.issuer ?? "Unknown issuer"} • ${sslCheck.days_until_expiry ?? "Unknown"} day(s) remaining`
+                              : "No SSL check data available yet."}
+                          </p>
+                        </div>
+                        {sslCheck ? <Badge variant={gradeVariant(sslCheck.grade)}>{sslCheck.grade}</Badge> : null}
+                      </div>
+                      {sslCheck?.expiry_date ? (
+                        <p className="mt-4 text-sm text-muted-foreground">
+                          Expires on {new Date(sslCheck.expiry_date).toLocaleDateString()}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-2xl border border-border bg-background p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold">Security headers</p>
+                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                            {securityHeaders ? "Pass/fail view of the browser headers protecting this site." : "No security header audit available yet."}
+                          </p>
+                        </div>
+                        {securityHeaders ? <Badge variant={gradeVariant(securityHeaders.grade)}>{securityHeaders.grade}</Badge> : null}
+                      </div>
+                      {securityHeaders ? (
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          {[
+                            ["HSTS", securityHeaders.hsts],
+                            ["CSP", securityHeaders.csp],
+                            ["X-Frame-Options", securityHeaders.x_frame_options],
+                            ["X-Content-Type-Options", securityHeaders.x_content_type],
+                            ["Referrer-Policy", securityHeaders.referrer_policy],
+                            ["Permissions-Policy", securityHeaders.permissions_policy]
+                          ].map(([label, passed]) => (
+                            <div key={String(label)} className="rounded-2xl border border-border/80 bg-card p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-medium">{label}</p>
+                                <Badge variant={passed ? "success" : "danger"}>{statusFromBoolean(Boolean(passed))}</Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="real-users" className="mt-5">
+                  <div className="space-y-4">
+                    <div className="grid gap-4 xl:grid-cols-3">
+                      <div className="rounded-2xl border border-border bg-background p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">30-day uptime</p>
+                        <p className="mt-2 font-display text-3xl font-semibold">{uptimeSummary.percentage}%</p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          {uptimeSummary.averageResponseMs !== null
+                            ? `Average response ${uptimeSummary.averageResponseMs} ms`
+                            : "Not enough checks yet to show response time."}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-border bg-background p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Recent incidents</p>
+                        <p className="mt-2 font-display text-3xl font-semibold">{uptimeSummary.incidents.length}</p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Captured from daily health checks and any linked UptimeRobot monitor data.
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-border bg-background p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Real-user loading</p>
+                        <p className="mt-2 font-display text-3xl font-semibold">{cruxData ? `${cruxData.lcp_good_pct}%` : "--"}</p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Real visitors with good loading performance from Chrome UX Report data.
+                        </p>
+                      </div>
+                    </div>
+
+                    {cruxData ? (
+                      <div className="grid gap-4 xl:grid-cols-2">
+                        {[
+                          ["LCP", cruxData.lcp_good_pct, cruxData.lcp_needs_pct, cruxData.lcp_poor_pct],
+                          ["CLS", cruxData.cls_good_pct, cruxData.cls_needs_pct, cruxData.cls_poor_pct],
+                          ["INP", cruxData.inp_good_pct, cruxData.inp_needs_pct, cruxData.inp_poor_pct],
+                          ["FCP", cruxData.fcp_good_pct, cruxData.fcp_needs_pct, cruxData.fcp_poor_pct],
+                          ["TTFB", cruxData.ttfb_good_pct, cruxData.ttfb_needs_pct, cruxData.ttfb_poor_pct]
+                        ].map(([label, good, needs, poor]) => (
+                          <div key={String(label)} className="rounded-2xl border border-border bg-background p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-sm font-semibold">{label}</p>
+                              <Badge variant={Number(good) >= 75 ? "success" : Number(poor) >= 25 ? "danger" : "warning"}>
+                                {Number(good)}% good
+                              </Badge>
+                            </div>
+                            <div className="mt-4 space-y-2 text-sm text-muted-foreground">
+                              <p>Good: {good}%</p>
+                              <p>Needs improvement: {needs}%</p>
+                              <p>Poor: {poor}%</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+                        Real-user Chrome UX Report data is not available for this origin yet.
+                      </p>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="competitors" className="mt-5">
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-border bg-background p-4">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold">Tracked competitor URLs</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Add up to 3 competitors, one per line or separated by commas.
+                          </p>
+                          <Textarea
+                            className="mt-4 min-h-[120px]"
+                            value={competitorInput}
+                            onChange={(event) => setCompetitorInput(event.target.value)}
+                            placeholder="https://competitor-one.com&#10;https://competitor-two.com"
+                          />
+                        </div>
+                        <Button onClick={saveCompetitors} disabled={isPending} className="shrink-0">
+                          Save competitors
+                        </Button>
+                      </div>
+                    </div>
+
+                    {competitorEntries.length ? (
+                      <div className="grid gap-4 xl:grid-cols-2">
+                        {competitorEntries.map((competitor) => {
+                          const competitorOverall = Math.round(
+                            (competitor.performance + competitor.seo + competitor.accessibility + competitor.best_practices) / 4
+                          );
+
+                          return (
+                            <div key={competitor.competitor_url} className="rounded-2xl border border-border bg-background p-4">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="break-all text-sm font-semibold">{competitor.competitor_url}</p>
+                                  <p className="mt-1 text-sm text-muted-foreground">
+                                    Last scanned {new Date(competitor.scanned_at).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <Badge variant={competitorOverall > (healthScore?.overall ?? 0) ? "warning" : "success"}>
+                                  {competitorOverall}/100
+                                </Badge>
+                              </div>
+
+                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                <MetricTile label="Performance" shortLabel="Perf." value={competitor.performance} />
+                                <MetricTile label="SEO" shortLabel="SEO" value={competitor.seo} />
+                                <MetricTile label="Accessibility" shortLabel="Access." value={competitor.accessibility} />
+                                <MetricTile label="Best Practices" shortLabel="Best Prac." value={competitor.best_practices} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
+                        Add competitor URLs above to start daily comparison tracking for this website.
+                      </p>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader className="pb-3 sm:pb-6">

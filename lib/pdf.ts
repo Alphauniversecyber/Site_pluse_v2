@@ -1,6 +1,19 @@
 import "server-only";
 
-import type { AgencyBranding, ScanResult, ScanSchedule, UserProfile, Website } from "@/types";
+import type {
+  AgencyBranding,
+  BrokenLinkRecord,
+  CompetitorScanRecord,
+  CruxDataRecord,
+  ScanResult,
+  ScanSchedule,
+  SecurityHeadersRecord,
+  SeoAuditRecord,
+  SslCheckRecord,
+  UptimeCheckRecord,
+  UserProfile,
+  Website
+} from "@/types";
 import { renderAiReportPdf } from "@/lib/report-browser-pdf";
 
 export async function generateScanPdf(input: {
@@ -11,6 +24,13 @@ export async function generateScanPdf(input: {
   branding?: AgencyBranding | null;
   profile: UserProfile;
   schedule?: ScanSchedule | null;
+  seoAudit?: SeoAuditRecord | null;
+  sslCheck?: SslCheckRecord | null;
+  securityHeaders?: SecurityHeadersRecord | null;
+  cruxData?: CruxDataRecord | null;
+  brokenLinks?: BrokenLinkRecord | null;
+  uptimeChecks?: UptimeCheckRecord[];
+  competitorScans?: CompetitorScanRecord[];
 }) {
   return renderAiReportPdf(input);
 }

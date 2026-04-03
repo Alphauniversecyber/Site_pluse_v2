@@ -20,6 +20,7 @@ export default function AddWebsitePage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [recipientText, setRecipientText] = useState("");
+  const [competitorText, setCompetitorText] = useState("");
   const form = useForm({
     resolver: zodResolver(websiteSchema),
     defaultValues: {
@@ -51,7 +52,12 @@ export default function AddWebsitePage() {
                     report_recipients: recipientText
                       .split(",")
                       .map((item) => item.trim())
+                      .filter(Boolean),
+                    competitor_urls: competitorText
+                      .split(/[\n,]+/)
+                      .map((item) => item.trim())
                       .filter(Boolean)
+                      .slice(0, 3)
                   })
                 });
                 toast.success("Website added.");
@@ -84,6 +90,18 @@ export default function AddWebsitePage() {
               />
               <p className="text-sm text-muted-foreground">
                 Separate multiple emails with commas. These addresses receive automatic reports for this site.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="competitor-urls">Competitor URLs</Label>
+              <Textarea
+                id="competitor-urls"
+                placeholder="https://competitor-one.com, https://competitor-two.com"
+                value={competitorText}
+                onChange={(event) => setCompetitorText(event.target.value)}
+              />
+              <p className="text-sm text-muted-foreground">
+                Optional. Add up to 3 competitor URLs separated by commas or new lines for daily comparison tracking.
               </p>
             </div>
             <div className="flex items-center gap-3 rounded-2xl border border-border bg-background p-4">

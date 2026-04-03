@@ -22,6 +22,14 @@ begin
     create type public.notification_type as enum ('score_drop', 'critical_score', 'scan_failure', 'report_ready', 'accessibility_regression');
   end if;
 
+  if not exists (select 1 from pg_type where typname = 'uptime_status') then
+    create type public.uptime_status as enum ('up', 'down');
+  end if;
+
+  if not exists (select 1 from pg_type where typname = 'uptime_source') then
+    create type public.uptime_source as enum ('vercel', 'uptimerobot');
+  end if;
+
   if not exists (select 1 from pg_type where typname = 'team_role') then
     create type public.team_role as enum ('owner', 'admin', 'viewer');
   end if;
@@ -30,6 +38,11 @@ begin
     create type public.team_status as enum ('invited', 'active');
   end if;
 end $$;
+
+alter type public.notification_type add value if not exists 'ssl_expiry';
+alter type public.notification_type add value if not exists 'uptime_alert';
+alter type public.notification_type add value if not exists 'competitor_alert';
+alter type public.notification_type add value if not exists 'broken_links_alert';
 
 create or replace function public.handle_updated_at()
 returns trigger
@@ -52,6 +65,7 @@ create table if not exists public.users (
   email_reports_enabled boolean not null default false,
   email_notifications_enabled boolean not null default false,
   profile_photo_url text,
+  uptimerobot_api_key text,
   extra_report_recipients text[] not null default '{}'::text[],
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
@@ -87,6 +101,7 @@ create table if not exists public.websites (
   is_active boolean not null default true,
   email_reports_enabled boolean not null default false,
   report_recipients text[] not null default '{}'::text[],
+  competitor_urls jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
   unique (user_id, url)
@@ -146,6 +161,125 @@ create table if not exists public.scan_schedules (
   last_scan_at timestamptz
 );
 
+create table if not exists public.ssl_checks (
+  id uuid primary key default gen_random_uuid(),
+  website_id uuid not null references public.websites (id) on delete cascade,
+  is_valid boolean not null default false,
+  expiry_date timestamptz,
+  days_until_expiry integer,
+  issuer text,
+  grade text not null default 'critical',
+  checked_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.security_headers (
+  id uuid primary key default gen_random_uuid(),
+  website_id uuid not null references public.websites (id) on delete cascade,
+  hsts boolean not null default false,
+  hsts_value text,
+  csp boolean not null default false,
+  csp_value text,
+  x_frame_options boolean not null default false,
+  x_frame_options_value text,
+  x_content_type boolean not null default false,
+  x_content_type_value text,
+  referrer_policy boolean not null default false,
+  referrer_policy_value text,
+  permissions_policy boolean not null default false,
+  permissions_policy_value text,
+  grade text not null default 'F',
+  checked_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.seo_audit (
+  id uuid primary key default gen_random_uuid(),
+  website_id uuid not null references public.websites (id) on delete cascade,
+  scan_id uuid not null references public.scan_results (id) on delete cascade,
+  title_tag jsonb not null default '{}'::jsonb,
+  meta_description jsonb not null default '{}'::jsonb,
+  headings jsonb not null default '{}'::jsonb,
+  images_missing_alt integer not null default 0,
+  images_missing_alt_urls jsonb not null default '[]'::jsonb,
+  og_tags jsonb not null default '{}'::jsonb,
+  twitter_tags jsonb not null default '{}'::jsonb,
+  canonical jsonb not null default '{}'::jsonb,
+  schema_present boolean not null default false,
+  schema_types jsonb not null default '[]'::jsonb,
+  fix_suggestions jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.crux_data (
+  id uuid primary key default gen_random_uuid(),
+  website_id uuid not null references public.websites (id) on delete cascade,
+  lcp_good_pct numeric(5,2) not null default 0,
+  lcp_needs_pct numeric(5,2) not null default 0,
+  lcp_poor_pct numeric(5,2) not null default 0,
+  cls_good_pct numeric(5,2) not null default 0,
+  cls_needs_pct numeric(5,2) not null default 0,
+  cls_poor_pct numeric(5,2) not null default 0,
+  inp_good_pct numeric(5,2) not null default 0,
+  inp_needs_pct numeric(5,2) not null default 0,
+  inp_poor_pct numeric(5,2) not null default 0,
+  fcp_good_pct numeric(5,2) not null default 0,
+  fcp_needs_pct numeric(5,2) not null default 0,
+  fcp_poor_pct numeric(5,2) not null default 0,
+  ttfb_good_pct numeric(5,2) not null default 0,
+  ttfb_needs_pct numeric(5,2) not null default 0,
+  ttfb_poor_pct numeric(5,2) not null default 0,
+  raw_payload jsonb not null default '{}'::jsonb,
+  fetched_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.broken_links (
+  id uuid primary key default gen_random_uuid(),
+  website_id uuid not null references public.websites (id) on delete cascade,
+  scan_id uuid references public.scan_results (id) on delete set null,
+  total_links integer not null default 0,
+  working_links integer not null default 0,
+  broken_links integer not null default 0,
+  redirect_chains integer not null default 0,
+  broken_urls jsonb not null default '[]'::jsonb,
+  redirect_urls jsonb not null default '[]'::jsonb,
+  scanned_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.uptime_checks (
+  id uuid primary key default gen_random_uuid(),
+  website_id uuid not null references public.websites (id) on delete cascade,
+  checked_at timestamptz not null default timezone('utc', now()),
+  status public.uptime_status not null,
+  response_time_ms integer,
+  source public.uptime_source not null default 'vercel',
+  incident_reason text,
+  raw_payload jsonb not null default '{}'::jsonb
+);
+
+create table if not exists public.competitor_scans (
+  id uuid primary key default gen_random_uuid(),
+  website_id uuid not null references public.websites (id) on delete cascade,
+  competitor_url text not null,
+  performance integer not null default 0 check (performance >= 0 and performance <= 100),
+  seo integer not null default 0 check (seo >= 0 and seo <= 100),
+  accessibility integer not null default 0 check (accessibility >= 0 and accessibility <= 100),
+  best_practices integer not null default 0 check (best_practices >= 0 and best_practices <= 100),
+  scan_status public.scan_status not null default 'success',
+  error_message text,
+  scanned_at timestamptz not null default timezone('utc', now())
+);
+
+alter table public.users add column if not exists uptimerobot_api_key text;
+alter table public.websites add column if not exists competitor_urls jsonb not null default '[]'::jsonb;
+
+alter table public.websites
+  drop constraint if exists websites_competitor_urls_is_array;
+alter table public.websites
+  add constraint websites_competitor_urls_is_array
+  check (
+    jsonb_typeof(competitor_urls) = 'array'
+    and jsonb_array_length(competitor_urls) <= 3
+  );
+
 create table if not exists public.notifications (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users (id) on delete cascade,
@@ -168,6 +302,14 @@ create index if not exists idx_report_ai_cache_owner_expires on public.report_ai
 create index if not exists idx_report_ai_cache_scan_id on public.report_ai_cache (scan_id);
 create index if not exists idx_notifications_user_id_created_at on public.notifications (user_id, created_at desc);
 create index if not exists idx_team_members_owner on public.team_members (owner_user_id);
+create index if not exists idx_ssl_checks_website_checked_at on public.ssl_checks (website_id, checked_at desc);
+create index if not exists idx_security_headers_website_checked_at on public.security_headers (website_id, checked_at desc);
+create index if not exists idx_seo_audit_website_created_at on public.seo_audit (website_id, created_at desc);
+create index if not exists idx_seo_audit_scan_id on public.seo_audit (scan_id);
+create index if not exists idx_crux_data_website_fetched_at on public.crux_data (website_id, fetched_at desc);
+create index if not exists idx_broken_links_website_scanned_at on public.broken_links (website_id, scanned_at desc);
+create index if not exists idx_uptime_checks_website_checked_at on public.uptime_checks (website_id, checked_at desc);
+create index if not exists idx_competitor_scans_website_scanned_at on public.competitor_scans (website_id, scanned_at desc);
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -305,6 +447,13 @@ alter table public.reports enable row level security;
 alter table public.report_ai_cache enable row level security;
 alter table public.scan_schedules enable row level security;
 alter table public.notifications enable row level security;
+alter table public.ssl_checks enable row level security;
+alter table public.security_headers enable row level security;
+alter table public.seo_audit enable row level security;
+alter table public.crux_data enable row level security;
+alter table public.broken_links enable row level security;
+alter table public.uptime_checks enable row level security;
+alter table public.competitor_scans enable row level security;
 
 drop policy if exists "Users can view own profile" on public.users;
 create policy "Users can view own profile"
@@ -428,6 +577,83 @@ create policy "Users can manage own notifications"
   on public.notifications for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+drop policy if exists "Users can view accessible ssl checks" on public.ssl_checks;
+create policy "Users can view accessible ssl checks"
+  on public.ssl_checks for select
+  using (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Owners can manage ssl checks" on public.ssl_checks;
+create policy "Owners can manage ssl checks"
+  on public.ssl_checks for all
+  using (public.user_can_access_owner(public.website_owner(website_id)))
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Users can view accessible security headers" on public.security_headers;
+create policy "Users can view accessible security headers"
+  on public.security_headers for select
+  using (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Owners can manage security headers" on public.security_headers;
+create policy "Owners can manage security headers"
+  on public.security_headers for all
+  using (public.user_can_access_owner(public.website_owner(website_id)))
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Users can view accessible seo audit" on public.seo_audit;
+create policy "Users can view accessible seo audit"
+  on public.seo_audit for select
+  using (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Owners can manage seo audit" on public.seo_audit;
+create policy "Owners can manage seo audit"
+  on public.seo_audit for all
+  using (public.user_can_access_owner(public.website_owner(website_id)))
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Users can view accessible crux data" on public.crux_data;
+create policy "Users can view accessible crux data"
+  on public.crux_data for select
+  using (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Owners can manage crux data" on public.crux_data;
+create policy "Owners can manage crux data"
+  on public.crux_data for all
+  using (public.user_can_access_owner(public.website_owner(website_id)))
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Users can view accessible broken links" on public.broken_links;
+create policy "Users can view accessible broken links"
+  on public.broken_links for select
+  using (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Owners can manage broken links" on public.broken_links;
+create policy "Owners can manage broken links"
+  on public.broken_links for all
+  using (public.user_can_access_owner(public.website_owner(website_id)))
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Users can view accessible uptime checks" on public.uptime_checks;
+create policy "Users can view accessible uptime checks"
+  on public.uptime_checks for select
+  using (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Owners can manage uptime checks" on public.uptime_checks;
+create policy "Owners can manage uptime checks"
+  on public.uptime_checks for all
+  using (public.user_can_access_owner(public.website_owner(website_id)))
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Users can view accessible competitor scans" on public.competitor_scans;
+create policy "Users can view accessible competitor scans"
+  on public.competitor_scans for select
+  using (public.user_can_access_owner(public.website_owner(website_id)));
+
+drop policy if exists "Owners can manage competitor scans" on public.competitor_scans;
+create policy "Owners can manage competitor scans"
+  on public.competitor_scans for all
+  using (public.user_can_access_owner(public.website_owner(website_id)))
+  with check (public.user_can_access_owner(public.website_owner(website_id)));
 
 insert into storage.buckets (id, name, public)
 values

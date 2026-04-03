@@ -39,6 +39,7 @@ export default function SettingsPage() {
       email_reports_enabled: false,
       email_notifications_enabled: true,
       profile_photo_url: "",
+      uptimerobot_api_key: "",
       extra_report_recipients: []
     }
   });
@@ -56,6 +57,7 @@ export default function SettingsPage() {
       email_reports_enabled: user.email_reports_enabled,
       email_notifications_enabled: user.email_notifications_enabled,
       profile_photo_url: user.profile_photo_url ?? "",
+      uptimerobot_api_key: user.uptimerobot_api_key ?? "",
       extra_report_recipients: user.extra_report_recipients ?? []
     });
   }, [form, user]);
@@ -263,6 +265,20 @@ export default function SettingsPage() {
                     }
                   }}
                 />
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-3xl border border-border bg-background p-5">
+              <div className="space-y-2">
+                <Label htmlFor="uptimerobot-api-key">UptimeRobot API key</Label>
+                <PasswordInput
+                  id="uptimerobot-api-key"
+                  placeholder="Paste your free UptimeRobot API key"
+                  {...form.register("uptimerobot_api_key")}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Optional. Connect your free UptimeRobot account to pull uptime ratios and incident data every hour.
+                </p>
               </div>
             </div>
 

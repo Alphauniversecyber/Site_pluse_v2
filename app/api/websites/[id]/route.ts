@@ -1,4 +1,5 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
+import { buildHealthScore } from "@/lib/health-score";
 import { PLAN_LIMITS } from "@/lib/utils";
 import { websiteUpdateSchema } from "@/lib/validation";
 
@@ -8,7 +9,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     return errorResponse;
   }
 
-  const [{ data: website, error }, { data: schedule }, { data: scans }] = await Promise.all([
+  const [{ data: website, error }, { data: schedule }, { data: scans }, { data: sslCheck }, { data: securityHeaders }, { data: seoAudit }, { data: cruxData }, { data: brokenLinks }, { data: uptimeChecks }, { data: competitorScans }] = await Promise.all([
     supabase.from("websites").select("*").eq("id", params.id).single(),
     supabase.from("scan_schedules").select("*").eq("website_id", params.id).maybeSingle(),
     supabase
@@ -16,7 +17,54 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       .select("*")
       .eq("website_id", params.id)
       .order("scanned_at", { ascending: false })
-      .limit(10)
+      .limit(10),
+    supabase
+      .from("ssl_checks")
+      .select("*")
+      .eq("website_id", params.id)
+      .order("checked_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("security_headers")
+      .select("*")
+      .eq("website_id", params.id)
+      .order("checked_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("seo_audit")
+      .select("*")
+      .eq("website_id", params.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("crux_data")
+      .select("*")
+      .eq("website_id", params.id)
+      .order("fetched_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("broken_links")
+      .select("*")
+      .eq("website_id", params.id)
+      .order("scanned_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("uptime_checks")
+      .select("*")
+      .eq("website_id", params.id)
+      .order("checked_at", { ascending: false })
+      .limit(120),
+    supabase
+      .from("competitor_scans")
+      .select("*")
+      .eq("website_id", params.id)
+      .order("scanned_at", { ascending: false })
+      .limit(30)
   ]);
 
   if (error || !website) {
@@ -26,7 +74,21 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   return apiSuccess({
     ...website,
     schedule: schedule ?? null,
-    scans: scans ?? []
+    scans: scans ?? [],
+    ssl_check: sslCheck ?? null,
+    security_headers: securityHeaders ?? null,
+    seo_audit: seoAudit ?? null,
+    crux_data: cruxData ?? null,
+    broken_links: brokenLinks ?? null,
+    uptime_checks: uptimeChecks ?? [],
+    competitor_scans: competitorScans ?? [],
+    health_score: buildHealthScore({
+      scan: (scans ?? [])[0] ?? null,
+      seoAudit: seoAudit ?? null,
+      sslCheck: sslCheck ?? null,
+      securityHeaders: securityHeaders ?? null,
+      uptimeChecks: uptimeChecks ?? []
+    })
   });
 }
 
@@ -64,6 +126,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (parsed.data.report_recipients !== undefined) {
     websiteUpdates.report_recipients =
       profile.plan === "free" ? [] : parsed.data.report_recipients;
+  }
+  if (parsed.data.competitor_urls !== undefined) {
+    websiteUpdates.competitor_urls = parsed.data.competitor_urls.slice(0, 3);
   }
 
   const { data: website, error } = await supabase

@@ -1,9 +1,20 @@
 export type PlanKey = "free" | "starter" | "agency";
 export type ScanFrequency = "daily" | "weekly" | "monthly";
 export type Severity = "low" | "medium" | "high";
-export type NotificationType = "score_drop" | "critical_score" | "scan_failure" | "report_ready";
+export type NotificationType =
+  | "score_drop"
+  | "critical_score"
+  | "scan_failure"
+  | "report_ready"
+  | "accessibility_regression"
+  | "ssl_expiry"
+  | "uptime_alert"
+  | "competitor_alert"
+  | "broken_links_alert";
 export type PlainLanguageCategory = "Performance" | "SEO" | "Accessibility" | "Security";
 export type PlainLanguageDifficulty = "Easy" | "Medium" | "Complex";
+export type UptimeStatus = "up" | "down";
+export type UptimeSource = "vercel" | "uptimerobot";
 
 export interface UserProfile {
   id: string;
@@ -16,6 +27,7 @@ export interface UserProfile {
   email_reports_enabled: boolean;
   email_notifications_enabled: boolean;
   profile_photo_url: string | null;
+  uptimerobot_api_key?: string | null;
   extra_report_recipients: string[];
   created_at: string;
 }
@@ -28,9 +40,18 @@ export interface Website {
   is_active: boolean;
   email_reports_enabled?: boolean;
   report_recipients?: string[];
+  competitor_urls?: string[];
   created_at: string;
+  health_score?: WebsiteHealthScore | null;
   latest_scan?: ScanResult | null;
   schedule?: ScanSchedule | null;
+  seo_audit?: SeoAuditRecord | null;
+  ssl_check?: SslCheckRecord | null;
+  security_headers?: SecurityHeadersRecord | null;
+  crux_data?: CruxDataRecord | null;
+  broken_links?: BrokenLinkRecord | null;
+  uptime_checks?: UptimeCheckRecord[];
+  competitor_scans?: CompetitorScanRecord[];
 }
 
 export interface AgencyBranding {
@@ -211,7 +232,177 @@ export interface DashboardOverview {
   criticalSites: number;
 }
 
+export interface SeoTagCheck {
+  exists: boolean;
+  count?: number;
+  length?: number;
+  status: string;
+  value?: string | null;
+}
+
+export interface SeoHeadingAudit {
+  h1_count: number;
+  h2_count: number;
+  h3_count: number;
+  status: string;
+  outline: Array<{
+    level: "h1" | "h2" | "h3";
+    text: string;
+  }>;
+}
+
+export interface SeoSocialAudit {
+  title: boolean;
+  description: boolean;
+  image?: boolean;
+  card?: boolean;
+}
+
+export interface SeoCanonicalAudit {
+  exists: boolean;
+  href?: string | null;
+  self_referencing: boolean;
+  status: string;
+}
+
+export interface SeoAuditRecord {
+  id: string;
+  website_id: string;
+  scan_id: string;
+  title_tag: SeoTagCheck;
+  meta_description: SeoTagCheck;
+  headings: SeoHeadingAudit;
+  images_missing_alt: number;
+  images_missing_alt_urls: string[];
+  og_tags: SeoSocialAudit;
+  twitter_tags: SeoSocialAudit;
+  canonical: SeoCanonicalAudit;
+  schema_present: boolean;
+  schema_types: string[];
+  fix_suggestions: Array<{
+    title: string;
+    severity: Severity;
+    description: string;
+  }>;
+  created_at: string;
+}
+
+export interface BrokenLinkRecord {
+  id: string;
+  website_id: string;
+  scan_id: string | null;
+  total_links: number;
+  working_links: number;
+  broken_links: number;
+  redirect_chains: number;
+  broken_urls: Array<{
+    url: string;
+    parent_url?: string | null;
+    status: number;
+  }>;
+  redirect_urls: Array<{
+    url: string;
+    parent_url?: string | null;
+    status: number;
+    redirected_to?: string | null;
+  }>;
+  scanned_at: string;
+}
+
+export interface SslCheckRecord {
+  id: string;
+  website_id: string;
+  is_valid: boolean;
+  expiry_date: string | null;
+  days_until_expiry: number | null;
+  issuer: string | null;
+  grade: "green" | "orange" | "red" | "critical";
+  checked_at: string;
+}
+
+export interface SecurityHeadersRecord {
+  id: string;
+  website_id: string;
+  hsts: boolean;
+  hsts_value: string | null;
+  csp: boolean;
+  csp_value: string | null;
+  x_frame_options: boolean;
+  x_frame_options_value: string | null;
+  x_content_type: boolean;
+  x_content_type_value: string | null;
+  referrer_policy: boolean;
+  referrer_policy_value: string | null;
+  permissions_policy: boolean;
+  permissions_policy_value: string | null;
+  grade: "A" | "B" | "C" | "F";
+  checked_at: string;
+}
+
+export interface UptimeCheckRecord {
+  id: string;
+  website_id: string;
+  checked_at: string;
+  status: UptimeStatus;
+  response_time_ms: number | null;
+  source: UptimeSource;
+  incident_reason: string | null;
+  raw_payload: Record<string, unknown>;
+}
+
+export interface CruxMetricDistribution {
+  good: number;
+  needs_improvement: number;
+  poor: number;
+}
+
+export interface CruxDataRecord {
+  id: string;
+  website_id: string;
+  lcp_good_pct: number;
+  lcp_needs_pct: number;
+  lcp_poor_pct: number;
+  cls_good_pct: number;
+  cls_needs_pct: number;
+  cls_poor_pct: number;
+  inp_good_pct: number;
+  inp_needs_pct: number;
+  inp_poor_pct: number;
+  fcp_good_pct: number;
+  fcp_needs_pct: number;
+  fcp_poor_pct: number;
+  ttfb_good_pct: number;
+  ttfb_needs_pct: number;
+  ttfb_poor_pct: number;
+  raw_payload: Record<string, unknown>;
+  fetched_at: string;
+}
+
+export interface CompetitorScanRecord {
+  id: string;
+  website_id: string;
+  competitor_url: string;
+  performance: number;
+  seo: number;
+  accessibility: number;
+  best_practices: number;
+  scan_status: "success" | "failed";
+  error_message: string | null;
+  scanned_at: string;
+}
+
 export interface ApiResponse<T> {
   data?: T;
   error?: string;
+}
+
+export interface WebsiteHealthScore {
+  overall: number;
+  breakdown: {
+    performance: number;
+    seo: number;
+    security: number;
+    uptime: number;
+    accessibility: number;
+  };
 }

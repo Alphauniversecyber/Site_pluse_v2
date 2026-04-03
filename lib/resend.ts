@@ -192,6 +192,7 @@ export async function sendReportEmail(input: {
   branding?: AgencyBranding | null;
   scan: ScanResult;
   previousScan?: ScanResult | null;
+  healthScore?: number | null;
   pdfBuffer: Buffer;
 }) {
   const baseUrl = getBaseUrl();
@@ -204,7 +205,9 @@ export async function sendReportEmail(input: {
     input.previousScan !== null && input.previousScan !== undefined
       ? input.scan.performance_score - input.previousScan.performance_score
       : null;
-  const subject = `[${input.website.label}] Weekly Report - SitePulse`;
+  const subject = input.healthScore
+    ? `[${input.website.label}] Health Score ${input.healthScore}/100 report`
+    : `[${input.website.label}] Weekly Report - SitePulse`;
 
   return sendEmailWithConfirmation({
     kind: "report",
