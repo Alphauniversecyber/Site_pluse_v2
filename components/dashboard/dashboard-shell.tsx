@@ -79,9 +79,9 @@ export function DashboardShell({
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
-      <div className="mx-auto flex min-h-screen w-full max-w-[2720px] [--dashboard-content-max:1600px] [--dashboard-sidebar-width:324px] xl:[--dashboard-sidebar-width:356px] 2xl:[--dashboard-sidebar-width:384px] min-[1800px]:[--dashboard-content-max:1760px] min-[1800px]:[--dashboard-sidebar-width:408px] min-[2200px]:[--dashboard-content-max:1960px] min-[2200px]:[--dashboard-sidebar-width:432px]">
+      <div className="mx-auto flex min-h-screen w-full max-w-[2720px] [--dashboard-content-max:1580px] [--dashboard-sidebar-width:276px] xl:[--dashboard-sidebar-width:304px] 2xl:[--dashboard-sidebar-width:336px] min-[1800px]:[--dashboard-content-max:1760px] min-[1800px]:[--dashboard-sidebar-width:376px] min-[2200px]:[--dashboard-content-max:1960px] min-[2200px]:[--dashboard-sidebar-width:408px]">
         <aside className="hidden border-r border-border/80 bg-card/65 backdrop-blur lg:block lg:w-[var(--dashboard-sidebar-width)]">
-          <div className="sticky top-0 flex h-screen flex-col px-7 py-6 xl:px-9 xl:py-7 2xl:px-10 min-[1800px]:px-11 min-[2200px]:px-12 [@media(max-height:900px)]:py-5 [@media(max-height:820px)]:py-4">
+          <div className="sticky top-0 flex h-screen flex-col px-6 py-6 xl:px-7 xl:py-7 2xl:px-8 min-[1800px]:px-10 min-[2200px]:px-11 [@media(max-height:900px)]:py-5 [@media(max-height:820px)]:py-4">
             <div className="border-b border-border/70 pb-6 [@media(max-height:900px)]:pb-5 [@media(max-height:820px)]:pb-4">
               <Link href="/" className="inline-flex max-w-full flex-col items-start gap-2.5">
                 <SitePulseLogo variant="light" className="h-10 w-[184px] max-w-full dark:hidden xl:w-[192px] min-[1800px]:w-[204px]" />
