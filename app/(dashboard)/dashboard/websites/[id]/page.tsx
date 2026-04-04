@@ -1,8 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { AlertTriangle, FileDown, Mail, WandSparkles } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  Activity,
+  AlertTriangle,
+  Clock3,
+  FileDown,
+  Mail,
+  Shield,
+  ShieldCheck,
+  TrendingUp,
+  WandSparkles,
+  type LucideIcon
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { DeviceScoreChart } from "@/components/charts/device-score-chart";
@@ -31,6 +42,7 @@ import type {
 import { fetchJson } from "@/lib/api-client";
 import { buildUptimeSummary } from "@/lib/health-score";
 import { getFriendlyScanFailureMessage } from "@/lib/scan-errors";
+import { cn } from "@/lib/utils";
 
 type WebsiteDetailResponse = Website & {
   scans: ScanResult[];
@@ -88,6 +100,116 @@ function normalizeTitleKey(value: string) {
 
 function severityRank(severity: Severity) {
   return severity === "high" ? 3 : severity === "medium" ? 2 : 1;
+}
+
+function compactDisplayUrl(value: string, maxLength = 56) {
+  try {
+    const parsed = new URL(value);
+    const compact = `${parsed.hostname}${parsed.pathname === "/" ? "" : parsed.pathname}`;
+    return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 3)}...`;
+  } catch {
+    return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
+  }
+}
+
+function getCoreVitalStatus(metric: "lcp" | "fid" | "cls" | "tbt", value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return {
+      label: "Unknown",
+      variant: "outline" as const
+    };
+  }
+
+  if (metric === "lcp") {
+    if (value <= 2500) return { label: "Good", variant: "success" as const };
+    if (value <= 4000) return { label: "Watch", variant: "warning" as const };
+    return { label: "Slow", variant: "danger" as const };
+  }
+
+  if (metric === "fid") {
+    if (value <= 100) return { label: "Good", variant: "success" as const };
+    if (value <= 300) return { label: "Watch", variant: "warning" as const };
+    return { label: "Slow", variant: "danger" as const };
+  }
+
+  if (metric === "cls") {
+    if (value <= 0.1) return { label: "Good", variant: "success" as const };
+    if (value <= 0.25) return { label: "Watch", variant: "warning" as const };
+    return { label: "Unstable", variant: "danger" as const };
+  }
+
+  if (value <= 200) return { label: "Good", variant: "success" as const };
+  if (value <= 600) return { label: "Watch", variant: "warning" as const };
+  return { label: "Slow", variant: "danger" as const };
+}
+
+function DetailSignalCard({
+  icon: Icon,
+  accent,
+  eyebrow,
+  value,
+  description,
+  footnote,
+  badge,
+  valueClassName,
+  className
+}: {
+  icon: LucideIcon;
+  accent: "blue" | "emerald" | "amber" | "rose";
+  eyebrow: string;
+  value: ReactNode;
+  description: string;
+  footnote?: ReactNode;
+  badge?: ReactNode;
+  valueClassName?: string;
+  className?: string;
+}) {
+  const accents = {
+    blue: {
+      glow: "bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.2),transparent_72%)]",
+      iconShell: "bg-sky-500/12 text-sky-300"
+    },
+    emerald: {
+      glow: "bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_72%)]",
+      iconShell: "bg-emerald-500/12 text-emerald-300"
+    },
+    amber: {
+      glow: "bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.18),transparent_72%)]",
+      iconShell: "bg-amber-500/12 text-amber-300"
+    },
+    rose: {
+      glow: "bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_72%)]",
+      iconShell: "bg-rose-500/12 text-rose-300"
+    }
+  }[accent];
+
+  return (
+    <Card
+      className={cn(
+        "relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.95),rgba(15,23,42,0.92))] shadow-[0_26px_90px_-46px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]",
+        className
+      )}
+    >
+      <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+      <div className={cn("pointer-events-none absolute right-0 top-0 h-24 w-28 blur-2xl", accents.glow)} />
+      <CardContent className="relative flex h-full min-h-[12.5rem] flex-col gap-5 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className={cn("flex h-11 w-11 items-center justify-center rounded-2xl border border-white/8", accents.iconShell)}>
+            <Icon className="h-5 w-5" strokeWidth={1.9} />
+          </div>
+          {badge}
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{eyebrow}</p>
+          <div className={cn("font-display text-4xl font-semibold leading-none tracking-tight", valueClassName)}>{value}</div>
+          <p className="max-w-[22rem] text-sm leading-6 text-muted-foreground">{description}</p>
+        </div>
+
+        {footnote ? <p className="mt-auto text-xs leading-5 text-muted-foreground/90">{footnote}</p> : null}
+      </CardContent>
+    </Card>
+  );
 }
 
 function difficultyStars(difficulty: PlainLanguageDifficulty) {
@@ -259,7 +381,7 @@ function badgeVariantForSeverity(severity: Severity) {
   return severity === "high" ? "danger" : severity === "medium" ? "warning" : "success";
 }
 
-function WebsiteHealthSignalsEmptyStateCard(input: {
+function WebsiteHealthSignalsCard(input: {
   websiteUrl: string;
   seoAudit: Website["seo_audit"] | null;
   brokenLinks: Website["broken_links"] | null;
@@ -291,18 +413,20 @@ function WebsiteHealthSignalsEmptyStateCard(input: {
   } = input;
 
   return (
-    <Card>
-      <CardHeader className="gap-4 pb-3 sm:pb-6">
-        <div className="space-y-1">
+    <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.95),rgba(15,23,42,0.94))] shadow-[0_28px_100px_-48px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]">
+      <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+      <div className="pointer-events-none absolute right-8 top-0 h-28 w-44 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_72%)] blur-3xl" />
+      <CardHeader className="relative gap-4 pb-3 sm:pb-6">
+        <div className="space-y-2">
           <CardTitle>Website health signals</CardTitle>
           <p className="text-sm text-muted-foreground">
             On-page SEO, link health, security, uptime, real user data, and competitor tracking in one place.
           </p>
         </div>
       </CardHeader>
-      <CardContent className="px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+      <CardContent className="relative px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
         <Tabs defaultValue="seo-audit" className="w-full">
-          <TabsList className="grid h-auto w-full grid-cols-2 lg:grid-cols-5">
+          <TabsList className="grid h-auto w-full grid-cols-2 rounded-[1.35rem] border border-white/8 bg-background/80 p-1.5 lg:grid-cols-5">
             <TabsTrigger value="seo-audit">SEO Audit</TabsTrigger>
             <TabsTrigger value="link-health">Link Health</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
@@ -317,17 +441,17 @@ function WebsiteHealthSignalsEmptyStateCard(input: {
                   {[
                     {
                       label: "Title tag",
-                      value: `${seoAudit.title_tag.status} • ${seoAudit.title_tag.length ?? 0} chars`,
+                      value: `${seoAudit.title_tag.status} / ${seoAudit.title_tag.length ?? 0} chars`,
                       pass: seoAudit.title_tag.exists
                     },
                     {
                       label: "Meta description",
-                      value: `${seoAudit.meta_description.status} • ${seoAudit.meta_description.length ?? 0} chars`,
+                      value: `${seoAudit.meta_description.status} / ${seoAudit.meta_description.length ?? 0} chars`,
                       pass: seoAudit.meta_description.exists
                     },
                     {
                       label: "Headings",
-                      value: `${seoAudit.headings.status} • H1 ${seoAudit.headings.h1_count}, H2 ${seoAudit.headings.h2_count}, H3 ${seoAudit.headings.h3_count}`,
+                      value: `${seoAudit.headings.status} / H1 ${seoAudit.headings.h1_count}, H2 ${seoAudit.headings.h2_count}, H3 ${seoAudit.headings.h3_count}`,
                       pass: seoAudit.headings.status === "Good"
                     },
                     {
@@ -366,14 +490,23 @@ function WebsiteHealthSignalsEmptyStateCard(input: {
 
                 <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
                   <div className="rounded-2xl border border-border bg-background p-4">
-                    <p className="text-sm font-semibold">Images missing alt text</p>
-                    <p className="mt-2 font-display text-3xl font-semibold">{seoAudit.images_missing_alt}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">Images missing alt text</p>
+                        <p className="mt-2 font-display text-3xl font-semibold">{seoAudit.images_missing_alt}</p>
+                      </div>
+                      <Badge variant={seoAudit.images_missing_alt ? "warning" : "success"}>
+                        {seoAudit.images_missing_alt ? "Needs fixes" : "Clean"}
+                      </Badge>
+                    </div>
                     <div className="mt-4 space-y-2">
                       {seoAudit.images_missing_alt_urls.length ? (
-                        seoAudit.images_missing_alt_urls.map((url) => (
-                          <p key={url} className="break-all text-sm leading-6 text-muted-foreground">
-                            {url}
-                          </p>
+                        seoAudit.images_missing_alt_urls.slice(0, 5).map((url) => (
+                          <div key={url} className="rounded-2xl border border-border/80 bg-card px-3 py-2">
+                            <p className="truncate text-sm leading-6 text-muted-foreground" title={url}>
+                              {compactDisplayUrl(url, 64)}
+                            </p>
+                          </div>
                         ))
                       ) : (
                         <p className="text-sm text-muted-foreground">No missing alt text found on the first audited images.</p>
@@ -420,7 +553,7 @@ function WebsiteHealthSignalsEmptyStateCard(input: {
                     <p className="text-sm font-semibold">SSL certificate</p>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
                       {sslCheck
-                        ? `${sslCheck.issuer ?? "Unknown issuer"} • ${sslCheck.days_until_expiry ?? "Unknown"} day(s) remaining`
+                        ? `${sslCheck.issuer ?? "Unknown issuer"} / ${sslCheck.days_until_expiry ?? "Unknown"} day(s) remaining`
                         : "No SSL check data available yet."}
                     </p>
                   </div>
@@ -559,7 +692,9 @@ function WebsiteHealthSignalsEmptyStateCard(input: {
                       <div key={competitor.competitor_url} className="rounded-2xl border border-border bg-background p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="break-all text-sm font-semibold">{competitor.competitor_url}</p>
+                            <p className="truncate text-sm font-semibold" title={competitor.competitor_url}>
+                              {compactDisplayUrl(competitor.competitor_url, 72)}
+                            </p>
                             <p className="mt-1 text-sm text-muted-foreground">
                               Last scanned {new Date(competitor.scanned_at).toLocaleDateString()}
                             </p>
@@ -788,113 +923,124 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   }
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <div className="space-y-8 sm:space-y-10">
       <PageHeader
         eyebrow="Website detail"
         title={data.label}
         description={data.url}
         actions={
-          <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:grid-cols-3">
-            <Button variant="outline" onClick={runScan} disabled={isPending} className="h-11 w-full justify-center sm:h-12">
+          <div className="w-full rounded-[1.5rem] border border-white/8 bg-card/70 p-2 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.58)] backdrop-blur xl:w-auto">
+            <div className="grid w-full gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-3">
+              <Button
+                variant="outline"
+                onClick={runScan}
+                disabled={isPending}
+                className="h-11 w-full justify-center rounded-xl border-white/10 bg-background/70 sm:h-12"
+              >
               <WandSparkles className="h-4 w-4" />
               Run scan
-            </Button>
-            <Button variant="outline" onClick={generateReport} disabled={isPending} className="h-11 w-full justify-center sm:h-12">
-              <FileDown className="h-4 w-4" />
-              Generate PDF
-            </Button>
-            <Button onClick={emailReport} disabled={isPending} className="h-11 w-full justify-center sm:h-12 sm:col-span-2 xl:col-span-1">
-              <Mail className="h-4 w-4" />
-              Email report
-            </Button>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={generateReport}
+                disabled={isPending}
+                className="h-11 w-full justify-center rounded-xl border-white/10 bg-background/70 sm:h-12"
+              >
+                <FileDown className="h-4 w-4" />
+                Generate PDF
+              </Button>
+              <Button
+                onClick={emailReport}
+                disabled={isPending}
+                className="h-11 w-full justify-center rounded-xl sm:h-12 sm:col-span-2 xl:col-span-1"
+              >
+                <Mail className="h-4 w-4" />
+                Email report
+              </Button>
+            </div>
           </div>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Overall health</p>
-            <div className="mt-4 flex items-end justify-between gap-4">
-              <div>
-                <p className="font-display text-4xl font-semibold">{healthScore?.overall ?? "--"}</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Weighted across performance, SEO, security, uptime, and accessibility.
-                </p>
-              </div>
-              {healthScore ? (
-                <Badge variant={healthScore.overall >= 85 ? "success" : healthScore.overall >= 60 ? "warning" : "danger"}>
-                  {healthScore.overall >= 85 ? "Strong" : healthScore.overall >= 60 ? "Watch" : "Needs work"}
-                </Badge>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">SSL</p>
-            <div className="mt-4 flex items-end justify-between gap-4">
-              <div>
-                <p className="font-display text-2xl font-semibold">
-                  {sslCheck?.days_until_expiry !== null && sslCheck?.days_until_expiry !== undefined
-                    ? `${sslCheck.days_until_expiry} days`
-                    : "Unknown"}
-                </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {sslCheck?.expiry_date
-                    ? `Expires ${new Date(sslCheck.expiry_date).toLocaleDateString()}`
-                    : "No SSL expiry date recorded yet."}
-                </p>
-              </div>
-              {sslCheck ? (
-                <Badge variant={gradeVariant(sslCheck.grade)}>
-                  {sslCheck.grade === "green"
-                    ? "Healthy"
-                    : sslCheck.grade === "orange"
-                      ? "Renew soon"
-                      : sslCheck.grade === "red"
-                        ? "Urgent"
-                        : "Critical"}
-                </Badge>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Security headers</p>
-            <div className="mt-4 flex items-end justify-between gap-4">
-              <div>
-                <p className="font-display text-4xl font-semibold">{securityHeaders?.grade ?? "--"}</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {securityHeaders ? "Grade based on six key browser security headers." : "Header audit not available yet."}
-                </p>
-              </div>
-              {securityHeaders ? <Badge variant={gradeVariant(securityHeaders.grade)}>{securityHeaders.grade}</Badge> : null}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">30-day uptime</p>
-            <div className="mt-4 flex items-end justify-between gap-4">
-              <div>
-                <p className="font-display text-4xl font-semibold">{uptimeSummary.percentage}%</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {uptimeSummary.averageResponseMs !== null
-                    ? `Average response ${uptimeSummary.averageResponseMs} ms`
-                    : "Waiting for enough uptime samples."}
-                </p>
-              </div>
-              <Badge variant={uptimeSummary.percentage >= 99 ? "success" : uptimeSummary.percentage >= 95 ? "warning" : "danger"}>
-                {uptimeSummary.incidents.length} incidents
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DetailSignalCard
+          icon={Activity}
+          accent="blue"
+          eyebrow="Overall health"
+          value={healthScore?.overall ?? "--"}
+          description="Weighted across performance, SEO, security, uptime, and accessibility."
+          badge={
+            healthScore ? (
+              <Badge variant={healthScore.overall >= 85 ? "success" : healthScore.overall >= 60 ? "warning" : "danger"}>
+                {healthScore.overall >= 85 ? "Strong" : healthScore.overall >= 60 ? "Watch" : "Needs work"}
               </Badge>
-            </div>
-          </CardContent>
-        </Card>
+            ) : null
+          }
+          footnote="This is the fastest way to see whether the site is trending healthy overall."
+        />
+
+        <DetailSignalCard
+          icon={ShieldCheck}
+          accent="emerald"
+          eyebrow="SSL"
+          value={
+            sslCheck?.days_until_expiry !== null && sslCheck?.days_until_expiry !== undefined
+              ? `${sslCheck.days_until_expiry} days`
+              : "Unknown"
+          }
+          valueClassName="text-[2rem] sm:text-[2.25rem]"
+          description={
+            sslCheck?.expiry_date
+              ? `Expires ${new Date(sslCheck.expiry_date).toLocaleDateString()}`
+              : "No SSL expiry date recorded yet."
+          }
+          badge={
+            sslCheck ? (
+              <Badge variant={gradeVariant(sslCheck.grade)}>
+                {sslCheck.grade === "green"
+                  ? "Healthy"
+                  : sslCheck.grade === "orange"
+                    ? "Renew soon"
+                    : sslCheck.grade === "red"
+                      ? "Urgent"
+                      : "Critical"}
+              </Badge>
+            ) : null
+          }
+          footnote={sslCheck?.issuer ? `Issued by ${sslCheck.issuer}` : "SSL issuer data will appear after the next successful check."}
+        />
+
+        <DetailSignalCard
+          icon={Shield}
+          accent="amber"
+          eyebrow="Security headers"
+          value={securityHeaders?.grade ?? "--"}
+          description={securityHeaders ? "Grade based on six key browser security headers." : "Header audit not available yet."}
+          badge={securityHeaders ? <Badge variant={gradeVariant(securityHeaders.grade)}>{securityHeaders.grade}</Badge> : null}
+          footnote={
+            securityHeaders
+              ? "HSTS, CSP, frame protection, content-type protection, referrer policy, and permissions policy are all checked."
+              : "Run another scan to refresh this audit."
+          }
+        />
+
+        <DetailSignalCard
+          icon={TrendingUp}
+          accent="rose"
+          eyebrow="30-day uptime"
+          value={`${uptimeSummary.percentage}%`}
+          description={
+            uptimeSummary.averageResponseMs !== null
+              ? `Average response ${uptimeSummary.averageResponseMs} ms`
+              : "Waiting for enough uptime samples."
+          }
+          badge={
+            <Badge variant={uptimeSummary.percentage >= 99 ? "success" : uptimeSummary.percentage >= 95 ? "warning" : "danger"}>
+              {uptimeSummary.incidents.length} incidents
+            </Badge>
+          }
+          footnote="Built from the latest uptime checks and any connected UptimeRobot monitor data."
+        />
       </div>
 
       {currentScan ? (
@@ -918,7 +1064,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                     </div>
                   </div>
                   <Button variant="outline" onClick={runScan} disabled={isPending} className="h-11 w-full shrink-0 sm:w-auto">
-                    <WandSparkles className="mr-2 h-4 w-4" />
+                    <WandSparkles className="h-4 w-4" />
                     Retry scan
                   </Button>
                 </div>
@@ -926,6 +1072,22 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             </Card>
           ) : (
             <>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Latest score pulse</p>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    Your current Lighthouse-style snapshot across speed, visibility, accessibility, and best-practice quality.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline">Scanned {new Date(currentScan.scanned_at).toLocaleDateString()}</Badge>
+                  {scoreDelta !== null ? (
+                    <Badge variant={scoreDelta > 0 ? "success" : scoreDelta < 0 ? "danger" : "outline"}>
+                      {scoreDelta > 0 ? `Up ${scoreDelta}` : scoreDelta < 0 ? `Down ${Math.abs(scoreDelta)}` : "No change"}
+                    </Badge>
+                  ) : null}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                 <ScoreRing label="Performance" score={currentScan.performance_score} delta={scoreDelta} compact />
                 <ScoreRing
@@ -974,34 +1136,59 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
               </div>
 
               <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
-                <Card>
-                  <CardHeader className="pb-3 sm:pb-6">
+                <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.94),rgba(15,23,42,0.92))] shadow-[0_24px_80px_-42px_rgba(15,23,42,0.82),0_0_0_1px_rgba(96,165,250,0.05)]">
+                  <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+                  <CardHeader className="relative gap-2 pb-3 sm:pb-6">
                     <CardTitle>Core Web Vitals</CardTitle>
+                    <CardDescription>Google&apos;s latest loading, responsiveness, and stability checks for this site.</CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-3 px-4 pb-4 pt-0 sm:px-6 sm:pb-6 md:grid-cols-2">
                     {[
-                      ["Largest Contentful Paint", `${Math.round(currentScan.lcp ?? 0)} ms`],
-                      ["First Input Delay", `${Math.round(currentScan.fid ?? 0)} ms`],
-                      ["Cumulative Layout Shift", `${currentScan.cls ?? 0}`],
-                      ["Total Blocking Time", `${Math.round(currentScan.tbt ?? 0)} ms`]
-                    ].map(([label, value]) => (
-                      <div key={label} className="rounded-2xl border border-border bg-background p-3 sm:p-4">
-                        <p className="text-[10px] uppercase leading-5 tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.18em]">
-                          {label}
-                        </p>
-                        <p className="mt-1.5 font-display text-xl font-semibold sm:mt-2 sm:text-2xl">{value}</p>
-                      </div>
-                    ))}
+                      ["lcp", "Largest Contentful Paint", `${Math.round(currentScan.lcp ?? 0)} ms`],
+                      ["fid", "First Input Delay", `${Math.round(currentScan.fid ?? 0)} ms`],
+                      ["cls", "Cumulative Layout Shift", `${currentScan.cls ?? 0}`],
+                      ["tbt", "Total Blocking Time", `${Math.round(currentScan.tbt ?? 0)} ms`]
+                    ].map(([metricKey, label, value]) => {
+                      const status = getCoreVitalStatus(
+                        metricKey as "lcp" | "fid" | "cls" | "tbt",
+                        metricKey === "lcp"
+                          ? currentScan.lcp
+                          : metricKey === "fid"
+                            ? currentScan.fid
+                            : metricKey === "cls"
+                              ? currentScan.cls
+                              : currentScan.tbt
+                      );
+
+                      return (
+                        <div key={label} className="rounded-2xl border border-border bg-background/90 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="max-w-[14rem] text-[10px] uppercase leading-5 tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.18em]">
+                              {label}
+                            </p>
+                            <Badge variant={status.variant}>{status.label}</Badge>
+                          </div>
+                          <p className="mt-3 font-display text-2xl font-semibold leading-none sm:text-[1.75rem]">{value}</p>
+                        </div>
+                      );
+                    })}
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader className="pb-3 sm:pb-6">
-                    <CardTitle>Accessibility violations</CardTitle>
+                <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.94),rgba(15,23,42,0.92))] shadow-[0_24px_80px_-42px_rgba(15,23,42,0.82),0_0_0_1px_rgba(96,165,250,0.05)]">
+                  <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+                  <CardHeader className="relative flex flex-col gap-3 pb-3 sm:pb-6 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-2">
+                      <CardTitle>Accessibility violations</CardTitle>
+                      <CardDescription>Most important accessibility blockers from the latest audit.</CardDescription>
+                    </div>
+                    <Badge variant={accessibilityViolations.length ? "warning" : "success"} className="self-start">
+                      {accessibilityViolations.length} issue{accessibilityViolations.length === 1 ? "" : "s"}
+                    </Badge>
                   </CardHeader>
                   <CardContent className="space-y-3 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
                     {accessibilityViolations.length ? (
-                      accessibilityViolations.slice(0, 8).map((violation, index) => (
-                        <div key={index} className="rounded-2xl border border-border bg-background p-3 sm:p-4">
+                      accessibilityViolations.slice(0, 6).map((violation, index) => (
+                        <div key={index} className="rounded-2xl border border-border bg-background/90 p-4">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <p className="font-medium leading-6">
                               {String(
@@ -1021,9 +1208,15 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                         </div>
                       ))
                     ) : (
-                      <p className="rounded-2xl border border-border bg-background p-3 text-sm text-muted-foreground sm:p-4">
-                        No accessibility violations recorded on the latest scan.
-                      </p>
+                      <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-2xl border border-dashed border-emerald-500/20 bg-emerald-500/5 px-6 text-center">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-400">
+                          <ShieldCheck className="h-5 w-5" />
+                        </div>
+                        <p className="mt-4 font-medium">No accessibility violations recorded</p>
+                        <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+                          The latest accessibility pass did not return any blocking issues for this website.
+                        </p>
+                      </div>
                     )}
                   </CardContent>
                 </Card>
@@ -1065,9 +1258,23 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                   </div>
                 ) : plainLanguage ? (
                   <div className="space-y-5">
-                    <div className="rounded-3xl border border-border bg-background p-4 sm:p-5">
+                    <div className="rounded-3xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.9),rgba(15,23,42,0.78))] p-4 shadow-[0_18px_56px_-34px_rgba(15,23,42,0.8)] sm:p-5">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div className="flex flex-wrap gap-2">
+                          <div className="inline-flex items-center gap-2 rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-rose-400">
+                            <span className="h-2 w-2 rounded-full bg-rose-400" />
+                            High {plainLanguage.severity_counts.high}
+                          </div>
+                          <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-amber-400">
+                            <span className="h-2 w-2 rounded-full bg-amber-400" />
+                            Medium {plainLanguage.severity_counts.medium}
+                          </div>
+                          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-400">
+                            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                            Low {plainLanguage.severity_counts.low}
+                          </div>
+                        </div>
+                        <div className="hidden flex flex-wrap gap-2">
                           <div className="rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-rose-500 dark:text-rose-400">
                             🔴 {plainLanguage.severity_counts.high} High
                           </div>
@@ -1083,7 +1290,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                     </div>
 
                     <Tabs defaultValue="issues" className="w-full">
-                      <TabsList className="grid h-auto w-full grid-cols-3">
+                      <TabsList className="grid h-auto w-full grid-cols-3 rounded-[1.25rem] border border-white/8 bg-background/80 p-1.5">
                         <TabsTrigger value="issues">Issues</TabsTrigger>
                         <TabsTrigger value="quick-wins">Quick Wins</TabsTrigger>
                         <TabsTrigger value="raw-data">Raw Data</TabsTrigger>
@@ -1108,32 +1315,42 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                                   </div>
                                 </div>
 
-                                <div className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
-                                  <div>
+                                <div className="mt-4 grid gap-3 text-sm leading-6 text-muted-foreground">
+                                  <div className="rounded-2xl border border-border/80 bg-card/60 p-3">
                                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">
                                       What&apos;s happening
                                     </p>
-                                    <p>{issue.whats_happening}</p>
+                                    <p className="mt-1">{issue.whats_happening}</p>
                                   </div>
-                                  <div>
+                                  <div className="rounded-2xl border border-border/80 bg-card/60 p-3">
                                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">
                                       Why it matters
                                     </p>
-                                    <p>{issue.business_impact}</p>
+                                    <p className="mt-1">{issue.business_impact}</p>
                                   </div>
-                                  <div>
+                                  <div className="rounded-2xl border border-border/80 bg-card/60 p-3">
                                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">
                                       How to fix
                                     </p>
-                                    <p>{issue.how_to_fix}</p>
+                                    <p className="mt-1">{issue.how_to_fix}</p>
                                   </div>
                                 </div>
 
-                                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                                <div className="hidden mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
                                   <span>⏱️ {issue.time_estimate}</span>
                                   <span>
                                     {difficultyStars(issue.difficulty)} {issue.difficulty}
                                   </span>
+                                </div>
+                                <div className="mt-4 flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1 text-xs">
+                                    <Clock3 className="h-3.5 w-3.5" />
+                                    {issue.time_estimate}
+                                  </Badge>
+                                  <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1 text-xs">
+                                    <WandSparkles className="h-3.5 w-3.5" />
+                                    {issue.difficulty}
+                                  </Badge>
                                 </div>
                               </div>
                             ))}
@@ -1155,17 +1372,33 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                                     <WandSparkles className="h-5 w-5" />
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                                    <p className="hidden text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
                                       ⚡ Quick Win
+                                    </p>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                                      Quick win
                                     </p>
                                     <p className="mt-1 text-lg font-semibold leading-tight">{recommendation.title}</p>
                                     <p className="mt-2 text-sm leading-6 text-muted-foreground">{recommendation.description}</p>
-                                    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                                    <div className="hidden mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
                                       <span>
                                         {difficultyStars(recommendation.difficulty)} {recommendation.difficulty}
                                       </span>
                                       <span>⏱️ {recommendation.time_estimate}</span>
                                       <Badge variant={badgeVariantForSeverity(recommendation.priority)} className="self-start">
+                                        {recommendation.priority}
+                                      </Badge>
+                                    </div>
+                                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                                      <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1 text-xs">
+                                        <WandSparkles className="h-3.5 w-3.5" />
+                                        {recommendation.difficulty}
+                                      </Badge>
+                                      <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1 text-xs">
+                                        <Clock3 className="h-3.5 w-3.5" />
+                                        {recommendation.time_estimate}
+                                      </Badge>
+                                      <Badge variant={badgeVariantForSeverity(recommendation.priority)} className="rounded-full px-3 py-1 text-xs">
                                         {recommendation.priority}
                                       </Badge>
                                     </div>
@@ -1256,306 +1489,21 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             </Card>
           ) : null}
 
-          <Card>
-            <CardHeader className="gap-4 pb-3 sm:pb-6">
-              <div className="space-y-1">
-                <CardTitle>Website health signals</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  On-page SEO, link health, security, uptime, real user data, and competitor tracking in one place.
-                </p>
-              </div>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
-              <Tabs defaultValue="seo-audit" className="w-full">
-                <TabsList className="grid h-auto w-full grid-cols-2 lg:grid-cols-5">
-                  <TabsTrigger value="seo-audit">SEO Audit</TabsTrigger>
-                  <TabsTrigger value="link-health">Link Health</TabsTrigger>
-                  <TabsTrigger value="security">Security</TabsTrigger>
-                  <TabsTrigger value="real-users">Real Users</TabsTrigger>
-                  <TabsTrigger value="competitors">Competitors</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="seo-audit" className="mt-5">
-                  {seoAudit ? (
-                    <div className="space-y-4">
-                      <div className="grid gap-4 xl:grid-cols-2">
-                        {[
-                          {
-                            label: "Title tag",
-                            value: `${seoAudit.title_tag.status} • ${seoAudit.title_tag.length ?? 0} chars`,
-                            pass: seoAudit.title_tag.exists
-                          },
-                          {
-                            label: "Meta description",
-                            value: `${seoAudit.meta_description.status} • ${seoAudit.meta_description.length ?? 0} chars`,
-                            pass: seoAudit.meta_description.exists
-                          },
-                          {
-                            label: "Headings",
-                            value: `${seoAudit.headings.status} • H1 ${seoAudit.headings.h1_count}, H2 ${seoAudit.headings.h2_count}, H3 ${seoAudit.headings.h3_count}`,
-                            pass: seoAudit.headings.status === "Good"
-                          },
-                          {
-                            label: "Canonical",
-                            value: seoAudit.canonical.status,
-                            pass: seoAudit.canonical.exists && seoAudit.canonical.self_referencing
-                          },
-                          {
-                            label: "Open Graph",
-                            value:
-                              seoAudit.og_tags.title && seoAudit.og_tags.description && seoAudit.og_tags.image
-                                ? "Complete"
-                                : "Needs attention",
-                            pass:
-                              seoAudit.og_tags.title && seoAudit.og_tags.description && seoAudit.og_tags.image
-                          },
-                          {
-                            label: "Schema markup",
-                            value: seoAudit.schema_present
-                              ? seoAudit.schema_types.join(", ") || "Detected"
-                              : "Missing",
-                            pass: seoAudit.schema_present
-                          }
-                        ].map((item) => (
-                          <div key={item.label} className="rounded-2xl border border-border bg-background p-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                  {item.label}
-                                </p>
-                                <p className="mt-2 text-sm leading-6 text-foreground">{item.value}</p>
-                              </div>
-                              <Badge variant={item.pass ? "success" : "danger"}>{statusFromBoolean(Boolean(item.pass))}</Badge>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-                        <div className="rounded-2xl border border-border bg-background p-4">
-                          <p className="text-sm font-semibold">Images missing alt text</p>
-                          <p className="mt-2 font-display text-3xl font-semibold">{seoAudit.images_missing_alt}</p>
-                          <div className="mt-4 space-y-2">
-                            {seoAudit.images_missing_alt_urls.length ? (
-                              seoAudit.images_missing_alt_urls.map((url) => (
-                                <p key={url} className="break-all text-sm leading-6 text-muted-foreground">
-                                  {url}
-                                </p>
-                              ))
-                            ) : (
-                              <p className="text-sm text-muted-foreground">No missing alt text found on the first audited images.</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="rounded-2xl border border-border bg-background p-4">
-                          <p className="text-sm font-semibold">Fix suggestions</p>
-                          <div className="mt-4 space-y-3">
-                            {seoAudit.fix_suggestions.length ? (
-                              seoAudit.fix_suggestions.map((suggestion, index) => (
-                                <div key={`${suggestion.title}-${index}`} className="rounded-2xl border border-border/80 bg-card p-4">
-                                  <div className="flex flex-wrap items-start justify-between gap-2">
-                                    <p className="font-medium">{suggestion.title}</p>
-                                    <Badge variant={badgeVariantForSeverity(suggestion.severity)}>{suggestion.severity}</Badge>
-                                  </div>
-                                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{suggestion.description}</p>
-                                </div>
-                              ))
-                            ) : (
-                              <p className="text-sm text-muted-foreground">The latest SEO audit did not flag any immediate fixes.</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
-                      SEO audit data will appear here after the next completed scan.
-                    </p>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="link-health" className="mt-5">
-                  <LinkHealthPanel brokenLinks={brokenLinks} websiteUrl={data.url} />
-                </TabsContent>
-
-                <TabsContent value="security" className="mt-5">
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <div className="rounded-2xl border border-border bg-background p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold">SSL certificate</p>
-                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                            {sslCheck
-                              ? `${sslCheck.issuer ?? "Unknown issuer"} • ${sslCheck.days_until_expiry ?? "Unknown"} day(s) remaining`
-                              : "No SSL check data available yet."}
-                          </p>
-                        </div>
-                        {sslCheck ? <Badge variant={gradeVariant(sslCheck.grade)}>{sslCheck.grade}</Badge> : null}
-                      </div>
-                      {sslCheck?.expiry_date ? (
-                        <p className="mt-4 text-sm text-muted-foreground">
-                          Expires on {new Date(sslCheck.expiry_date).toLocaleDateString()}
-                        </p>
-                      ) : null}
-                    </div>
-
-                    <div className="rounded-2xl border border-border bg-background p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold">Security headers</p>
-                          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                            {securityHeaders ? "Pass/fail view of the browser headers protecting this site." : "No security header audit available yet."}
-                          </p>
-                        </div>
-                        {securityHeaders ? <Badge variant={gradeVariant(securityHeaders.grade)}>{securityHeaders.grade}</Badge> : null}
-                      </div>
-                      {securityHeaders ? (
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                          {[
-                            ["HSTS", securityHeaders.hsts],
-                            ["CSP", securityHeaders.csp],
-                            ["X-Frame-Options", securityHeaders.x_frame_options],
-                            ["X-Content-Type-Options", securityHeaders.x_content_type],
-                            ["Referrer-Policy", securityHeaders.referrer_policy],
-                            ["Permissions-Policy", securityHeaders.permissions_policy]
-                          ].map(([label, passed]) => (
-                            <div key={String(label)} className="rounded-2xl border border-border/80 bg-card p-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-medium">{label}</p>
-                                <Badge variant={passed ? "success" : "danger"}>{statusFromBoolean(Boolean(passed))}</Badge>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="real-users" className="mt-5">
-                  <div className="space-y-4">
-                    <div className="grid gap-4 xl:grid-cols-3">
-                      <div className="rounded-2xl border border-border bg-background p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">30-day uptime</p>
-                        <p className="mt-2 font-display text-3xl font-semibold">{uptimeSummary.percentage}%</p>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          {uptimeSummary.averageResponseMs !== null
-                            ? `Average response ${uptimeSummary.averageResponseMs} ms`
-                            : "Not enough checks yet to show response time."}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-border bg-background p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Recent incidents</p>
-                        <p className="mt-2 font-display text-3xl font-semibold">{uptimeSummary.incidents.length}</p>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          Captured from daily health checks and any linked UptimeRobot monitor data.
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-border bg-background p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Real-user loading</p>
-                        <p className="mt-2 font-display text-3xl font-semibold">{cruxData ? `${cruxData.lcp_good_pct}%` : "--"}</p>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          Real visitors with good loading performance from Chrome UX Report data.
-                        </p>
-                      </div>
-                    </div>
-
-                    {cruxData ? (
-                      <div className="grid gap-4 xl:grid-cols-2">
-                        {[
-                          ["LCP", cruxData.lcp_good_pct, cruxData.lcp_needs_pct, cruxData.lcp_poor_pct],
-                          ["CLS", cruxData.cls_good_pct, cruxData.cls_needs_pct, cruxData.cls_poor_pct],
-                          ["INP", cruxData.inp_good_pct, cruxData.inp_needs_pct, cruxData.inp_poor_pct],
-                          ["FCP", cruxData.fcp_good_pct, cruxData.fcp_needs_pct, cruxData.fcp_poor_pct],
-                          ["TTFB", cruxData.ttfb_good_pct, cruxData.ttfb_needs_pct, cruxData.ttfb_poor_pct]
-                        ].map(([label, good, needs, poor]) => (
-                          <div key={String(label)} className="rounded-2xl border border-border bg-background p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-sm font-semibold">{label}</p>
-                              <Badge variant={Number(good) >= 75 ? "success" : Number(poor) >= 25 ? "danger" : "warning"}>
-                                {Number(good)}% good
-                              </Badge>
-                            </div>
-                            <div className="mt-4 space-y-2 text-sm text-muted-foreground">
-                              <p>Good: {good}%</p>
-                              <p>Needs improvement: {needs}%</p>
-                              <p>Poor: {poor}%</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
-                        Real-user Chrome UX Report data is not available for this origin yet.
-                      </p>
-                    )}
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="competitors" className="mt-5">
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border border-border bg-background p-4">
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold">Tracked competitor URLs</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            Add up to 3 competitors, one per line or separated by commas.
-                          </p>
-                          <Textarea
-                            className="mt-4 min-h-[120px]"
-                            value={competitorInput}
-                            onChange={(event) => setCompetitorInput(event.target.value)}
-                            placeholder="https://competitor-one.com&#10;https://competitor-two.com"
-                          />
-                        </div>
-                        <Button onClick={saveCompetitors} disabled={isPending} className="shrink-0">
-                          Save competitors
-                        </Button>
-                      </div>
-                    </div>
-
-                    {competitorEntries.length ? (
-                      <div className="grid gap-4 xl:grid-cols-2">
-                        {competitorEntries.map((competitor) => {
-                          const competitorOverall = Math.round(
-                            (competitor.performance + competitor.seo + competitor.accessibility + competitor.best_practices) / 4
-                          );
-
-                          return (
-                            <div key={competitor.competitor_url} className="rounded-2xl border border-border bg-background p-4">
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="break-all text-sm font-semibold">{competitor.competitor_url}</p>
-                                  <p className="mt-1 text-sm text-muted-foreground">
-                                    Last scanned {new Date(competitor.scanned_at).toLocaleDateString()}
-                                  </p>
-                                </div>
-                                <Badge variant={competitorOverall > (healthScore?.overall ?? 0) ? "warning" : "success"}>
-                                  {competitorOverall}/100
-                                </Badge>
-                              </div>
-
-                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                <MetricTile label="Performance" shortLabel="Perf." value={competitor.performance} />
-                                <MetricTile label="SEO" shortLabel="SEO" value={competitor.seo} />
-                                <MetricTile label="Accessibility" shortLabel="Access." value={competitor.accessibility} />
-                                <MetricTile label="Best Practices" shortLabel="Best Prac." value={competitor.best_practices} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
-                        Add competitor URLs above to start daily comparison tracking for this website.
-                      </p>
-                    )}
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+          <WebsiteHealthSignalsCard
+            websiteUrl={data.url}
+            seoAudit={seoAudit}
+            brokenLinks={brokenLinks}
+            sslCheck={sslCheck}
+            securityHeaders={securityHeaders}
+            cruxData={cruxData}
+            uptimeSummary={uptimeSummary}
+            competitorEntries={competitorEntries}
+            competitorInput={competitorInput}
+            onCompetitorInputChange={setCompetitorInput}
+            onSaveCompetitors={saveCompetitors}
+            isPending={isPending}
+            healthScore={healthScore}
+          />
 
           <Card>
             <CardHeader className="pb-3 sm:pb-6">
@@ -1594,7 +1542,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             title="No scans yet"
             description="Run the first scan to generate scores, accessibility checks, and your first white-label report."
           />
-          <WebsiteHealthSignalsEmptyStateCard
+          <WebsiteHealthSignalsCard
             websiteUrl={data.url}
             seoAudit={seoAudit}
             brokenLinks={brokenLinks}
