@@ -4,7 +4,7 @@ import localFont from "next/font/local";
 import "@/app/globals.css";
 
 import { AnalyticsRoot } from "@/components/analytics/analytics-root";
-import { siteCopy } from "@/lib/copy";
+import { marketingCopy } from "@/lib/marketing-copy";
 import { Providers } from "@/components/providers";
 import { themeScript } from "@/components/theme/theme-provider";
 
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     default: "SitePulse",
     template: "%s | SitePulse"
   },
-  description: siteCopy.subTagline,
+  description: marketingCopy.subTagline,
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   icons: {
     icon: "/icon.svg"

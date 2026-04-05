@@ -205,9 +205,13 @@ export async function sendReportEmail(input: {
     input.previousScan !== null && input.previousScan !== undefined
       ? input.scan.performance_score - input.previousScan.performance_score
       : null;
-  const subject = input.healthScore
-    ? `[${input.website.label}] Health Score ${input.healthScore}/100 report`
-    : `[${input.website.label}] Weekly Report - SitePulse`;
+  const keyIssue = issues[0]?.title ?? "Website performance needs review";
+  const subject =
+    performanceDelta !== null && performanceDelta < 0
+      ? `⚠ Weekly Report: Performance dropped by ${Math.abs(performanceDelta)} points`
+      : performanceDelta !== null && performanceDelta > 0
+        ? `Weekly Report: Performance improved by ${performanceDelta} points`
+        : `Weekly Report: ${input.website.label} needs attention`;
 
   return sendEmailWithConfirmation({
     kind: "report",
@@ -227,9 +231,25 @@ export async function sendReportEmail(input: {
           </div>
 
           <div style="padding: 36px 32px 18px; text-align: center;">
-            <h1 style="margin: 0; font-size: 40px; line-height: 1.1; color: #0F172A;">Your Weekly Website Report</h1>
+            <h1 style="margin: 0; font-size: 40px; line-height: 1.1; color: #0F172A;">Client-ready weekly website report</h1>
             <p style="margin: 14px 0 0; font-size: 24px; color: #64748B;">${input.website.url.replace(/^https?:\/\//, "")}</p>
             <p style="margin: 10px 0 0; font-size: 15px; color: #94A3B8;">Scanned ${formatDateTime(input.scan.scanned_at)}</p>
+          </div>
+
+          <div style="padding: 0 32px 24px;">
+            <div style="border-radius: 22px; border: 1px solid #DBEAFE; background: #EFF6FF; padding: 18px 20px;">
+              <p style="margin: 0; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #2563EB; font-weight: 700;">
+                Why this matters now
+              </p>
+              <p style="margin: 10px 0 0; font-size: 18px; line-height: 1.6; color: #1E293B;">
+                ${performanceDelta !== null && performanceDelta < 0
+                  ? `Urgency: this website dropped ${Math.abs(performanceDelta)} performance points since the last report.`
+                  : "Urgency: this website still has visible opportunities to improve client-facing performance and trust."}
+              </p>
+              <p style="margin: 8px 0 0; font-size: 16px; line-height: 1.7; color: #475569;">
+                Key issue: ${keyIssue}. Open the full report to review the fixes, expected impact, and next client-ready talking points.
+              </p>
+            </div>
           </div>
 
           <div style="padding: 0 32px 8px;">
@@ -239,7 +259,7 @@ export async function sendReportEmail(input: {
           <table width="100%" cellpadding="0" cellspacing="0" style="padding: 0 32px 24px;">
             <tr>
               <td valign="top" style="width: 42%; padding: 20px 16px 32px 32px;">
-                <h2 style="margin: 0 0 20px; font-size: 24px; color: #0F172A;">What changed this week</h2>
+                <h2 style="margin: 0 0 20px; font-size: 24px; color: #0F172A;">What needs your attention</h2>
                 ${
                   performanceDelta !== null
                     ? renderChangeCard(
@@ -258,12 +278,12 @@ export async function sendReportEmail(input: {
                 )}
 
                 <a href="${baseUrl}/dashboard/websites/${input.website.id}" style="display: inline-block; margin-top: 12px; border-radius: 16px; background: ${accent}; color: #FFFFFF; text-decoration: none; padding: 16px 28px; font-size: 18px; font-weight: 700;">
-                  View Full Dashboard
+                  View full report
                 </a>
               </td>
 
               <td valign="top" style="padding: 20px 32px 32px 24px; border-left: 1px solid #E2E8F0;">
-                <h2 style="margin: 0 0 20px; font-size: 24px; color: #0F172A;">Top Issues</h2>
+                <h2 style="margin: 0 0 20px; font-size: 24px; color: #0F172A;">Top issue summary</h2>
                 <ul style="margin: 0; padding-left: 22px; color: #475569; font-size: 18px; line-height: 1.7;">
                   ${
                     issues.length
@@ -281,7 +301,7 @@ export async function sendReportEmail(input: {
           </table>
 
           <div style="border-top: 1px solid #E2E8F0; padding: 22px 32px; text-align: center; font-size: 15px; color: #64748B;">
-            You received this email because you are subscribed to SitePulse.
+            You received this email because this client website is part of your SitePulse reporting workflow.
             <a href="${baseUrl}/dashboard/settings" style="color: ${accent}; text-decoration: none; margin-left: 4px;">Manage email settings</a>
           </div>
         </div>
@@ -319,9 +339,10 @@ export async function sendCriticalAlertEmail(input: {
     html: `
       <div style="font-family: Arial, sans-serif; background: #FFF7ED; padding: 32px;">
         <div style="max-width: 680px; margin: 0 auto; background: white; border-radius: 24px; padding: 32px; border: 1px solid #FED7AA;">
-          <p style="font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: #C2410C; font-weight: 700;">Critical Alert</p>
+          <p style="font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: #C2410C; font-weight: 700;">Urgent client alert</p>
           <h1 style="font-size: 30px; color: #7C2D12; margin-bottom: 12px;">${input.website.label}</h1>
           <p style="font-size: 16px; color: #9A3412; margin-bottom: 20px;">${input.reason}</p>
+          <p style="font-size: 16px; color: #334155; margin-bottom: 16px;">Review this quickly so you can explain the issue and next action before the client escalates it.</p>
           <p style="font-size: 16px; color: #334155;">Current performance score: <strong>${input.scan.performance_score}</strong></p>
           <p style="font-size: 16px; color: #334155;">Scan time: ${formatDateTime(input.scan.scanned_at)}</p>
           <a href="${getBaseUrl()}/dashboard/websites/${input.website.id}" style="display: inline-block; margin-top: 20px; background: #C2410C; color: white; text-decoration: none; padding: 14px 20px; border-radius: 999px; font-weight: 700;">

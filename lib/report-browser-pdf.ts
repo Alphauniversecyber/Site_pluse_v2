@@ -81,7 +81,6 @@ type PdfIssue = {
   priority: ReportPriority;
   what: string;
   why: string;
-  rootCause: string;
   recommendation: string;
   difficulty: "Easy" | "Medium" | "Hard";
   time: string;
@@ -176,21 +175,62 @@ function contactEmail(input: Context) {
 }
 
 function nextReportDate(input: Context) {
-  if (input.schedule?.next_scan_at) {
-    return formatDateTime(input.schedule.next_scan_at);
-  }
-
   const anchor = new Date(input.scan.scanned_at);
-  const frequency = input.profile.email_report_frequency;
+  const frequency =
+    (input.schedule?.frequency as "daily" | "weekly" | "monthly" | undefined) ??
+    input.profile.email_report_frequency ??
+    "weekly";
   if (frequency === "daily") {
     anchor.setDate(anchor.getDate() + 1);
   } else if (frequency === "weekly") {
     anchor.setDate(anchor.getDate() + 7);
   } else {
-    anchor.setMonth(anchor.getMonth() + 1);
+    anchor.setDate(anchor.getDate() + 30);
   }
 
   return formatDateTime(anchor);
+}
+
+function issueSummaryLine(issues: PdfIssue[]) {
+  const counts = issues.reduce(
+    (acc, issue) => {
+      if (issue.priority === "Critical") {
+        acc.critical += 1;
+      } else if (issue.priority === "High") {
+        acc.high += 1;
+      } else if (issue.priority === "Medium") {
+        acc.medium += 1;
+      }
+
+      return acc;
+    },
+    { critical: 0, high: 0, medium: 0 }
+  );
+
+  return `${issues.length} issues found &mdash; ${counts.critical} critical, ${counts.high} high, ${counts.medium} medium priority`;
+}
+
+function truncateHeaderValue(value: string, maxLength = 45) {
+  const cleaned = cleanCopy(value);
+  if (cleaned.length <= maxLength) {
+    return cleaned;
+  }
+
+  const shortened = cleaned.slice(0, Math.max(0, maxLength - 3));
+  const boundary = shortened.search(/\s+\S*$/);
+  const safe = boundary > 18 ? shortened.slice(0, boundary) : shortened;
+  return `${safe.trim()}...`;
+}
+
+function hasRenderablePageContent(content: string) {
+  const visibleText = content
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z0-9#]+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return visibleText.length > 24;
 }
 
 async function fetchImageAsDataUrl(url: string) {
@@ -406,7 +446,6 @@ function selectPdfIssues(narrative: ReportNarrative): PdfIssue[] {
       priority: entry.issue.insight.priority,
       what: takeSentences(withDeviceNote(entry.issue.ai.what_is_happening, entry.device), 2),
       why: takeSentences(entry.issue.ai.why_it_matters, 2),
-      rootCause: takeSentences(entry.issue.ai.root_cause || entry.issue.insight.rootCause, 2),
       recommendation: takeSentences(
         entry.recommendation?.ai.action ||
           entry.issue.insight.relatedRecommendations[0]?.description ||
@@ -508,11 +547,7 @@ function issueCardHtml(issue: PdfIssue) {
           <p class="detail-block__copy">${escapeHtml(issue.why)}</p>
         </div>
         <div class="detail-block">
-          <p class="detail-block__label">Root cause</p>
-          <p class="detail-block__copy">${escapeHtml(issue.rootCause)}</p>
-        </div>
-        <div class="detail-block">
-          <p class="detail-block__label">Recommended fix</p>
+          <p class="detail-block__label">How to fix it</p>
           <p class="detail-block__copy">${escapeHtml(issue.recommendation)}</p>
         </div>
       </div>
@@ -569,7 +604,6 @@ function planBoxHtml(title: string, expected: string, tasks: Array<{ task: strin
 }
 
 function measurementCardHtml(input: {
-  icon: string;
   title: string;
   value: string;
   status: string;
@@ -584,7 +618,10 @@ function measurementCardHtml(input: {
   return `
     <article class="surface-card measurement-card">
       <div class="measurement-card__top">
-        <p class="measurement-card__title">${input.icon} ${escapeHtml(input.title)}</p>
+        <div class="measurement-card__title-row">
+          <span class="measurement-card__dot" style="background:${statusTone.color};"></span>
+          <p class="measurement-card__title">${escapeHtml(input.title)}</p>
+        </div>
         ${badgeHtml(input.status, statusTone)}
       </div>
       <p class="measurement-card__value">${escapeHtml(cleanCopy(input.value))}</p>
@@ -713,7 +750,48 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
   );
   const issues = selectPdfIssues(narrative);
   const recommendations = selectPdfRecommendations(narrative);
-  const issuePages = issues.length > 0 ? chunk(issues, 3) : [[]];
+  const issuePages = issues.length > 0 ? chunk(issues, 3).filter((pageIssues) => pageIssues.length > 0) : [];
+  const businessImpactItems = [
+    {
+      title: "Traffic",
+      body:
+        input.scan.seo_score < 80
+          ? "Search visibility gaps can reduce the number of qualified visitors reaching your highest-value pages consistently."
+          : "Search signals are mostly healthy, which helps protect steady discovery and keeps valuable pages visible."
+    },
+    {
+      title: "Conversions",
+      body:
+        input.scan.performance_score < 75
+          ? "Speed and usability friction can cause visitors to leave before they enquire, book, or buy."
+          : "The current experience gives visitors a better chance of staying long enough to complete key actions."
+    },
+    {
+      title: "Engagement",
+      body:
+        input.scan.accessibility_score < 80 || input.scan.best_practices_score < 80
+          ? "Trust and usability issues can quietly lower confidence, page depth, and the quality of each visit."
+          : "A steadier, easier experience supports longer sessions, stronger trust, and better engagement."
+    }
+  ];
+  const businessImpactCards = businessImpactItems
+    .map(
+      (item) => `
+        <article class="surface-card business-card">
+          <div class="section-card__header">
+            <h2>${escapeHtml(item.title)}</h2>
+          </div>
+          <p>${escapeHtml(cleanCopy(item.body))}</p>
+        </article>
+      `
+    )
+    .join("");
+  const businessImpactSummary =
+    overall >= 85
+      ? "This website is in a strong position, but staying proactive will help protect traffic, conversion confidence, and client trust."
+      : overall >= 60
+        ? "There is meaningful upside available here. Addressing the current issues should improve how visitors discover, trust, and act on the website."
+        : "This website is carrying clear commercial risk right now. Fixing the priority issues should reduce visitor drop-off and support stronger lead generation.";
   const scoreCards = [
     scoreCardHtml({
       title: "Performance",
@@ -766,14 +844,19 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
     .map((item) => {
       const isPositive = item.value > 0;
       const isNegative = item.value < 0;
-      const changeTone = isPositive ? tone(GREEN, GREEN_SOFT) : isNegative ? tone(RED, RED_SOFT) : tone(BLUE, BLUE_SOFT);
-      const arrow = isPositive ? "?" : isNegative ? "?" : "?";
+      const changeTone = isPositive
+        ? { color: "#22C55E", background: "rgba(34,197,94,0.10)", border: "#22C55E" }
+        : isNegative
+          ? { color: "#EF4444", background: "rgba(239,68,68,0.10)", border: "#EF4444" }
+          : { color: "#94A3B8", background: "rgba(148,163,184,0.12)", border: "rgba(148,163,184,0.24)" };
+      const arrow = isPositive ? "↑" : isNegative ? "↓" : "→";
+      const formattedValue = isPositive ? `+${item.value}` : `${item.value}`;
 
       return `
         <div class="change-chip">
           <p class="change-chip__label">${escapeHtml(item.label)}</p>
           <span class="change-chip__value" style="color:${changeTone.color}; background:${changeTone.background}; border-color:${changeTone.border};">
-            ${arrow} ${item.value > 0 ? "+" : ""}${item.value}
+            ${isPositive ? "&uarr;" : isNegative ? "&darr;" : "&rarr;"} ${formattedValue}
           </span>
         </div>
       `;
@@ -797,7 +880,6 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
 
   const vitals = [
     measurementCardHtml({
-      icon: "?",
       title: narrative.overview.vitals[0]?.title ?? "Page Load Speed",
       value:
         narrative.overview.vitals[0]?.value_label ??
@@ -806,14 +888,12 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       summary: narrative.overview.vitals[0]?.explanation ?? ""
     }),
     measurementCardHtml({
-      icon: "??",
       title: narrative.overview.vitals[1]?.title ?? "Click Response",
       value: narrative.overview.vitals[1]?.value_label ?? `${Math.round(input.scan.fid ?? 0)} ms`,
       status: narrative.overview.vitals[1]?.status_label ?? "Needs work",
       summary: narrative.overview.vitals[1]?.explanation ?? ""
     }),
     measurementCardHtml({
-      icon: "??",
       title: narrative.overview.vitals[2]?.title ?? "Visual Stability",
       value: narrative.overview.vitals[2]?.value_label ?? `${(input.scan.cls ?? 0).toFixed(4)}`,
       status: narrative.overview.vitals[2]?.status_label ?? "Needs work",
@@ -944,10 +1024,10 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       ${
         input.securityHeaders
           ? `<div class="two-column-grid">
-              ${metricRowHtml("HSTS", input.securityHeaders.hsts_value || "Missing", input.securityHeaders.hsts ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.hsts))}
-              ${metricRowHtml("Content Security Policy", input.securityHeaders.csp_value || "Missing", input.securityHeaders.csp ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.csp))}
-              ${metricRowHtml("X-Frame-Options", input.securityHeaders.x_frame_options_value || "Missing", input.securityHeaders.x_frame_options ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.x_frame_options))}
-              ${metricRowHtml("Referrer-Policy", input.securityHeaders.referrer_policy_value || "Missing", input.securityHeaders.referrer_policy ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.referrer_policy))}
+              ${metricRowHtml("HSTS", truncateHeaderValue(input.securityHeaders.hsts_value || "Missing"), input.securityHeaders.hsts ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.hsts))}
+              ${metricRowHtml("Content Security Policy", truncateHeaderValue(input.securityHeaders.csp_value || "Missing"), input.securityHeaders.csp ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.csp))}
+              ${metricRowHtml("X-Frame-Options", truncateHeaderValue(input.securityHeaders.x_frame_options_value || "Missing"), input.securityHeaders.x_frame_options ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.x_frame_options))}
+              ${metricRowHtml("Referrer-Policy", truncateHeaderValue(input.securityHeaders.referrer_policy_value || "Missing"), input.securityHeaders.referrer_policy ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.referrer_policy))}
             </div>`
           : ""
       }
@@ -963,11 +1043,20 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       <div class="signal-grid">
         ${smallSignalCardHtml({
           title: "30-day uptime",
-          value: `${uptimeSummary.percentage}%`,
+          value:
+            uptimeSummary.percentage > 0
+              ? `${uptimeSummary.percentage}%`
+              : "Monitoring active",
           subtitle:
-            uptimeSummary.averageResponseMs !== null
-              ? `Average response time: ${uptimeSummary.averageResponseMs} ms.`
-              : "Waiting for more uptime samples to calculate response time."
+            uptimeSummary.percentage > 0
+              ? uptimeSummary.averageResponseMs !== null
+                ? `Average response time: ${uptimeSummary.averageResponseMs} ms.`
+                : "Waiting for more uptime samples to calculate response time."
+              : "First report ready in 7 days.",
+          tone:
+            uptimeSummary.percentage > 0
+              ? undefined
+              : tone(BLUE, BLUE_SOFT)
         })}
         ${smallSignalCardHtml({
           title: "Recent incidents",
@@ -1042,7 +1131,7 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
             </div>
             <div>
               <p class="meta-label">Health score</p>
-              <p class="meta-value">${healthScore.overall}/100</p>
+              <p class="meta-value meta-value--score">${healthScore.overall}/100</p>
             </div>
             <div class="meta-divider"></div>
             <div>
@@ -1127,6 +1216,7 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
                 ? "These are the highest-impact issues to discuss with your client or developer next."
                 : "The next most important fixes once the urgent work is underway."
           })}
+          ${index === 0 ? `<p class="issue-summary-line">${issueSummaryLine(issues)}</p>` : ""}
           <section class="issue-stack">
             ${
               pageIssues.length
@@ -1137,6 +1227,23 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
         </div>
       `
     })),
+    {
+      content: `
+        <div class="page-stack">
+          ${sectionHeaderHtml({
+            eyebrow: "Business Impact",
+            title: "How This Affects The Business",
+            subtitle: "Use this page to connect technical fixes to traffic, conversions, and engagement outcomes."
+          })}
+          <section class="business-grid">
+            ${businessImpactCards}
+          </section>
+          <section class="surface-card summary-card">
+            <p>${escapeHtml(cleanCopy(businessImpactSummary))}</p>
+          </section>
+        </div>
+      `
+    },
     {
       content: `
         <div class="page-stack">
@@ -1164,13 +1271,14 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
                   <h2>Expected Outcome</h2>
                   <p>${escapeHtml(cleanCopy(narrative.overview.projected_summary))}</p>
                 </div>
-                <div class="outcome-metrics">
-                  <div class="outcome-metric">
+                <div class="outcome-inline">
+                  <div class="outcome-chip">
                     <span>Current score</span>
                     <strong>${overall}/100</strong>
                   </div>
-                  <div class="outcome-metric">
-                    <span>Projected range</span>
+                  <div class="outcome-inline__arrow">→</div>
+                  <div class="outcome-chip outcome-chip--expected">
+                    <span>Expected range</span>
                     <strong>${escapeHtml(cleanCopy(narrative.overview.projected_score_range))}/100</strong>
                   </div>
                 </div>
@@ -1238,13 +1346,14 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
           <p class="contact-page__prompt">Your next report will be delivered:</p>
           <p class="contact-page__date">${escapeHtml(nextDate)}</p>
           <div class="contact-divider"></div>
-          <p class="contact-page__note">Report generated by ${escapeHtml(name)} using SitePulse monitoring</p>
+      <p class="contact-page__note">Report generated by ${escapeHtml(name)} using SitePulse's client reporting system</p>
         </div>
       `
     }
   ];
 
-  const totalPages = pages.length;
+  const filteredPages = pages.filter((page) => hasRenderablePageContent(page.content));
+  const totalPages = filteredPages.length;
   const css = `
     @page { size: A4; margin: 0; }
     * { box-sizing: border-box; }
@@ -1267,7 +1376,9 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
     }
     .page {
       width: 210mm;
+      height: 297mm;
       min-height: 297mm;
+      max-height: 297mm;
       padding: 17mm 17mm 14mm;
       display: flex;
       flex-direction: column;
@@ -1333,11 +1444,18 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       line-height: 1.7;
       color: ${SLATE_600};
     }
+    .issue-summary-line {
+      margin: -4px 0 0;
+      font-size: 13px;
+      line-height: 1.6;
+      color: ${SLATE_700};
+    }
     .pill {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       width: fit-content;
+      min-width: 74px;
       min-height: 30px;
       padding: 6px 14px;
       border-radius: 999px;
@@ -1415,11 +1533,10 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       gap: 18px;
     }
     .health-card__top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      gap: 18px;
     }
     .health-card__score {
       display: flex;
@@ -1433,11 +1550,19 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       letter-spacing: 0.12em;
       text-transform: uppercase;
       color: ${SLATE_600};
+      white-space: nowrap;
+      overflow-wrap: normal;
+      word-break: keep-all;
     }
     .health-card__score strong {
-      font-size: 30px;
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
       line-height: 1;
       color: ${SLATE_950};
+      white-space: nowrap;
+      overflow-wrap: normal;
+      word-break: keep-all;
     }
     .health-card__summary {
       margin: 0;
@@ -1493,6 +1618,7 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       font-weight: 800;
       line-height: 1;
       flex-shrink: 0;
+      white-space: nowrap;
     }
     .score-card__copy,
     .device-card__copy {
@@ -1549,6 +1675,7 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       align-items: center;
       justify-content: center;
       min-height: 28px;
+      min-width: 74px;
       padding: 4px 12px;
       border-radius: 999px;
       border: 1px solid;
@@ -1563,18 +1690,19 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
     }
     .comparison-row {
       display: grid;
-      grid-template-columns: 68px minmax(0, 1fr) 34px;
+      grid-template-columns: 76px minmax(0, 1fr) 40px;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
       font-size: 13px;
       color: ${SLATE_700};
     }
     .comparison-row strong {
       text-align: right;
       color: ${SLATE_950};
+      white-space: nowrap;
     }
     .progress-track {
-      height: 12px;
+      height: 14px;
       border-radius: 999px;
       background: #E2E8F0;
       overflow: hidden;
@@ -1600,7 +1728,7 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
     }
     .issue-card__grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 14px 16px;
       margin-top: 16px;
     }
@@ -1717,31 +1845,48 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       background: ${SURFACE_TINT};
       border-color: rgba(37,99,235,0.18);
     }
-    .outcome-metrics {
+    .outcome-inline {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(160px, 1fr) auto minmax(180px, 1.1fr);
+      align-items: center;
       gap: 12px;
       margin-top: 16px;
     }
-    .outcome-metric {
+    .outcome-chip {
       display: flex;
       flex-direction: column;
       gap: 4px;
+      min-width: 150px;
       padding: 14px 16px;
       border-radius: 16px;
       border: 1px solid rgba(37,99,235,0.14);
       background: rgba(255,255,255,0.72);
     }
-    .outcome-metric span {
+    .outcome-chip--expected {
+      background: rgba(219,234,254,0.7);
+    }
+    .outcome-chip span {
       font-size: 11px;
       letter-spacing: 0.10em;
       text-transform: uppercase;
       color: ${SLATE_600};
+      white-space: nowrap;
+      overflow-wrap: normal;
+      word-break: keep-all;
     }
-    .outcome-metric strong {
-      font-size: 24px;
+    .outcome-chip strong {
+      font-size: 28px;
       line-height: 1.1;
       color: ${SLATE_950};
+      white-space: nowrap;
+      overflow-wrap: normal;
+      word-break: keep-all;
+    }
+    .outcome-inline__arrow {
+      font-size: 24px;
+      font-weight: 700;
+      color: ${SLATE_600};
+      white-space: nowrap;
     }
     .measurements-grid {
       display: grid;
@@ -1760,6 +1905,19 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       gap: 12px;
       align-items: flex-start;
     }
+    .measurement-card__title-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .measurement-card__dot {
+      width: 10px;
+      height: 10px;
+      flex-shrink: 0;
+      border-radius: 999px;
+      box-shadow: 0 0 0 5px rgba(148,163,184,0.14);
+    }
     .measurement-card__title {
       margin: 0;
       font-size: 16px;
@@ -1769,10 +1927,13 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
     }
     .measurement-card__value {
       margin: 0;
-      font-size: 30px;
+      font-size: 28px;
       line-height: 1;
       font-weight: 800;
       color: ${SLATE_950};
+      white-space: nowrap;
+      overflow-wrap: normal;
+      word-break: keep-all;
     }
     .summary-card {
       background: ${SURFACE_TINT};
@@ -1780,6 +1941,20 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
     }
     .summary-card p {
       color: #1E40AF;
+    }
+    .business-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .business-card {
+      padding: 22px;
+    }
+    .business-card p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.75;
+      color: ${SLATE_700};
     }
     .device-grid {
       display: grid;
@@ -1832,6 +2007,9 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       line-height: 1.1;
       font-weight: 800;
       color: ${SLATE_950};
+      white-space: nowrap;
+      overflow-wrap: normal;
+      word-break: keep-all;
     }
     .signal-card__subtitle {
       margin: 0;
@@ -2014,6 +2192,13 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       font-weight: 600;
       color: ${SLATE_950};
     }
+    .meta-value--score {
+      font-size: 28px;
+      line-height: 1.1;
+      white-space: nowrap;
+      overflow-wrap: normal;
+      word-break: keep-all;
+    }
     .meta-divider,
     .contact-divider {
       width: 100%;
@@ -2056,7 +2241,7 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
     }
   `;
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><style>${css}</style></head><body>${pages
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><style>${css}</style></head><body>${filteredPages
     .map(
       (page, index) => `
         <section class="page ${page.dark ? "page--dark" : ""}">
@@ -2066,6 +2251,12 @@ function buildHtml(input: Context, narrative: ReportNarrative, logo: string | nu
       `
     )
     .join("")}</body></html>`;
+
+  return html
+    .replace(/â†‘/g, "&uarr;")
+    .replace(/â†“/g, "&darr;")
+    .replace(/â†’/g, "&rarr;")
+    .replace(/â€¢/g, "-");
 }
 
 export async function renderAiReportPdf(input: Context) {

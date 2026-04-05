@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchJson } from "@/lib/api-client";
 import { useUser } from "@/hooks/useUser";
+import { getPlanDisplayName } from "@/lib/utils";
 
 export default function BillingPage() {
   const { user, loading } = useUser();
@@ -45,8 +46,8 @@ export default function BillingPage() {
     <div className="space-y-8">
       <PageHeader
         eyebrow="Billing"
-        title="Plans, subscriptions, and billing history"
-        description="Upgrade when you need more websites, white-label reports, or team access. Use the Stripe portal for invoices, plan changes, and cancellation."
+        title="Plans built around agency ROI"
+        description="Upgrade when you want more client coverage, stronger delivery workflows, and higher perceived value. Use Stripe for invoices, plan changes, and cancellation."
       />
 
       <Card>
@@ -56,11 +57,11 @@ export default function BillingPage() {
         <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <Badge variant={user.plan === "agency" ? "success" : user.plan === "starter" ? "default" : "outline"}>
-              {user.plan} plan
+              {getPlanDisplayName(user.plan)} plan
             </Badge>
             <p className="mt-4 text-muted-foreground">
               {user.plan === "free"
-                ? "You are currently on the free plan."
+                ? "You are currently on the Starter plan."
                 : "Manage billing history, cancellation, and payment methods through Stripe."}
             </p>
           </div>
@@ -77,13 +78,13 @@ export default function BillingPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {[
           {
-            title: "Starter",
+            title: "Growth",
             price: "$49/mo",
             plan: "starter" as const,
             features: ["5 websites", "Daily scans", "90 day history", "PDF report downloads", "Weekly email reports", "Email notifications"]
           },
           {
-            title: "Agency",
+            title: "Pro",
             price: "$149/mo",
             plan: "agency" as const,
             features: ["30 websites", "White-label reports", "Daily email reports", "Priority alerts", "Team access (3 users)", "CSV export"]

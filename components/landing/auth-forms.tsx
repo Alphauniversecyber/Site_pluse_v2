@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import type { Route } from "next";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
@@ -29,9 +30,18 @@ function FieldMessage({ error, hint }: { error?: string; hint?: string }) {
   );
 }
 
+function buildAuthHref(pathname: "/login" | "/signup", nextPath: string): Route {
+  if (nextPath === "/dashboard") {
+    return pathname;
+  }
+
+  return `${pathname}?next=${encodeURIComponent(nextPath)}` as Route;
+}
+
 export function LoginForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const isPreviewUnlock = nextPath.startsWith("/unlock-preview/");
   const form = useForm({
     resolver: zodResolver(loginSchema),
     mode: "onChange",
@@ -45,11 +55,15 @@ export function LoginForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
     <Card className="mx-auto w-full max-w-xl border-border bg-card/90 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.45)]">
       <CardHeader className="space-y-3 p-6 sm:p-8">
         <div className="inline-flex w-fit items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-          Client monitoring login
+          {isPreviewUnlock ? "Unlock full report" : "Agency workspace login"}
         </div>
-        <CardTitle className="text-3xl">Login to SitePulse</CardTitle>
+        <CardTitle className="text-3xl">
+          {isPreviewUnlock ? "Log in to unlock the full client report" : "Login to SitePulse"}
+        </CardTitle>
         <CardDescription className="text-base">
-          Access your client monitoring dashboard, reports, and alerts with the same account you use for billing.
+          {isPreviewUnlock
+            ? "Access the full score breakdown, client-ready insights, and follow-up actions without losing the free scan you just ran."
+            : "Access your client acquisition workspace, reports, and alerts with the same account you use for billing."}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-6 pt-0 sm:px-8 sm:pb-8">
@@ -106,7 +120,10 @@ export function LoginForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
             </Link>
             <p className="text-muted-foreground">
               New here?{" "}
-              <Link href="/signup" className="text-primary transition hover:underline">
+              <Link
+                href={buildAuthHref("/signup", nextPath)}
+                className="text-primary transition hover:underline"
+              >
                 Create a free account
               </Link>
             </p>
@@ -117,9 +134,10 @@ export function LoginForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
   );
 }
 
-export function SignupForm() {
+export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const isPreviewUnlock = nextPath.startsWith("/unlock-preview/");
   const form = useForm({
     resolver: zodResolver(signupSchema),
     mode: "onChange",
@@ -135,11 +153,15 @@ export function SignupForm() {
     <Card className="mx-auto w-full max-w-xl border-border bg-card/90 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.45)]">
       <CardHeader className="space-y-3 p-6 sm:p-8">
         <div className="inline-flex w-fit items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-          Free plan signup
+          {isPreviewUnlock ? "Unlock full report" : "Agency growth signup"}
         </div>
-        <CardTitle className="text-3xl">Create your free SitePulse account</CardTitle>
+        <CardTitle className="text-3xl">
+          {isPreviewUnlock ? "Create your free account to unlock the full report" : "Create your free SitePulse account"}
+        </CardTitle>
         <CardDescription className="text-base">
-          Start monitoring one website free forever, then upgrade when you&apos;re ready to automate client reporting.
+          {isPreviewUnlock
+            ? "Keep the scan you already ran, unlock the full client-ready report, and turn it into an agency-grade follow-up immediately."
+            : "Start with one site free, then upgrade when the workflow starts helping you win and retain more client work."}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-6 pt-0 sm:px-8 sm:pb-8">
@@ -168,13 +190,13 @@ export function SignupForm() {
 
             if (data.session) {
               toast.success("Account created.");
-              router.push("/dashboard");
+              router.push(nextPath as Route);
               router.refresh();
               return;
             }
 
             toast.success("Account created. Check your inbox to confirm your email.");
-            router.push("/login");
+            router.push(buildAuthHref("/login", nextPath));
           })}
         >
           <div className="space-y-2.5">
@@ -238,7 +260,10 @@ export function SignupForm() {
 
           <p className="text-sm text-muted-foreground">
             Already have an account?{" "}
-            <Link href="/login" className="text-primary transition hover:underline">
+            <Link
+              href={buildAuthHref("/login", nextPath)}
+              className="text-primary transition hover:underline"
+            >
               Log in
             </Link>
           </p>

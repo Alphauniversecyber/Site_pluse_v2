@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,51 +12,43 @@ const plans: Array<{
   amount: string;
   badge: string;
   subtitle: string;
+  audience: string;
+  roiLine: string;
   features: string[];
-  moreLabel?: string;
   cta: string;
   theme: "light" | "featured" | "dark";
 }> = [
   {
-    name: "Free",
+    name: "Starter",
     amount: "$0",
-    badge: "Free",
-    subtitle: "Perfect for testing SitePulse on your own site.",
-    features: ["1 website", "Weekly scans", "30 day history", "Basic dashboard", "Email-free setup"],
-    moreLabel: "No PDF reports or email reports",
-    cta: "Get Started Free",
+    badge: "For testing value",
+    subtitle: "For freelancers testing whether fast audits can open better client conversations.",
+    audience: "Best for solo operators proving demand.",
+    roiLine: "Win the first conversation with a no-risk free scan flow.",
+    features: ["1 website", "Weekly scans", "30-day history", "Free scan preview funnel", "Core dashboard access"],
+    cta: "Start with a free scan",
     theme: "light"
   },
   {
-    name: "Starter",
+    name: "Growth",
     amount: "$49",
-    badge: "Most Popular",
-    subtitle: "The sweet spot for freelancers and small retainers.",
-    features: [
-      "5 websites",
-      "Daily scans",
-      "90 day history",
-      "PDF report download",
-      "Weekly email reports"
-    ],
-    moreLabel: "Includes email notifications and Core Web Vitals",
-    cta: "Start Free Trial",
+    badge: "Most popular",
+    subtitle: "For agencies managing multiple clients and turning website reviews into a repeatable sales and retention process.",
+    audience: "Best for growing agencies with active retainers.",
+    roiLine: "Close 1 extra client and this plan pays for itself immediately.",
+    features: ["5 websites", "Daily scans", "90-day history", "PDF reports", "Weekly email reports"],
+    cta: "Start Growth",
     theme: "featured"
   },
   {
-    name: "Agency",
+    name: "Pro",
     amount: "$149",
-    badge: "Agency",
-    subtitle: "Built to resell monitoring and reporting at margin.",
-    features: [
-      "30 websites",
-      "Daily scans",
-      "1 year history",
-      "White-label PDF reports",
-      "Daily email reports"
-    ],
-    moreLabel: "Includes priority alerts, team access, CSV export, and reseller tools",
-    cta: "Start Free Trial",
+    badge: "For serious scale",
+    subtitle: "For agencies that want SitePulse to feel like a premium client-delivery system inside their own service stack.",
+    audience: "Best for agencies scaling account coverage and brand authority.",
+    roiLine: "One retained client usually covers this plan many times over.",
+    features: ["30 websites", "Daily scans", "1-year history", "White-label reports", "Priority alerts and team access"],
+    cta: "Start Pro",
     theme: "dark"
   }
 ] as const;
@@ -82,7 +74,7 @@ export function PricingGrid() {
           <div className="relative flex h-full flex-col">
             <Badge
               className={cn(
-                "px-4 py-2 text-sm tracking-normal normal-case",
+                "w-fit px-4 py-2 text-sm tracking-normal normal-case",
                 plan.theme === "light" && "bg-slate-100 text-slate-700",
                 plan.theme === "featured" && "bg-gradient-to-r from-blue-500 to-blue-600 text-white",
                 plan.theme === "dark" && "bg-white/10 text-white"
@@ -93,57 +85,38 @@ export function PricingGrid() {
 
             <div className="mt-6 flex items-end gap-2">
               <span className="font-display text-[3.2rem] font-semibold tracking-tight">{plan.amount}</span>
-              <span
-                className={cn(
-                  "pb-1.5 text-xl",
-                  plan.theme === "dark" ? "text-slate-300" : "text-slate-500"
-                )}
-              >
+              <span className={cn("pb-1.5 text-xl", plan.theme === "dark" ? "text-slate-300" : "text-slate-500")}>
                 /month
               </span>
             </div>
 
-            <p className={cn("mt-4 max-w-xs text-sm leading-6", plan.theme === "dark" ? "text-slate-300" : "text-slate-500")}>
-              {plan.subtitle}
-            </p>
+            <div className="mt-4">
+              <p className="text-2xl font-semibold">{plan.name}</p>
+              <p className={cn("mt-3 text-sm leading-6", plan.theme === "dark" ? "text-slate-300" : "text-slate-600")}>
+                {plan.subtitle}
+              </p>
+            </div>
 
             <div className={cn("my-5 h-px", plan.theme === "dark" ? "bg-white/10" : "bg-slate-200")} />
 
-            <ul
-              className={cn(
-                "space-y-2.5 text-[15px]",
-                plan.theme === "dark" ? "text-slate-100" : "text-slate-700"
-              )}
-            >
+            <div className={cn("rounded-[1.4rem] border px-4 py-4", plan.theme === "dark" ? "border-white/10 bg-white/[0.04]" : "border-slate-200 bg-slate-50/90")}>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Positioning</p>
+              <p className={cn("mt-2 text-sm font-medium", plan.theme === "dark" ? "text-slate-100" : "text-slate-800")}>
+                {plan.audience}
+              </p>
+              <p className={cn("mt-2 text-sm leading-6", plan.theme === "dark" ? "text-slate-300" : "text-slate-600")}>
+                {plan.roiLine}
+              </p>
+            </div>
+
+            <ul className={cn("mt-5 space-y-2.5 text-[15px]", plan.theme === "dark" ? "text-slate-100" : "text-slate-700")}>
               {plan.features.map((feature) => (
                 <li key={feature} className="flex items-start gap-3">
-                  <Check
-                    className={cn(
-                      "mt-1 h-5 w-5 shrink-0",
-                      plan.theme === "featured" ? "text-blue-500" : "text-emerald-500"
-                    )}
-                  />
+                  <Check className={cn("mt-1 h-5 w-5 shrink-0", plan.theme === "featured" ? "text-blue-500" : "text-emerald-500")} />
                   <span>{feature}</span>
                 </li>
               ))}
             </ul>
-
-            {plan.moreLabel ? (
-              <p
-                className={cn(
-                  "mt-5 text-sm font-medium",
-                  plan.theme === "featured"
-                    ? "text-blue-600"
-                    : plan.theme === "dark"
-                      ? "text-slate-300"
-                      : "text-slate-500"
-                )}
-              >
-                + more:
-                {" "}
-                <span className="font-normal">{plan.moreLabel}</span>
-              </p>
-            ) : null}
 
             <Button
               asChild
@@ -156,7 +129,10 @@ export function PricingGrid() {
               )}
               variant={plan.theme === "featured" ? "default" : "outline"}
             >
-              <Link href="/signup">{plan.cta}</Link>
+              <Link href={plan.amount === "$0" ? "/#free-scan" : "/signup"}>
+                {plan.cta}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </Button>
           </div>
         </article>

@@ -40,6 +40,7 @@ import type {
   WebsiteScanPlainEnglish
 } from "@/types";
 import { fetchJson } from "@/lib/api-client";
+import { buildSiteBusinessImpact } from "@/lib/business-impact";
 import { buildUptimeSummary } from "@/lib/health-score";
 import { getFriendlyScanFailureMessage } from "@/lib/scan-errors";
 import { cn } from "@/lib/utils";
@@ -167,34 +168,39 @@ function DetailSignalCard({
   const accents = {
     blue: {
       glow: "bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.2),transparent_72%)]",
-      iconShell: "bg-sky-500/12 text-sky-300"
+      iconShell: "bg-sky-500/10 text-sky-700 dark:bg-sky-500/12 dark:text-sky-300"
     },
     emerald: {
       glow: "bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_72%)]",
-      iconShell: "bg-emerald-500/12 text-emerald-300"
+      iconShell: "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/12 dark:text-emerald-300"
     },
     amber: {
       glow: "bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.18),transparent_72%)]",
-      iconShell: "bg-amber-500/12 text-amber-300"
+      iconShell: "bg-amber-500/10 text-amber-700 dark:bg-amber-500/12 dark:text-amber-300"
     },
     rose: {
       glow: "bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.18),transparent_72%)]",
-      iconShell: "bg-rose-500/12 text-rose-300"
+      iconShell: "bg-rose-500/10 text-rose-700 dark:bg-rose-500/12 dark:text-rose-300"
     }
   }[accent];
 
   return (
     <Card
       className={cn(
-        "relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.95),rgba(15,23,42,0.92))] shadow-[0_26px_90px_-46px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]",
+        "detail-monitor-card relative overflow-hidden",
         className
       )}
     >
-      <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+      <div className="detail-monitor-inset pointer-events-none absolute inset-px rounded-[1.45rem]" />
       <div className={cn("pointer-events-none absolute right-0 top-0 h-24 w-28 blur-2xl", accents.glow)} />
       <CardContent className="relative flex h-full min-h-[12.5rem] flex-col gap-5 p-5">
         <div className="flex items-start justify-between gap-4">
-          <div className={cn("flex h-11 w-11 items-center justify-center rounded-2xl border border-white/8", accents.iconShell)}>
+          <div
+            className={cn(
+              "flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200/85 shadow-sm dark:border-white/8",
+              accents.iconShell
+            )}
+          >
             <Icon className="h-5 w-5" strokeWidth={1.9} />
           </div>
           {badge}
@@ -413,8 +419,8 @@ function WebsiteHealthSignalsCard(input: {
   } = input;
 
   return (
-    <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.95),rgba(15,23,42,0.94))] shadow-[0_28px_100px_-48px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]">
-      <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+    <Card className="detail-monitor-card relative overflow-hidden">
+      <div className="detail-monitor-inset pointer-events-none absolute inset-px rounded-[1.45rem]" />
       <div className="pointer-events-none absolute right-8 top-0 h-28 w-44 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_72%)] blur-3xl" />
       <CardHeader className="relative gap-4 pb-3 sm:pb-6">
         <div className="space-y-2">
@@ -426,7 +432,7 @@ function WebsiteHealthSignalsCard(input: {
       </CardHeader>
       <CardContent className="relative px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
         <Tabs defaultValue="seo-audit" className="w-full">
-          <TabsList className="grid h-auto w-full grid-cols-2 rounded-[1.35rem] border border-white/8 bg-background/80 p-1.5 lg:grid-cols-5">
+          <TabsList className="detail-monitor-tablist grid h-auto w-full grid-cols-2 p-1.5 lg:grid-cols-5">
             <TabsTrigger value="seo-audit">SEO Audit</TabsTrigger>
             <TabsTrigger value="link-health">Link Health</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
@@ -768,6 +774,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const brokenLinks = data?.broken_links ?? null;
   const uptimeSummary = buildUptimeSummary(data?.uptime_checks ?? []);
   const competitorEntries = latestCompetitorEntries(data?.competitor_scans ?? []);
+  const businessImpact = buildSiteBusinessImpact(currentScan ?? null);
 
   const accessibilityViolations = useMemo(
     () => currentScan?.accessibility_violations ?? [],
@@ -929,13 +936,13 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
         title={data.label}
         description={data.url}
         actions={
-          <div className="w-full rounded-[1.5rem] border border-white/8 bg-card/70 p-2 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.58)] backdrop-blur xl:w-auto">
+          <div className="w-full rounded-[1.5rem] border border-slate-200/90 bg-white/80 p-2 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.16)] backdrop-blur dark:border-white/8 dark:bg-card/70 dark:shadow-[0_18px_48px_-28px_rgba(15,23,42,0.58)] xl:w-auto">
             <div className="grid w-full gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-3">
               <Button
                 variant="outline"
                 onClick={runScan}
                 disabled={isPending}
-                className="h-11 w-full justify-center rounded-xl border-white/10 bg-background/70 sm:h-12"
+                className="h-11 w-full justify-center rounded-xl border-slate-200/90 bg-white/75 shadow-sm dark:border-white/10 dark:bg-background/70 sm:h-12"
               >
               <WandSparkles className="h-4 w-4" />
               Run scan
@@ -944,7 +951,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                 variant="outline"
                 onClick={generateReport}
                 disabled={isPending}
-                className="h-11 w-full justify-center rounded-xl border-white/10 bg-background/70 sm:h-12"
+                className="h-11 w-full justify-center rounded-xl border-slate-200/90 bg-white/75 shadow-sm dark:border-white/10 dark:bg-background/70 sm:h-12"
               >
                 <FileDown className="h-4 w-4" />
                 Generate PDF
@@ -961,6 +968,42 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
           </div>
         }
       />
+
+      <Card className="overflow-hidden border-primary/15 bg-primary/[0.06]">
+        <CardContent className="p-5 sm:p-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+                Business impact layer
+              </p>
+              <p className="mt-2 text-lg font-semibold leading-8 text-foreground">
+                {businessImpact.headline}
+              </p>
+              <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                {businessImpact.detail}
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[19rem]">
+              <div className="rounded-2xl border border-primary/12 bg-background/80 px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Estimated leak
+                </p>
+                <p className="mt-2 font-display text-3xl font-semibold text-rose-500 dark:text-rose-400">
+                  {businessImpact.estimatedLeak}%
+                </p>
+              </div>
+              <div className="rounded-2xl border border-primary/12 bg-background/80 px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Improvement potential
+                </p>
+                <p className="mt-2 font-display text-3xl font-semibold text-emerald-500 dark:text-emerald-400">
+                  {businessImpact.improvementPotential}%
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <DetailSignalCard
@@ -1111,8 +1154,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
               </div>
 
               <div className="grid gap-4 sm:gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-                <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.94),rgba(15,23,42,0.92))] shadow-[0_28px_90px_-44px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.06)]">
-                  <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+                <Card className="detail-monitor-card relative overflow-hidden">
+                  <div className="detail-monitor-inset pointer-events-none absolute inset-px rounded-[1.45rem]" />
                   <div className="pointer-events-none absolute left-0 top-0 h-28 w-48 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.12),transparent_72%)] blur-2xl" />
                   <CardHeader className="relative pb-3 sm:pb-5">
                     <CardTitle>Score trend (last 30 days)</CardTitle>
@@ -1122,8 +1165,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                     <ScoreTrendChart scans={data.scans.slice(0, 30)} />
                   </CardContent>
                 </Card>
-                <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.94),rgba(15,23,42,0.92))] shadow-[0_28px_90px_-44px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.06)]">
-                  <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+                <Card className="detail-monitor-card relative overflow-hidden">
+                  <div className="detail-monitor-inset pointer-events-none absolute inset-px rounded-[1.45rem]" />
                   <div className="pointer-events-none absolute right-0 top-0 h-28 w-44 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_72%)] blur-2xl" />
                   <CardHeader className="relative pb-3 sm:pb-5">
                     <CardTitle>Mobile vs desktop</CardTitle>
@@ -1136,8 +1179,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
               </div>
 
               <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
-                <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.94),rgba(15,23,42,0.92))] shadow-[0_24px_80px_-42px_rgba(15,23,42,0.82),0_0_0_1px_rgba(96,165,250,0.05)]">
-                  <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+                <Card className="detail-monitor-card relative overflow-hidden">
+                  <div className="detail-monitor-inset pointer-events-none absolute inset-px rounded-[1.45rem]" />
                   <CardHeader className="relative gap-2 pb-3 sm:pb-6">
                     <CardTitle>Core Web Vitals</CardTitle>
                     <CardDescription>Google&apos;s latest loading, responsiveness, and stability checks for this site.</CardDescription>
@@ -1174,8 +1217,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                     })}
                   </CardContent>
                 </Card>
-                <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.94),rgba(15,23,42,0.92))] shadow-[0_24px_80px_-42px_rgba(15,23,42,0.82),0_0_0_1px_rgba(96,165,250,0.05)]">
-                  <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
+                <Card className="detail-monitor-card relative overflow-hidden">
+                  <div className="detail-monitor-inset pointer-events-none absolute inset-px rounded-[1.45rem]" />
                   <CardHeader className="relative flex flex-col gap-3 pb-3 sm:pb-6 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-2">
                       <CardTitle>Accessibility violations</CardTitle>
@@ -1258,7 +1301,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                   </div>
                 ) : plainLanguage ? (
                   <div className="space-y-5">
-                    <div className="rounded-3xl border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.9),rgba(15,23,42,0.78))] p-4 shadow-[0_18px_56px_-34px_rgba(15,23,42,0.8)] sm:p-5">
+                    <div className="detail-monitor-summary p-4 sm:p-5">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div className="flex flex-wrap gap-2">
                           <div className="inline-flex items-center gap-2 rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-rose-400">
@@ -1290,7 +1333,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                     </div>
 
                     <Tabs defaultValue="issues" className="w-full">
-                      <TabsList className="grid h-auto w-full grid-cols-3 rounded-[1.25rem] border border-white/8 bg-background/80 p-1.5">
+                      <TabsList className="detail-monitor-tablist grid h-auto w-full grid-cols-3 p-1.5">
                         <TabsTrigger value="issues">Issues</TabsTrigger>
                         <TabsTrigger value="quick-wins">Quick Wins</TabsTrigger>
                         <TabsTrigger value="raw-data">Raw Data</TabsTrigger>

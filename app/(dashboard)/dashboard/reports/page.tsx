@@ -76,8 +76,8 @@ function MetricPill({
       className={cn(
         "rounded-2xl border px-4 py-3",
         tone === "primary"
-          ? "border-primary/20 bg-primary/[0.08] shadow-[0_18px_44px_-34px_rgba(59,130,246,0.45)]"
-          : "border-border/80 bg-background/60"
+          ? "border-primary/20 bg-primary/[0.08] shadow-[0_18px_44px_-34px_rgba(59,130,246,0.28)] dark:shadow-[0_18px_44px_-34px_rgba(59,130,246,0.45)]"
+          : "border-slate-200/90 bg-white/78 shadow-[0_16px_38px_-30px_rgba(15,23,42,0.12)] dark:border-border/80 dark:bg-background/60 dark:shadow-none"
       )}
     >
       <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{label}</p>
@@ -183,13 +183,13 @@ export default function ReportsPage() {
     <div className="space-y-6 sm:space-y-8">
       <PageHeader
         eyebrow="Reports"
-        title="White-label report library"
-        description="Review generated client reports, resend them quickly, and keep delivery status easy to scan at a glance."
+        title="Client delivery and retention library"
+        description="Keep every client-facing report ready to send, easy to prove, and simple to use in follow-up conversations."
       />
 
-      <Card className="relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.96),rgba(15,23,42,0.96))] shadow-[0_28px_90px_-44px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]">
-        <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
-        <div className="pointer-events-none absolute left-0 top-0 h-28 w-56 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.12),transparent_72%)] blur-2xl" />
+      <Card className="relative overflow-hidden border-slate-200/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] shadow-[0_28px_90px_-44px_rgba(15,23,42,0.16),0_0_0_1px_rgba(148,163,184,0.14)] dark:border-white/8 dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.96),rgba(15,23,42,0.96))] dark:shadow-[0_28px_90px_-44px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]">
+        <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-slate-200/70 dark:border-white/6" />
+        <div className="pointer-events-none absolute left-0 top-0 h-28 w-56 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_72%)] blur-2xl dark:bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.12),transparent_72%)]" />
 
         <CardHeader className="relative gap-5 pb-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -212,12 +212,12 @@ export default function ReportsPage() {
         </CardHeader>
 
         <CardContent className="relative space-y-5 p-5 pt-0 sm:p-6 sm:pt-0">
-          <div className="rounded-[1.75rem] border border-border/80 bg-background/60 p-4 sm:p-5">
+          <div className="rounded-[1.75rem] border border-slate-200/90 bg-slate-50/92 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] sm:p-5 dark:border-border/80 dark:bg-background/60 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div className="max-w-xl">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Library controls</p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Search by website and manage report delivery without the row layout falling apart on wider or tighter desktop screens.
+                  Search by website and manage report delivery as a clean client-success workflow instead of a cluttered file list.
                 </p>
               </div>
 
@@ -227,7 +227,7 @@ export default function ReportsPage() {
                   <Input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    className="h-14 rounded-2xl border-border/80 bg-card/70 pl-11"
+                    className="h-14 rounded-2xl border-slate-200/90 bg-white/92 pl-11 shadow-[0_16px_38px_-28px_rgba(15,23,42,0.12)] dark:border-border/80 dark:bg-card/70 dark:shadow-none"
                     placeholder="Search reports by website name or URL"
                   />
                 </div>
@@ -238,7 +238,7 @@ export default function ReportsPage() {
           {loading ? (
             <div className="space-y-4">
               {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="rounded-[1.75rem] border border-border/80 bg-background/70 p-5">
+                <div key={index} className="rounded-[1.75rem] border border-slate-200/90 bg-white/90 p-5 shadow-[0_18px_48px_-34px_rgba(15,23,42,0.14)] dark:border-border/80 dark:bg-background/70 dark:shadow-none">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1 space-y-3">
                       <Skeleton className="h-6 w-40" />
@@ -280,13 +280,13 @@ export default function ReportsPage() {
                         </div>
                       </div>
 
-                      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-border/70 bg-card/60 p-3">
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-slate-200/90 bg-slate-50/88 p-3 dark:border-border/70 dark:bg-card/60">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Generated</p>
                           <p className="mt-2 font-medium">{createdMeta.date}</p>
                           <p className="mt-1 text-sm text-muted-foreground">{createdMeta.time}</p>
                         </div>
-                        <div className="rounded-2xl border border-border/70 bg-card/60 p-3">
+                        <div className="rounded-2xl border border-slate-200/90 bg-slate-50/88 p-3 dark:border-border/70 dark:bg-card/60">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Last sent</p>
                           <p className="mt-2 font-medium">{report.sent_at ? sentMeta.date : "Not yet sent"}</p>
                           <p className="mt-1 text-sm text-muted-foreground">
@@ -320,9 +320,9 @@ export default function ReportsPage() {
               </div>
 
               <div className="hidden lg:block">
-                <div className="overflow-hidden rounded-[1.75rem] border border-border/80 bg-background/70">
+                <div className="overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white/90 shadow-[0_18px_52px_-34px_rgba(15,23,42,0.16)] dark:border-border/80 dark:bg-background/70 dark:shadow-none">
                   <Table>
-                    <TableHeader className="bg-card/70">
+                    <TableHeader className="bg-slate-50/90 dark:bg-card/70">
                       <TableRow className="hover:bg-transparent">
                         <TableHead className="w-[28%]">Website</TableHead>
                         <TableHead className="w-[18%]">Generated</TableHead>
@@ -341,7 +341,7 @@ export default function ReportsPage() {
                         return (
                           <TableRow
                             key={report.id}
-                            className="border-border/80 bg-background/60 transition-[background-color,border-color] duration-200 hover:bg-card/50"
+                            className="border-slate-200/90 bg-white/88 transition-[background-color,border-color] duration-200 hover:bg-slate-50/96 dark:border-border/80 dark:bg-background/60 dark:hover:bg-card/50"
                           >
                             <TableCell className="py-6">
                               <div className="min-w-0">

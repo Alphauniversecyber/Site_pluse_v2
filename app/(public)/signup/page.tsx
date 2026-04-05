@@ -1,21 +1,45 @@
 import { SignupForm } from "@/components/landing/auth-forms";
 import { redirectIfAuthenticated } from "@/lib/supabase-server";
 
-export default async function SignupPage() {
-  await redirectIfAuthenticated();
+export default async function SignupPage({
+  searchParams
+}: {
+  searchParams: { next?: string };
+}) {
+  await redirectIfAuthenticated(searchParams.next ?? "/dashboard");
+  const isPreviewUnlock = (searchParams.next ?? "").startsWith("/unlock-preview/");
 
   return (
     <main className="container grid gap-10 py-10 md:py-16 lg:min-h-[calc(100vh-8rem)] lg:grid-cols-[1fr_28rem] lg:items-center">
       <div className="theme-panel order-2 rounded-[2rem] p-6 lg:order-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">Built for agencies</p>
-        <h1 className="mt-4 font-display text-4xl font-semibold">Start with one site free, then scale when client reporting becomes repeatable.</h1>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
+          {isPreviewUnlock ? "Unlock your scan" : "Agency growth system"}
+        </p>
+        <h1 className="mt-4 font-display text-4xl font-semibold">
+          {isPreviewUnlock
+            ? "Claim the free audit you just ran and turn it into a client-ready growth report."
+            : "Start with one free scan, then scale into a repeatable client-closing workflow."}
+        </h1>
         <div className="mt-6 space-y-4 text-sm text-muted-foreground">
-          <p>Set up a workspace, connect your first website, and see how SitePulse handles monitoring and reporting without adding another manual weekly task.</p>
-          <p>Upgrade later for white-label reports, daily scanning, more websites, and agency-ready branding controls.</p>
+          {isPreviewUnlock ? (
+            <>
+              <p>
+                Create the workspace now and SitePulse will attach the free scan to your account automatically, so you can walk straight into the full report.
+              </p>
+              <p>
+                That means no empty dashboard and no lost momentum when you&apos;re already mid-pitch with a client.
+              </p>
+            </>
+          ) : (
+            <>
+              <p>Create the workspace once, run a client-ready scan immediately, and turn technical findings into a sales and retention asset your team can reuse.</p>
+              <p>Upgrade when you want more coverage, stronger white-label delivery, and a more scalable way to prove your agency's value every month.</p>
+            </>
+          )}
         </div>
       </div>
       <div className="order-1 lg:order-2">
-        <SignupForm />
+        <SignupForm nextPath={searchParams.next ?? "/dashboard"} />
       </div>
     </main>
   );

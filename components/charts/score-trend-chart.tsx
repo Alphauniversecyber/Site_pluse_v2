@@ -31,19 +31,19 @@ function TrendTooltip({
   }
 
   return (
-    <div className="min-w-[12rem] rounded-[1.25rem] border border-white/10 bg-[#081121]/95 px-4 py-3 shadow-[0_24px_60px_-28px_rgba(59,130,246,0.35)] backdrop-blur-xl">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+    <div className="min-w-[12rem] rounded-[1.25rem] border border-slate-200/90 bg-white/95 px-4 py-3 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.18)] backdrop-blur-xl dark:border-white/10 dark:bg-[#081121]/95 dark:shadow-[0_24px_60px_-28px_rgba(59,130,246,0.35)]">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</p>
       <div className="mt-3 space-y-2">
         {payload.map((entry) => (
           <div key={entry.name} className="flex items-center justify-between gap-4 text-sm">
-            <div className="flex items-center gap-2.5 text-slate-300">
+            <div className="flex items-center gap-2.5 text-slate-600 dark:text-slate-300">
               <span
                 className="h-2.5 w-2.5 rounded-full shadow-[0_0_12px_rgba(96,165,250,0.4)]"
                 style={{ backgroundColor: entry.color ?? "#60A5FA" }}
               />
               <span>{entry.name}</span>
             </div>
-            <span className="font-semibold text-white">{entry.value}</span>
+            <span className="font-semibold text-slate-950 dark:text-white">{entry.value}</span>
           </div>
         ))}
       </div>
@@ -70,8 +70,8 @@ export function ScoreTrendChart({ scans }: { scans: ScanResult[] }) {
   const latest = data[data.length - 1];
 
   return (
-    <div className="relative overflow-hidden rounded-[1.75rem] border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.92),rgba(15,23,42,0.76))] p-4 shadow-[0_24px_70px_-34px_rgba(15,23,42,0.82),0_0_0_1px_rgba(96,165,250,0.06)] sm:p-5">
-      <div className="pointer-events-none absolute inset-px rounded-[1.65rem] border border-white/6" />
+    <div className="detail-monitor-card relative overflow-hidden rounded-[1.75rem] p-4 sm:p-5">
+      <div className="detail-monitor-inset pointer-events-none absolute inset-px rounded-[1.65rem]" />
       <div className="pointer-events-none absolute inset-x-5 top-0 h-24 rounded-full bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.18),transparent_72%)] blur-2xl" />
 
       <div className="relative flex flex-col gap-4">
@@ -80,22 +80,22 @@ export function ScoreTrendChart({ scans }: { scans: ScanResult[] }) {
             {trendSeries.map((series) => (
               <div
                 key={series.key}
-                className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                className="rounded-full border border-slate-200/90 bg-white/82 px-3 py-2 text-xs text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-white/8 dark:bg-white/[0.03] dark:text-slate-300 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
               >
                 <div className="flex items-center gap-2.5">
                   <span
                     className="h-2.5 w-2.5 rounded-full shadow-[0_0_14px_rgba(96,165,250,0.38)]"
                     style={{ backgroundColor: series.stroke }}
                   />
-                  <span className="font-medium tracking-[0.08em] text-slate-300">{series.label}</span>
-                  <span className="font-semibold text-white">
+                  <span className="font-medium tracking-[0.08em] text-slate-600 dark:text-slate-300">{series.label}</span>
+                  <span className="font-semibold text-slate-950 dark:text-white">
                     {latest ? latest[series.key] : "--"}
                   </span>
                 </div>
               </div>
             ))}
           </div>
-          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Latest 30-day signal</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">Latest 30-day signal</p>
         </div>
 
         <div className="h-[240px] w-full sm:h-[280px] lg:h-[312px]">
@@ -120,15 +120,15 @@ export function ScoreTrendChart({ scans }: { scans: ScanResult[] }) {
                 </filter>
               </defs>
 
-              <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="4 8" vertical={false} />
+              <CartesianGrid stroke="rgba(148,163,184,0.18)" strokeDasharray="4 8" vertical={false} />
               <XAxis
                 dataKey="date"
                 tickLine={false}
                 axisLine={false}
                 minTickGap={18}
                 tickMargin={12}
-                stroke="#64748B"
-                tick={{ fontSize: 11, fill: "#94A3B8" }}
+                stroke="hsl(var(--muted-foreground))"
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
               />
               <YAxis
                 tickLine={false}
@@ -136,8 +136,8 @@ export function ScoreTrendChart({ scans }: { scans: ScanResult[] }) {
                 width={34}
                 domain={[chartFloor, 100]}
                 tickMargin={10}
-                stroke="#64748B"
-                tick={{ fontSize: 11, fill: "#94A3B8" }}
+                stroke="hsl(var(--muted-foreground))"
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
               />
               <Tooltip
                 cursor={{ stroke: "rgba(96,165,250,0.22)", strokeDasharray: "4 8" }}

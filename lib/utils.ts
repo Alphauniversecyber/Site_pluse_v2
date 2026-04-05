@@ -24,7 +24,7 @@ export const PLAN_LIMITS: Record<
   }
 > = {
   free: {
-    name: "Free",
+    name: "Starter",
     price: 0,
     websiteLimit: 1,
     scanFrequencies: ["weekly"],
@@ -36,7 +36,7 @@ export const PLAN_LIMITS: Record<
     csvExport: false
   },
   starter: {
-    name: "Starter",
+    name: "Growth",
     price: 49,
     websiteLimit: 5,
     scanFrequencies: ["daily", "weekly", "monthly"],
@@ -48,7 +48,7 @@ export const PLAN_LIMITS: Record<
     csvExport: false
   },
   agency: {
-    name: "Agency",
+    name: "Pro",
     price: 149,
     websiteLimit: 30,
     scanFrequencies: ["daily", "weekly", "monthly"],
@@ -60,6 +60,43 @@ export const PLAN_LIMITS: Record<
     csvExport: true
   }
 };
+
+export const PLAN_MARKETING: Record<
+  PlanKey,
+  {
+    displayName: string;
+    audience: string;
+    roiLine: string;
+  }
+> = {
+  free: {
+    displayName: "Starter",
+    audience: "For freelancers testing value",
+    roiLine: "Prove value on one client site before you scale."
+  },
+  starter: {
+    displayName: "Growth",
+    audience: "For agencies managing multiple clients",
+    roiLine: "Close one extra client and this plan pays for itself."
+  },
+  agency: {
+    displayName: "Pro",
+    audience: "For serious agencies scaling operations",
+    roiLine: "Turn monitoring into a premium retained service."
+  }
+};
+
+export function getPlanDisplayName(plan: PlanKey) {
+  return PLAN_MARKETING[plan].displayName;
+}
+
+export function getPlanAudience(plan: PlanKey) {
+  return PLAN_MARKETING[plan].audience;
+}
+
+export function getPlanRoiLine(plan: PlanKey) {
+  return PLAN_MARKETING[plan].roiLine;
+}
 
 export function getScoreTone(score: number) {
   if (score >= 90) {

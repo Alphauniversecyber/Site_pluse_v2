@@ -26,9 +26,9 @@ const GROQ_MODEL = "llama-3.3-70b-versatile";
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 const CACHE_TTL_HOURS = 24;
 const SYSTEM_PROMPT =
-  "You are a friendly web consultant writing a report for a business owner who is NOT technical. Use simple language. No jargon. Be encouraging but honest. Keep each explanation under 3 sentences. Focus on business impact not technical details.";
+  "You are an expert website consultant writing for non-technical clients. Be direct, confident, professional, and clear. Do not use fluff or generic phrases. Explain business impact in plain English and focus on traffic, conversions, engagement, trust, and revenue outcomes.";
 const WEBSITE_DETAIL_SYSTEM_PROMPT =
-  "You are a friendly web consultant writing for non-technical business owners. Transform technical website issues into plain English. Never use technical terms like LCP, CLS, FID, TBT, DOM, API, CDN, HTTP, CSS, JS, render-blocking, viewport. Always focus on business impact. Keep each field SHORT and simple. Return ONLY valid JSON, nothing else.";
+  "You are an expert website consultant writing for non-technical business owners. Transform technical website issues into plain English. Never use technical terms like LCP, CLS, FID, TBT, DOM, API, CDN, HTTP, CSS, JS, render-blocking, or viewport. Always focus on business impact, client retention, conversions, trust, and revenue. Return ONLY valid JSON, nothing else.";
 const BANNED_CLIENT_TERMS = /\b(LCP|FID|CLS|TBT|TTFB|INP|DOM|API|CDN|HTTP|CSS|JS|viewport)\b|render-blocking/gi;
 const WEBSITE_DETAIL_TIME_OPTIONS = ["30 mins", "1-2 hours", "1-2 days", "1-2 weeks"] as const;
 
@@ -220,6 +220,48 @@ function clampSentenceCount(value: string, count = 3) {
   return sentences.join(" ").trim();
 }
 
+function trimDanglingEnding(value: string) {
+  let cleaned = sanitizeClientText(value).trim();
+  const danglingWordPattern = /\b(?:and|but|to|for|the|your)\b$/i;
+
+  while (danglingWordPattern.test(cleaned)) {
+    cleaned = cleaned.replace(/\b(?:and|but|to|for|the|your)\b$/i, "").trim();
+  }
+
+  return cleaned.replace(/[,:;\-]+$/, "").trim();
+}
+
+function truncateToWordBoundary(value: string, maxLength: number) {
+  const shortened = value.slice(0, Math.max(0, maxLength));
+  const boundary = shortened.search(/\s+\S*$/);
+  const safe = boundary > 24 ? shortened.slice(0, boundary) : shortened;
+  return trimDanglingEnding(safe);
+}
+
+function completeSentenceWithinLimit(value: string, maxLength: number, sentenceCount = 3) {
+  const clean = clampSentenceCount(value, sentenceCount);
+
+  if (clean.length <= maxLength) {
+    const completed = trimDanglingEnding(clean);
+    return /[.!?]$/.test(completed) ? completed : `${completed}.`;
+  }
+
+  const sentenceFit = clean
+    .split(/(?<=[.!?])\s+/)
+    .filter(Boolean)
+    .reduce<string[]>((acc, sentence) => {
+      const candidate = [...acc, sentence].join(" ").trim();
+      return candidate.length <= maxLength ? [...acc, sentence] : acc;
+    }, []);
+
+  if (sentenceFit.length > 0) {
+    return sentenceFit.join(" ").trim();
+  }
+
+  const fallback = truncateToWordBoundary(clean, maxLength);
+  return /[.!?]$/.test(fallback) ? fallback : `${fallback}.`;
+}
+
 function truncateAtBoundary(value: string, maxLength: number, sentenceCount = 3) {
   const clean = clampSentenceCount(value, sentenceCount);
 
@@ -239,66 +281,187 @@ function truncateAtBoundary(value: string, maxLength: number, sentenceCount = 3)
     return sentenceFit.join(" ").trim();
   }
 
-  const shortened = clean.slice(0, Math.max(0, maxLength - 3));
-  const boundary = shortened.search(/\s+\S*$/);
-  const safe = boundary > 24 ? shortened.slice(0, boundary) : shortened;
-
-  return `${safe.trim()}...`;
+  return truncateToWordBoundary(clean, maxLength);
 }
 
 function clampToThreeSentences(value: string) {
   return truncateAtBoundary(value, 220, 3);
 }
 
+function countWords(value: string) {
+  return sanitizeClientText(value)
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function ensureSentenceEnding(value: string) {
+  const cleaned = trimDanglingEnding(value);
+  if (!cleaned) {
+    return "";
+  }
+
+  return /[.!?]$/.test(cleaned) ? cleaned : `${cleaned}.`;
+}
+
+function takeCompleteSentencesWithinWords(value: string, maxWords: number, sentenceCount = 2) {
+  const sentences = clampSentenceCount(value, sentenceCount)
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => ensureSentenceEnding(sentence))
+    .filter(Boolean);
+
+  const fitted: string[] = [];
+
+  for (const sentence of sentences) {
+    const candidate = [...fitted, sentence].join(" ").trim();
+    if (countWords(candidate) <= maxWords) {
+      fitted.push(sentence);
+    } else {
+      break;
+    }
+  }
+
+  return ensureSentenceEnding(fitted.join(" ").trim());
+}
+
+function takeWordsWithinLimit(value: string, maxWords: number) {
+  const words = sanitizeClientText(value)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, maxWords)
+    .join(" ");
+
+  return ensureSentenceEnding(words);
+}
+
+function isProfessionalSubtitle(value: string) {
+  return !/(fix issues!?|check vitals!?|check devices!?|great score!?)/i.test(value);
+}
+
+function meetsSentenceRules(
+  value: string,
+  minWords: number,
+  maxWords: number,
+  options?: {
+    requireBusinessImpact?: boolean;
+    requireMobileDesktop?: boolean;
+    requireProfessional?: boolean;
+  }
+) {
+  const cleaned = ensureSentenceEnding(value);
+  const words = countWords(cleaned);
+
+  if (!cleaned || words < minWords || words > maxWords || !/[.!?]$/.test(cleaned)) {
+    return false;
+  }
+
+  if (/\b(?:and|but|to|for|the|your)[.!?]$/i.test(cleaned)) {
+    return false;
+  }
+
+  if (
+    options?.requireBusinessImpact &&
+    !/\b(visitor|visitors|customer|customers|lead|leads|sale|sales|conversion|conversions|enquiries|enquiry|trust|ranking|rankings|business|revenue|traffic)\b/i.test(
+      cleaned
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    options?.requireMobileDesktop &&
+    (!/\bmobile\b/i.test(cleaned) || !/\bdesktop\b/i.test(cleaned))
+  ) {
+    return false;
+  }
+
+  if (options?.requireProfessional && !isProfessionalSubtitle(cleaned)) {
+    return false;
+  }
+
+  return true;
+}
+
+function enforceSentenceRange(
+  value: string,
+  fallback: string,
+  minWords: number,
+  maxWords: number,
+  options?: {
+    sentenceCount?: number;
+    requireBusinessImpact?: boolean;
+    requireMobileDesktop?: boolean;
+    requireProfessional?: boolean;
+  }
+) {
+  const sentenceCount = options?.sentenceCount ?? 2;
+  const primary =
+    takeCompleteSentencesWithinWords(value, maxWords, sentenceCount) ||
+    takeWordsWithinLimit(value, maxWords);
+
+  if (meetsSentenceRules(primary, minWords, maxWords, options)) {
+    return primary;
+  }
+
+  const backup =
+    takeCompleteSentencesWithinWords(fallback, maxWords, sentenceCount) ||
+    takeWordsWithinLimit(fallback, maxWords);
+
+  if (meetsSentenceRules(backup, minWords, maxWords, options)) {
+    return backup;
+  }
+
+  return ensureSentenceEnding(trimDanglingEnding(fallback));
+}
+
 function sanitizeOverview(value: OverviewNarrative): OverviewNarrative {
   return {
     ...value,
-    executive_sentences: value.executive_sentences.map((sentence) => truncateAtBoundary(sentence, 100, 2)),
+    executive_sentences: value.executive_sentences.map((sentence) => completeSentenceWithinLimit(sentence, 80, 2)),
     score_summaries: {
       performance: {
         label: truncateAtBoundary(value.score_summaries.performance.label, 40, 1),
-        summary: truncateAtBoundary(value.score_summaries.performance.summary, 90, 1)
+        summary: completeSentenceWithinLimit(value.score_summaries.performance.summary, 80, 1)
       },
       seo: {
         label: truncateAtBoundary(value.score_summaries.seo.label, 40, 1),
-        summary: truncateAtBoundary(value.score_summaries.seo.summary, 90, 1)
+        summary: completeSentenceWithinLimit(value.score_summaries.seo.summary, 80, 1)
       },
       accessibility: {
         label: truncateAtBoundary(value.score_summaries.accessibility.label, 40, 1),
-        summary: truncateAtBoundary(value.score_summaries.accessibility.summary, 90, 1)
+        summary: completeSentenceWithinLimit(value.score_summaries.accessibility.summary, 80, 1)
       },
       best_practices: {
         label: truncateAtBoundary(value.score_summaries.best_practices.label, 40, 1),
-        summary: truncateAtBoundary(value.score_summaries.best_practices.summary, 90, 1)
+        summary: completeSentenceWithinLimit(value.score_summaries.best_practices.summary, 80, 1)
       }
     },
-    changes_summary: truncateAtBoundary(value.changes_summary, 180, 2),
+    changes_summary: completeSentenceWithinLimit(value.changes_summary, 80, 1),
     action_plan_title: truncateAtBoundary(value.action_plan_title, 60, 1),
-    action_plan_intro: truncateAtBoundary(value.action_plan_intro, 180, 2),
+    action_plan_intro: completeSentenceWithinLimit(value.action_plan_intro, 80, 1),
     action_plan: value.action_plan.map((week) => ({
       ...week,
       phase: sanitizeClientText(week.phase),
       focus: sanitizeClientText(week.focus),
-      expected_result: clampToThreeSentences(week.expected_result),
+      expected_result: completeSentenceWithinLimit(week.expected_result, 80, 1),
       tasks: week.tasks.map((task) => ({
         task: sanitizeClientText(task.task),
         time: sanitizeClientText(task.time)
       }))
     })),
     projected_score_range: truncateAtBoundary(value.projected_score_range, 30, 1),
-    projected_summary: truncateAtBoundary(value.projected_summary, 180, 2),
-    vitals_intro: truncateAtBoundary(value.vitals_intro, 180, 2),
+    projected_summary: completeSentenceWithinLimit(value.projected_summary, 80, 1),
+    vitals_intro: completeSentenceWithinLimit(value.vitals_intro, 80, 1),
     vitals: value.vitals.map((metric) => ({
       title: truncateAtBoundary(metric.title, 30, 1),
       value_label: truncateAtBoundary(metric.value_label, 30, 1),
       status_label: truncateAtBoundary(metric.status_label, 20, 1),
-      explanation: truncateAtBoundary(metric.explanation, 100, 2)
+      explanation: completeSentenceWithinLimit(metric.explanation, 80, 1)
     })),
-    vitals_overall: truncateAtBoundary(value.vitals_overall, 180, 2),
-    device_intro: truncateAtBoundary(value.device_intro, 180, 2),
-    mobile_summary: truncateAtBoundary(value.mobile_summary, 100, 2),
-    desktop_summary: truncateAtBoundary(value.desktop_summary, 100, 2),
-    device_tip: truncateAtBoundary(value.device_tip, 180, 2)
+    vitals_overall: completeSentenceWithinLimit(value.vitals_overall, 80, 1),
+    device_intro: completeSentenceWithinLimit(value.device_intro, 80, 1),
+    mobile_summary: completeSentenceWithinLimit(value.mobile_summary, 80, 1),
+    desktop_summary: completeSentenceWithinLimit(value.desktop_summary, 80, 1),
+    device_tip: completeSentenceWithinLimit(value.device_tip, 80, 1)
   };
 }
 
@@ -307,9 +470,9 @@ function sanitizeReportIssue(value: ReportSectionIssue): ReportSectionIssue {
     insight_id: sanitizeClientText(value.insight_id),
     title: truncateAtBoundary(value.title, 50, 1),
     priority: value.priority,
-    what_is_happening: truncateAtBoundary(value.what_is_happening, 120, 2),
-    why_it_matters: truncateAtBoundary(value.why_it_matters, 100, 1),
-    root_cause: truncateAtBoundary(value.root_cause, 100, 1)
+    what_is_happening: completeSentenceWithinLimit(value.what_is_happening, 80, 1),
+    why_it_matters: completeSentenceWithinLimit(value.why_it_matters, 80, 1),
+    root_cause: completeSentenceWithinLimit(value.root_cause, 80, 1)
   };
 }
 
@@ -319,8 +482,8 @@ function sanitizeReportRecommendation(
   return {
     insight_id: sanitizeClientText(value.insight_id),
     title: truncateAtBoundary(value.title, 50, 1),
-    action: truncateAtBoundary(value.action, 120, 2),
-    expected_impact: truncateAtBoundary(value.expected_impact, 100, 1),
+    action: completeSentenceWithinLimit(value.action, 80, 1),
+    expected_impact: completeSentenceWithinLimit(value.expected_impact, 80, 1),
     effort: value.effort,
     priority: value.priority
   };
@@ -330,6 +493,237 @@ function sanitizeReportSections(value: ReportSectionsPayload): ReportSectionsPay
   return {
     issues: value.issues.map(sanitizeReportIssue),
     recommendations: value.recommendations.map(sanitizeReportRecommendation)
+  };
+}
+
+function fallbackIssueWhatText(insight: ReportInsight) {
+  const templates: Record<InsightCategory, string> = {
+    "speed-assets":
+      "Large files and extra code are delaying important content, so visitors on both mobile and desktop wait too long before they can properly use the page.",
+    "speed-delivery":
+      "The website is not delivering pages efficiently, so visitors on both mobile and desktop spend longer waiting for content and key actions to appear.",
+    "seo-snippets":
+      "Important pages are missing strong search summaries, so visitors on both mobile and desktop may reach the site less often from Google results.",
+    "seo-discovery":
+      "Search engines are not getting the clearest signals from important pages, which affects how easily people find you on both mobile and desktop.",
+    "accessibility-content":
+      "Important buttons, links, or images are not clear enough, which makes the experience harder to use for people on both mobile and desktop.",
+    "accessibility-structure":
+      "Parts of the page structure are harder to follow than they should be, which affects usability for visitors on both mobile and desktop.",
+    stability:
+      "The page shifts or settles too late while loading, so visitors on both mobile and desktop may struggle to use content confidently.",
+    trust:
+      "Technical trust signals are being flagged in the background, which can make the experience feel less reliable on both mobile and desktop.",
+    other:
+      "A technical issue is creating friction across the website, and that makes browsing harder for visitors on both mobile and desktop."
+  };
+
+  return templates[insight.category];
+}
+
+function fallbackIssueWhyText(priority: ReportPriority) {
+  if (priority === "Critical" || priority === "High") {
+    return "When pages feel slow or awkward, visitors leave sooner, trust drops, and you lose more enquiries, sales, and search visibility.";
+  }
+
+  if (priority === "Medium") {
+    return "If this stays unresolved, the website can feel less reliable, which quietly reduces trust, engagement, and future conversion opportunities.";
+  }
+
+  return "This is not urgent, but fixing it still improves trust, usability, and the overall impression your business makes online.";
+}
+
+function fallbackIssueActionText(insight: ReportInsight) {
+  const templates: Record<InsightCategory, string> = {
+    "speed-assets":
+      "Ask your developer to compress large images, delay non-essential code, and retest the page. This usually improves speed very quickly.",
+    "speed-delivery":
+      "Ask your developer or host to improve caching, compression, and server response settings. This usually improves load speed across important pages.",
+    "seo-snippets":
+      "Rewrite key page titles and meta descriptions so they match visitor intent and encourage more clicks from search results.",
+    "seo-discovery":
+      "Ask your developer to review canonicals, indexing rules, and crawl signals so search engines can understand important pages better.",
+    "accessibility-content":
+      "Add clear labels, descriptive alt text, and stronger button names so every visitor can understand and use important actions.",
+    "accessibility-structure":
+      "Improve headings, contrast, and navigation cues so visitors can follow pages more easily and complete important tasks.",
+    stability:
+      "Reserve space for images and embeds, and delay layout-shifting elements so the page feels steady while loading.",
+    trust:
+      "Remove outdated scripts, browser warnings, and reliability issues so the website feels safer and more trustworthy to visitors.",
+    other:
+      "Review the flagged pages with your developer and fix the highest-impact issue first, then retest the website."
+  };
+
+  return templates[insight.category];
+}
+
+function mergeOverviewWithFallback(value: OverviewNarrative, fallback: OverviewNarrative): OverviewNarrative {
+  const sanitized = sanitizeOverview(value);
+
+  return {
+    ...sanitized,
+    executive_sentences: sanitized.executive_sentences.map((sentence, index) =>
+      enforceSentenceRange(sentence, fallback.executive_sentences[index] ?? fallback.executive_sentences[0], 12, 24, {
+        sentenceCount: 2,
+        requireProfessional: true
+      })
+    ),
+    score_summaries: {
+      performance: {
+        label: sanitized.score_summaries.performance.label,
+        summary: enforceSentenceRange(
+          sanitized.score_summaries.performance.summary,
+          fallback.score_summaries.performance.summary,
+          15,
+          25,
+          { requireBusinessImpact: true, requireProfessional: true }
+        )
+      },
+      seo: {
+        label: sanitized.score_summaries.seo.label,
+        summary: enforceSentenceRange(
+          sanitized.score_summaries.seo.summary,
+          fallback.score_summaries.seo.summary,
+          15,
+          25,
+          { requireBusinessImpact: true, requireProfessional: true }
+        )
+      },
+      accessibility: {
+        label: sanitized.score_summaries.accessibility.label,
+        summary: enforceSentenceRange(
+          sanitized.score_summaries.accessibility.summary,
+          fallback.score_summaries.accessibility.summary,
+          15,
+          25,
+          { requireBusinessImpact: true, requireProfessional: true }
+        )
+      },
+      best_practices: {
+        label: sanitized.score_summaries.best_practices.label,
+        summary: enforceSentenceRange(
+          sanitized.score_summaries.best_practices.summary,
+          fallback.score_summaries.best_practices.summary,
+          15,
+          25,
+          { requireBusinessImpact: true, requireProfessional: true }
+        )
+      }
+    },
+    action_plan_intro: enforceSentenceRange(
+      sanitized.action_plan_intro,
+      fallback.action_plan_intro,
+      10,
+      22,
+      { requireProfessional: true }
+    ),
+    action_plan: sanitized.action_plan.map((week, index) => ({
+      ...week,
+      expected_result: enforceSentenceRange(
+        week.expected_result,
+        fallback.action_plan[index]?.expected_result ?? fallback.action_plan[0].expected_result,
+        8,
+        18,
+        { requireProfessional: true }
+      )
+    })),
+    projected_summary: enforceSentenceRange(
+      sanitized.projected_summary,
+      fallback.projected_summary,
+      12,
+      24,
+      { requireProfessional: true }
+    ),
+    vitals_intro: enforceSentenceRange(sanitized.vitals_intro, fallback.vitals_intro, 10, 20, {
+      requireProfessional: true
+    }),
+    vitals_overall: enforceSentenceRange(
+      sanitized.vitals_overall,
+      fallback.vitals_overall,
+      12,
+      22,
+      { requireBusinessImpact: true, requireProfessional: true }
+    ),
+    device_intro: enforceSentenceRange(sanitized.device_intro, fallback.device_intro, 8, 16, {
+      requireProfessional: true
+    }),
+    mobile_summary: enforceSentenceRange(
+      sanitized.mobile_summary,
+      fallback.mobile_summary,
+      12,
+      22,
+      { requireBusinessImpact: true, requireProfessional: true }
+    ),
+    desktop_summary: enforceSentenceRange(
+      sanitized.desktop_summary,
+      fallback.desktop_summary,
+      12,
+      22,
+      { requireBusinessImpact: true, requireProfessional: true }
+    ),
+    device_tip: enforceSentenceRange(sanitized.device_tip, fallback.device_tip, 12, 22, {
+      requireBusinessImpact: true,
+      requireProfessional: true
+    })
+  };
+}
+
+function mergeReportIssueWithFallback(
+  value: ReportSectionIssue,
+  fallback: ReportSectionIssue,
+  insight: ReportInsight
+): ReportSectionIssue {
+  const sanitized = sanitizeReportIssue(value);
+
+  return {
+    ...sanitized,
+    title: sanitized.title || fallback.title,
+    what_is_happening: enforceSentenceRange(
+      sanitized.what_is_happening,
+      fallbackIssueWhatText(insight),
+      20,
+      35,
+      { sentenceCount: 2, requireMobileDesktop: true, requireProfessional: true }
+    ),
+    why_it_matters: enforceSentenceRange(
+      sanitized.why_it_matters,
+      fallbackIssueWhyText(insight.priority),
+      15,
+      25,
+      { requireBusinessImpact: true, requireProfessional: true }
+    ),
+    root_cause: enforceSentenceRange(
+      sanitized.root_cause,
+      fallback.root_cause,
+      12,
+      24,
+      { requireProfessional: true }
+    )
+  };
+}
+
+function mergeReportRecommendationWithFallback(
+  value: ReportSectionRecommendation,
+  fallback: ReportSectionRecommendation,
+  insight: ReportInsight
+): ReportSectionRecommendation {
+  const sanitized = sanitizeReportRecommendation(value);
+
+  return {
+    ...sanitized,
+    title: sanitized.title || fallback.title,
+    action: enforceSentenceRange(sanitized.action, fallbackIssueActionText(insight), 15, 25, {
+      sentenceCount: 2,
+      requireProfessional: true
+    }),
+    expected_impact: enforceSentenceRange(
+      sanitized.expected_impact,
+      fallback.expected_impact,
+      15,
+      25,
+      { requireBusinessImpact: true, requireProfessional: true }
+    )
   };
 }
 
@@ -1082,24 +1476,36 @@ function getScoreLabel(score: number) {
 function getScoreSummary(metric: string, score: number) {
   const messages: Record<string, { strong: string; medium: string; weak: string }> = {
     performance: {
-      strong: "Your website feels fast, so visitors are less likely to leave out of frustration.",
-      medium: "Your website is usable, but speed improvements could help more visitors stay engaged.",
-      weak: "Your website likely feels slow to visitors, which can hurt leads and sales."
+      strong:
+        "Your website loads quickly, which keeps visitors engaged longer and gives them a better chance of becoming paying customers.",
+      medium:
+        "Your website is usable, but faster loading would keep more visitors engaged and improve your chances of winning enquiries or sales.",
+      weak:
+        "Your website feels slow to visitors, which can reduce trust, increase drop-offs, and directly hurt leads, sales, and enquiries."
     },
     seo: {
-      strong: "Search engines can understand your website well and you are in a healthy position.",
-      medium: "Your website is visible to Google, but a few fixes could help rankings climb.",
-      weak: "Your website has SEO gaps that may make it harder for new customers to find you."
+      strong:
+        "Search engines can understand your website clearly, which gives your business a stronger chance of attracting new visitors and customers.",
+      medium:
+        "Your website is visible to Google, but a few SEO fixes could improve rankings and bring in more qualified enquiries.",
+      weak:
+        "Your website has search gaps that may limit visibility, making it harder for potential customers to discover your business online."
     },
     accessibility: {
-      strong: "Your website is easy for more people to use, which reduces legal and usability risk.",
-      medium: "Your website is in decent shape, but a few accessibility fixes would make it safer and more inclusive.",
-      weak: "Your website has accessibility issues that may frustrate visitors and increase risk."
+      strong:
+        "Your website is easy for more people to use, which improves trust, reduces risk, and supports more conversions from every visitor.",
+      medium:
+        "Your website is in decent shape, but accessibility fixes would make the experience smoother, safer, and more inclusive for visitors.",
+      weak:
+        "Your website has accessibility issues that may frustrate visitors, reduce trust, and expose the business to avoidable legal risk."
     },
     best_practices: {
-      strong: "Your website follows modern web standards and looks trustworthy behind the scenes.",
-      medium: "Your website is generally healthy, though a few cleanup items would strengthen reliability.",
-      weak: "Your website needs some technical cleanup to improve stability and trust."
+      strong:
+        "Your website follows strong technical standards, which supports reliability, trust, and a smoother experience for visitors and customers.",
+      medium:
+        "Your website is generally healthy, though a few cleanup items would strengthen reliability and help visitors trust the experience more.",
+      weak:
+        "Your website needs technical cleanup, and these issues can make the experience feel less reliable for visitors and potential customers."
     }
   };
 
@@ -1560,15 +1966,24 @@ function getInsightFallbackRecommendationTitle(insight: ReportInsight) {
 
 function getInsightFallbackImpact(insight: ReportInsight) {
   const impacts: Record<InsightCategory, string> = {
-    "speed-assets": "This should improve load speed, reduce bounce risk, and help more visitors stay engaged.",
-    "speed-delivery": "This should improve perceived speed, repeat visits, and overall reliability.",
-    "seo-snippets": "This should improve search visibility and make more people want to click through.",
-    "seo-discovery": "This should help search engines understand and surface the right pages more consistently.",
-    "accessibility-content": "This should make key actions clearer for more visitors and reduce usability risk.",
-    "accessibility-structure": "This should make the experience easier to follow and more trustworthy for all users.",
-    stability: "This should make the page feel steadier and reduce accidental taps or frustration.",
-    trust: "This should strengthen technical reliability and reduce avoidable confidence issues.",
-    other: "This should reduce friction and make the website easier to trust and maintain."
+    "speed-assets":
+      "This should improve load speed, keep more visitors engaged, and increase the chances of enquiries, sales, and repeat visits.",
+    "speed-delivery":
+      "This should improve speed and reliability, which helps visitors trust the website and stay engaged for longer.",
+    "seo-snippets":
+      "This should improve search visibility and increase the number of potential customers who choose your website from search results.",
+    "seo-discovery":
+      "This should help search engines surface the right pages more often, bringing stronger traffic and more qualified visitors.",
+    "accessibility-content":
+      "This should make key actions clearer for more visitors, reducing friction and improving trust, usability, and conversion opportunities.",
+    "accessibility-structure":
+      "This should make the experience easier to follow, helping visitors trust the website and complete more valuable actions.",
+    stability:
+      "This should make the page feel steadier, which reduces frustration and helps visitors stay focused on your products or services.",
+    trust:
+      "This should strengthen reliability and trust, making the website feel safer and more credible to potential customers.",
+    other:
+      "This should reduce friction across the website and make the overall experience feel more trustworthy for visitors and customers."
   };
 
   return impacts[insight.category];
@@ -1579,15 +1994,8 @@ function fallbackReportIssue(insight: ReportInsight): ReportSectionIssue {
     insight_id: insight.id,
     title: insight.title,
     priority: insight.priority,
-    what_is_happening:
-      insight.technicalSummary ||
-      "Your website is running into a technical issue that is making the experience feel less smooth than it should.",
-    why_it_matters:
-      insight.priority === "Critical" || insight.priority === "High"
-        ? "This is likely affecting visitor confidence, conversions, or search visibility right now."
-        : insight.priority === "Medium"
-          ? "This is worth fixing soon because it can quietly chip away at performance and trust over time."
-          : "This is not urgent, but cleaning it up will make your website stronger and easier to maintain.",
+    what_is_happening: fallbackIssueWhatText(insight),
+    why_it_matters: fallbackIssueWhyText(insight.priority),
     root_cause: insight.rootCause
   };
 }
@@ -1596,10 +2004,7 @@ function fallbackReportRecommendation(insight: ReportInsight): ReportSectionReco
   return {
     insight_id: insight.id,
     title: getInsightFallbackRecommendationTitle(insight),
-    action:
-      insight.relatedRecommendations[0]?.description
-        ? clampToThreeSentences(insight.relatedRecommendations[0].description)
-        : insightCategoryConfig[insight.category].fixHint,
+    action: fallbackIssueActionText(insight),
     expected_impact: getInsightFallbackImpact(insight),
     effort: insight.difficulty,
     priority: insight.priority
@@ -1871,7 +2276,17 @@ Return JSON with this exact shape:
   "device_tip": "..."
 }
 
-Do not use technical acronyms like LCP, FID, CLS, TBT, TTFB in the JSON.`;
+Rules:
+- Every score_summaries.*.summary field must be one complete sentence between 15 and 25 words.
+- Every score_summaries.*.summary field must mention business impact like visitors, customers, sales, trust, or rankings.
+- Every action_plan[*].expected_result field must be a professional sentence with at least 8 words.
+- action_plan_intro, vitals_intro, device_intro, and projected_summary must sound professional and consultant-ready.
+- Never use casual phrases like "Fix issues!", "Check vitals!", "Check devices!", or "Great score!".
+- Never return one-word responses or incomplete sentences.
+- If any field is under the minimum word count, rewrite it until it meets the minimum.
+- End each sentence cleanly with . ! or ?.
+- Never end a field with dangling words like "and", "but", "to", "for", "the", or "your".
+- Do not use technical acronyms like LCP, FID, CLS, TBT, TTFB in the JSON.`;
 }
 
 function buildSectionsPrompt(input: {
@@ -1892,6 +2307,14 @@ Rules:
 - Do not copy raw Lighthouse wording directly.
 - Recommendation priority must match the issue priority.
 - Recommendation should clearly map to the matching issue via insight_id.
+- what_is_happening must be 20 to 35 words, explain the specific problem clearly, and mention both mobile and desktop.
+- why_it_matters must be 15 to 25 words and clearly mention business impact.
+- action must be 15 to 25 words, specific, and clearly tell a developer or owner what to do next.
+- expected_impact must be 15 to 25 words and mention business impact.
+- Never return one-word responses or incomplete sentences.
+- If any field is under the minimum word count, rewrite it until it meets the minimum.
+- End each sentence cleanly with . ! or ?.
+- Never end a field with dangling words like "and", "but", "to", "for", "the", or "your".
 
 ${JSON.stringify(
     {
@@ -1987,7 +2410,7 @@ function buildSectionsCacheKey(scanId: string, insights: ReportInsight[]) {
     .digest("hex")
     .slice(0, 12);
 
-  return `report-sections:v3:${scanId}:${hash}`;
+  return `report-sections:v4:${scanId}:${hash}`;
 }
 
 function mergeSectionsWithFallback(
@@ -2012,21 +2435,40 @@ function mergeSectionsWithFallback(
 
   return {
     issues: insights.map((insight) => {
-      const issue = issueMap.get(insight.id) ?? fallbackReportIssue(insight);
-      return sanitizeReportIssue({
-        ...issue,
-        insight_id: insight.id,
-        priority: insight.priority
-      });
+      const fallback = fallbackReportIssue(insight);
+      const issue = issueMap.get(insight.id) ?? fallback;
+      return mergeReportIssueWithFallback(
+        {
+          ...issue,
+          insight_id: insight.id,
+          priority: insight.priority
+        },
+        {
+          ...fallback,
+          insight_id: insight.id,
+          priority: insight.priority
+        },
+        insight
+      );
     }),
     recommendations: insights.map((insight) => {
-      const recommendation = recommendationMap.get(insight.id) ?? fallbackReportRecommendation(insight);
-      return sanitizeReportRecommendation({
-        ...recommendation,
-        insight_id: insight.id,
-        effort: recommendation.effort ?? insight.difficulty,
-        priority: insight.priority
-      });
+      const fallback = fallbackReportRecommendation(insight);
+      const recommendation = recommendationMap.get(insight.id) ?? fallback;
+      return mergeReportRecommendationWithFallback(
+        {
+          ...recommendation,
+          insight_id: insight.id,
+          effort: recommendation.effort ?? insight.difficulty,
+          priority: insight.priority
+        },
+        {
+          ...fallback,
+          insight_id: insight.id,
+          effort: fallback.effort ?? insight.difficulty,
+          priority: insight.priority
+        },
+        insight
+      );
     })
   };
 }
@@ -2179,7 +2621,7 @@ export async function buildReportNarrative(input: {
   const insights = buildReportInsights(input.scan);
   const fallbackOverview = buildFallbackActionPlan(input.scan, input.previousScan, insights);
   const overviewResult = await resolveStructuredSection({
-    cacheKey: `report-overview:v2:${input.scan.id}`,
+    cacheKey: `report-overview:v3:${input.scan.id}`,
     section: "overview",
     ownerUserId: input.profile.id,
     websiteId: input.website.id,
@@ -2190,7 +2632,7 @@ export async function buildReportNarrative(input: {
     }),
     schema: overviewSchema,
     fallback: () => fallbackOverview,
-    sanitize: sanitizeOverview
+    sanitize: (payload) => mergeOverviewWithFallback(payload, fallbackOverview)
   });
 
   const sectionsResult = await resolveStructuredSection({

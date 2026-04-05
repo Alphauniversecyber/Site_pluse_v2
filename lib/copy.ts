@@ -1,13 +1,13 @@
 export const siteCopy = {
   name: "SitePulse",
-  tagline: "Know When Your Website Breaks Before Your Clients Do",
+  tagline: "Turn website audits into paying clients",
   subTagline:
     "Automated performance, SEO & accessibility monitoring with weekly white-label PDF reports — built for agencies",
   heroSubheadline:
-    "Automated performance, SEO & accessibility monitoring with weekly white-label PDF reports. Built for web agencies.",
+    "SitePulse helps agencies close more clients, retain them longer, and prove measurable value without building manual audit decks every week.",
   positioning:
     "SitePulse is the only website monitoring tool built specifically for web agencies — automated weekly PDF reports, white-label branding, and accessibility scanning at a third of the price of Semrush.",
-  socialProof: "Trusted by 500+ web agencies worldwide"
+  socialProof: "Built for agencies that want to close faster, retain longer, and look premium doing it."
 } as const;
 
 export const landingFaq = [

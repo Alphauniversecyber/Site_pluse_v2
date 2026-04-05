@@ -62,6 +62,22 @@ export const scanRunSchema = z.object({
   websiteId: z.string().uuid("Invalid website id.")
 });
 
+export const previewScanSchema = z.object({
+  url: z
+    .string()
+    .trim()
+    .min(1, "Website URL is required.")
+    .transform((value) => (urlRegex.test(value) ? value : `https://${value}`))
+    .refine((value) => {
+      try {
+        new URL(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Enter a valid website URL.")
+});
+
 export const linkScanSchema = z.object({
   websiteId: z.string().uuid("Invalid website id."),
   scanId: z.string().uuid().optional(),

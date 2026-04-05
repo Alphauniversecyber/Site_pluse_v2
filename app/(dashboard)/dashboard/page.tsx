@@ -17,8 +17,9 @@ import { SnapshotStatCard } from "@/components/dashboard/snapshot-stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { buildPortfolioImpactSummary } from "@/lib/business-impact";
 import { createSupabaseServerClient, requireAuthenticatedUser } from "@/lib/supabase-server";
-import { cn, formatDateTime, formatRelativeTime } from "@/lib/utils";
+import { cn, formatDateTime, formatRelativeTime, getPlanDisplayName } from "@/lib/utils";
 import type { ScanResult, ScanSchedule, Website } from "@/types";
 
 function compactUrl(url: string) {
@@ -225,6 +226,12 @@ export default async function DashboardOverviewPage() {
   const focusQueue = [...scoredSites]
     .sort((left, right) => (left.score ?? 999) - (right.score ?? 999))
     .slice(0, 4);
+  const portfolioImpact = buildPortfolioImpactSummary({
+    urgentSites,
+    watchSites,
+    totalSites: websites.length,
+    averageHealth
+  });
 
   const snapshotStats = [
     {
@@ -285,7 +292,7 @@ export default async function DashboardOverviewPage() {
                     {`Welcome back, ${profile.full_name?.split(" ")[0] ?? "there"}`}
                   </h1>
                   <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
-                    Track every client website, catch score drops before they spread, and keep report delivery moving without manual follow-ups.
+                    Track every client website, catch score drops before they spread, and keep your agency&apos;s proof-of-value workflow moving without manual follow-ups.
                   </p>
                 </div>
 
@@ -301,7 +308,7 @@ export default async function DashboardOverviewPage() {
 
               <div className="flex flex-wrap gap-3">
                 <Badge variant={profile.plan === "agency" ? "success" : profile.plan === "starter" ? "default" : "outline"}>
-                  {profile.plan} plan
+                  {getPlanDisplayName(profile.plan)} plan
                 </Badge>
                 <Badge variant={urgentSites ? "warning" : "success"}>
                   {urgentSites ? `${urgentSites} sites need review` : "No urgent client sites"}
@@ -309,6 +316,13 @@ export default async function DashboardOverviewPage() {
                 <Badge variant="outline">
                   {latestScannedAt ? `Last scan ${formatRelativeTime(latestScannedAt)}` : "No scans yet"}
                 </Badge>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-primary/15 bg-primary/[0.08] px-4 py-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+                  Business impact layer
+                </p>
+                <p className="mt-2 text-sm leading-7 text-foreground/90">{portfolioImpact}</p>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
@@ -346,7 +360,7 @@ export default async function DashboardOverviewPage() {
                 <CardTitle className="mt-2 text-2xl">Monitoring cadence stays live</CardTitle>
               </div>
               <Badge variant={profile.plan === "agency" ? "success" : profile.plan === "starter" ? "default" : "outline"}>
-                {profile.plan}
+                {getPlanDisplayName(profile.plan)}
               </Badge>
             </div>
             <CardDescription>

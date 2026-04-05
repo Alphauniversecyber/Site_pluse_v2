@@ -153,6 +153,20 @@ create table if not exists public.report_ai_cache (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.preview_scan_sessions (
+  id uuid primary key default gen_random_uuid(),
+  input_url text not null,
+  normalized_url text not null,
+  website_label text not null,
+  preview_payload jsonb not null default '{}'::jsonb,
+  scan_payload jsonb not null default '{}'::jsonb,
+  expires_at timestamptz not null,
+  claimed_by_user_id uuid references public.users (id) on delete set null,
+  claimed_website_id uuid references public.websites (id) on delete set null,
+  claimed_scan_id uuid references public.scan_results (id) on delete set null,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
 create table if not exists public.scan_schedules (
   id uuid primary key default gen_random_uuid(),
   website_id uuid not null unique references public.websites (id) on delete cascade,
@@ -300,6 +314,8 @@ create index if not exists idx_reports_website_id on public.reports (website_id)
 create index if not exists idx_reports_scan_id on public.reports (scan_id);
 create index if not exists idx_report_ai_cache_owner_expires on public.report_ai_cache (owner_user_id, expires_at desc);
 create index if not exists idx_report_ai_cache_scan_id on public.report_ai_cache (scan_id);
+create index if not exists idx_preview_scan_sessions_url_expires on public.preview_scan_sessions (normalized_url, expires_at desc);
+create index if not exists idx_preview_scan_sessions_claimed_by on public.preview_scan_sessions (claimed_by_user_id);
 create index if not exists idx_notifications_user_id_created_at on public.notifications (user_id, created_at desc);
 create index if not exists idx_team_members_owner on public.team_members (owner_user_id);
 create index if not exists idx_ssl_checks_website_checked_at on public.ssl_checks (website_id, checked_at desc);
@@ -445,6 +461,7 @@ alter table public.websites enable row level security;
 alter table public.scan_results enable row level security;
 alter table public.reports enable row level security;
 alter table public.report_ai_cache enable row level security;
+alter table public.preview_scan_sessions enable row level security;
 alter table public.scan_schedules enable row level security;
 alter table public.notifications enable row level security;
 alter table public.ssl_checks enable row level security;

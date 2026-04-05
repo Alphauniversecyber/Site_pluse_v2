@@ -1,3 +1,4 @@
+import { AgencyPricingPage } from "@/components/landing/agency-pricing-page";
 import Link from "next/link";
 
 import { PricingGrid } from "@/components/landing/pricing-grid";
@@ -7,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { siteCopy } from "@/lib/copy";
 
 export default function PricingPage() {
+  return <AgencyPricingPage />;
+
   return (
     <main className="container py-20">
       <div className="mx-auto max-w-3xl text-center">

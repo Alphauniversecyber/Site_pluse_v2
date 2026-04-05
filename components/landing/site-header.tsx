@@ -32,7 +32,7 @@ export function SiteHeader() {
           <SitePulseLogo variant="light" priority className="h-9 w-[148px] max-w-full dark:hidden sm:w-[164px] md:w-[180px]" />
           <SitePulseLogo variant="dark" priority className="hidden h-9 w-[148px] max-w-full dark:inline-flex sm:w-[164px] md:w-[180px]" />
           <p className="hidden text-xs uppercase tracking-[0.24em] text-muted-foreground lg:block">
-            Built for agencies
+            Agency growth system
           </p>
         </Link>
         <nav className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
@@ -52,7 +52,7 @@ export function SiteHeader() {
         <div className="hidden items-center gap-3 md:flex">
           <ThemeToggle />
           <Button asChild>
-            <Link href="/signup">Start Free</Link>
+            <Link href="/#free-scan">Scan a website (free)</Link>
           </Button>
         </div>
 
@@ -73,7 +73,7 @@ export function SiteHeader() {
               </Link>
               <SheetTitle className="pt-4">Navigate SitePulse</SheetTitle>
               <SheetDescription>
-                Explore features, pricing, and sign in from any screen size without losing access to the main nav.
+                Explore the agency-growth workflow, pricing, and sign in from any screen size.
               </SheetDescription>
             </SheetHeader>
 
@@ -96,7 +96,7 @@ export function SiteHeader() {
 
             <div className="mt-8">
               <Button asChild className="w-full">
-                <Link href="/signup">Start Free</Link>
+                <Link href="/#free-scan">Scan a website (free)</Link>
               </Button>
             </div>
           </SheetContent>

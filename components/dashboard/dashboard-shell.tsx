@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import type { NotificationItem, UserProfile } from "@/types";
-import { cn } from "@/lib/utils";
+import { cn, getPlanAudience, getPlanDisplayName } from "@/lib/utils";
 
 const navigation = [
   { href: "/dashboard", label: "Overview", icon: Gauge },
@@ -86,7 +86,7 @@ export function DashboardShell({
               <Link href="/" className="inline-flex max-w-full flex-col items-start gap-2.5">
                 <SitePulseLogo variant="light" className="h-10 w-[184px] max-w-full dark:hidden xl:w-[192px] min-[1800px]:w-[204px]" />
                 <SitePulseLogo variant="dark" className="hidden h-10 w-[184px] max-w-full dark:inline-flex xl:w-[192px] min-[1800px]:w-[204px]" />
-                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Built for agencies</p>
+                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Agency growth system</p>
               </Link>
             </div>
 
@@ -109,7 +109,7 @@ export function DashboardShell({
                 </div>
               </div>
               <Badge className="mt-4" variant={profile.plan === "agency" ? "success" : profile.plan === "starter" ? "default" : "outline"}>
-                {profile.plan} plan
+                {getPlanDisplayName(profile.plan)} plan
               </Badge>
             </div>
 
@@ -141,7 +141,7 @@ export function DashboardShell({
                         <SitePulseLogo variant="light" className="h-10 w-[170px] max-w-full dark:hidden" />
                         <SitePulseLogo variant="dark" className="hidden h-10 w-[170px] max-w-full dark:inline-flex" />
                         <span className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-                          Built for agencies
+                          Agency growth system
                         </span>
                       </Link>
                       <SheetTitle className="pt-4">Dashboard navigation</SheetTitle>
@@ -165,7 +165,7 @@ export function DashboardShell({
                         className="mt-4"
                         variant={profile.plan === "agency" ? "success" : profile.plan === "starter" ? "default" : "outline"}
                       >
-                        {profile.plan} plan
+                        {getPlanDisplayName(profile.plan)} plan
                       </Badge>
                     </div>
 
@@ -185,9 +185,9 @@ export function DashboardShell({
                 </Link>
 
                 <div className="hidden min-w-0 lg:block">
-                  <p className="text-xs uppercase tracking-[0.24em] text-primary">Agency monitoring</p>
+                  <p className="text-xs uppercase tracking-[0.24em] text-primary">Agency growth system</p>
                   <p className="text-sm text-foreground/66 xl:text-[15px]">
-                    Know when client sites break before they call.
+                    {getPlanAudience(profile.plan)}
                   </p>
                 </div>
               </div>

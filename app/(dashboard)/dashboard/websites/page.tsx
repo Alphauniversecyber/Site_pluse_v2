@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Website } from "@/types";
 import { fetchJson } from "@/lib/api-client";
+import { buildSiteBusinessImpact } from "@/lib/business-impact";
 import { getFriendlyScanFailureMessage } from "@/lib/scan-errors";
 import { useWebsites } from "@/hooks/useWebsites";
 import type { ScanResult } from "@/types";
@@ -88,8 +89,8 @@ export default function WebsitesPage() {
     <div className="space-y-8">
       <PageHeader
         eyebrow="Websites"
-        title="Monitor every client website from one place"
-        description="Search, scan, pause, delete, and jump into reports without leaving the dashboard."
+        title="Protect every client account from one operating board"
+        description="See which sites are at risk, where business value is leaking, and what your team should act on next."
         actions={
           <Button asChild>
             <Link href="/dashboard/websites/add">
@@ -102,6 +103,9 @@ export default function WebsitesPage() {
 
       <Card>
         <CardContent className="p-5">
+          <div className="mb-4 rounded-2xl border border-primary/15 bg-primary/[0.06] px-4 py-3 text-sm leading-7 text-muted-foreground">
+            SitePulse is framed here as an account protection workflow, so every website card should help you spot risk, explain impact, and move to the next client action quickly.
+          </div>
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -117,10 +121,7 @@ export default function WebsitesPage() {
       {loading ? (
         <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr))] min-[1800px]:[grid-template-columns:repeat(auto-fit,minmax(28rem,1fr))]">
           {Array.from({ length: 4 }).map((_, index) => (
-            <Card
-              key={index}
-              className="h-full overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.96),rgba(15,23,42,0.94))] shadow-[0_24px_80px_-42px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]"
-            >
+            <Card key={index} className="website-monitor-card h-full">
               <CardContent className="flex h-full flex-col p-6">
                 <Skeleton className="h-6 w-1/2" />
                 <Skeleton className="mt-4 h-4 w-2/3" />
@@ -138,6 +139,7 @@ export default function WebsitesPage() {
             const latest = website.latest_scan;
             const isScanning = scanningWebsiteId === website.id;
             const hasValidScan = Boolean(latest && latest.scan_status !== "failed");
+            const impact = buildSiteBusinessImpact(latest ?? null);
             const latestState = isScanning
               ? {
                   label: "Scan queued",
@@ -161,14 +163,8 @@ export default function WebsitesPage() {
                     };
 
             return (
-              <Card
-                key={website.id}
-                className="h-full overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(30,41,59,0.96),rgba(15,23,42,0.94))] shadow-[0_24px_80px_-42px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]"
-              >
+              <Card key={website.id} className="website-monitor-card h-full">
                 <CardContent className="relative flex h-full flex-col p-6">
-                  <div className="pointer-events-none absolute inset-px rounded-[1.45rem] border border-white/6" />
-                  <div className="pointer-events-none absolute right-0 top-0 h-24 w-40 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.1),transparent_72%)] blur-2xl" />
-
                   <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-start">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-3">
@@ -192,6 +188,12 @@ export default function WebsitesPage() {
                             Security {website.security_headers.grade}
                           </Badge>
                         ) : null}
+                      </div>
+                      <div className="mt-4 rounded-2xl border border-primary/12 bg-primary/[0.06] px-3.5 py-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                          Business impact
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-foreground/90">{impact.headline}</p>
                       </div>
                     </div>
 
@@ -272,9 +274,10 @@ export default function WebsitesPage() {
                             ? `${website.health_score.breakdown.security}/100 security`
                             : null
                         }
+                        className="website-monitor-panel bg-white/88 dark:bg-card"
                       />
                     ) : (
-                      <div className="flex flex-col justify-between rounded-3xl border border-border bg-background p-6">
+                      <div className="website-monitor-empty flex flex-col justify-between p-6">
                         <div>
                           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Performance</p>
                           <p className="mt-4 font-display text-3xl font-semibold">{latestState.label}</p>
@@ -283,7 +286,7 @@ export default function WebsitesPage() {
                       </div>
                     )}
 
-                    <div className="rounded-3xl border border-border/80 bg-background/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+                    <div className="website-monitor-panel p-5">
                       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Latest scan</p>
                       {hasValidScan ? (
                         <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10.5rem),1fr))]">
@@ -307,7 +310,7 @@ export default function WebsitesPage() {
                           ))}
                         </div>
                       ) : (
-                        <div className="mt-4 rounded-2xl border border-dashed border-border bg-card p-4">
+                        <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white/92 p-4 dark:border-border dark:bg-card">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <p className="font-medium">{latestState.label}</p>

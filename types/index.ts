@@ -144,6 +144,64 @@ export interface ReportAiCacheEntry {
   updated_at?: string;
 }
 
+export interface PreviewScanIssue {
+  id: string;
+  title: string;
+  summary: string;
+  why_it_matters: string;
+}
+
+export interface PreviewScanResult {
+  session_id: string;
+  normalized_url: string;
+  website_label: string;
+  overall_score: number;
+  scores: {
+    performance: number;
+    seo: number;
+    accessibility: number;
+    best_practices: number;
+  };
+  impact_message: string;
+  improvement_message: string;
+  unlock_path: string;
+  issues: PreviewScanIssue[];
+  generated_at: string;
+}
+
+export interface PreviewScanPayload {
+  performance_score: number;
+  seo_score: number;
+  accessibility_score: number;
+  best_practices_score: number;
+  lcp: number | null;
+  fid: number | null;
+  cls: number | null;
+  tbt: number | null;
+  issues: ScanIssue[];
+  recommendations: ScanRecommendation[];
+  accessibility_violations: Array<Record<string, unknown>>;
+  raw_data: Record<string, unknown>;
+  mobile_snapshot?: DeviceAuditSummary;
+  desktop_snapshot?: DeviceAuditSummary;
+  scan_status: "success" | "failed";
+  error_message?: string | null;
+}
+
+export interface PreviewScanSessionRecord {
+  id: string;
+  input_url: string;
+  normalized_url: string;
+  website_label: string;
+  preview_payload: PreviewScanResult;
+  scan_payload: PreviewScanPayload;
+  expires_at: string;
+  claimed_by_user_id: string | null;
+  claimed_website_id: string | null;
+  claimed_scan_id: string | null;
+  created_at: string;
+}
+
 export interface PlainLanguageIssue {
   id: string;
   title: string;

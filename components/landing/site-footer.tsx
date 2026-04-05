@@ -10,7 +10,7 @@ export function SiteFooter() {
           <SitePulseLogo variant="light" className="h-10 w-[170px] max-w-full dark:hidden" />
           <SitePulseLogo variant="dark" className="hidden h-10 w-[170px] max-w-full dark:inline-flex" />
           <p className="mt-3 max-w-xs text-sm text-muted-foreground">
-            Automated performance, SEO and accessibility monitoring with white-label reports for web agencies.
+            SitePulse helps agencies turn audits into client-ready proof, revenue-focused reporting, and stronger retention.
           </p>
         </div>
         <div className="space-y-3 text-sm text-muted-foreground">
@@ -25,8 +25,8 @@ export function SiteFooter() {
           </Link>
         </div>
         <div className="space-y-2 text-sm text-muted-foreground">
-          <p>Built for small web agencies, freelancers, and WordPress maintenance providers.</p>
-          <p>Not a keyword tool. Not backlink software. Just website health monitoring that clients understand.</p>
+          <p>Built for agencies that want to close faster, retain longer, and look premium doing it.</p>
+          <p>Not a developer dashboard. A premium client acquisition and retention system with proof clients can actually understand.</p>
         </div>
       </div>
     </footer>
