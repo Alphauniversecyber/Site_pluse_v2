@@ -104,7 +104,7 @@ export function DashboardMockup() {
 
   return (
     <div
-      className="relative mx-auto w-full max-w-[304px] max-h-[430px] overflow-hidden rounded-[1.85rem] border border-blue-400/15 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.14),_transparent_42%),linear-gradient(180deg,_#091024,_#122661)] p-2.5 shadow-[0_24px_56px_-40px_rgba(37,99,235,0.35)] sm:max-w-[352px] sm:max-h-none sm:p-4 md:max-w-[376px] lg:h-[468px] lg:max-w-[392px] lg:translate-y-0 lg:translate-x-0 xl:max-w-[408px] xl:translate-x-2"
+      className="relative mx-auto w-full max-w-[304px] max-h-[430px] overflow-hidden rounded-[1.85rem] border border-slate-200 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_42%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(238,244,255,0.96))] p-2.5 shadow-[0_24px_56px_-40px_rgba(15,23,42,0.18)] dark:border-blue-400/15 dark:bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.14),_transparent_42%),linear-gradient(180deg,_#091024,_#122661)] dark:shadow-[0_24px_56px_-40px_rgba(37,99,235,0.35)] sm:max-w-[352px] sm:max-h-none sm:p-4 md:max-w-[376px] lg:h-[468px] lg:max-w-[392px] lg:translate-y-0 lg:translate-x-0 xl:max-w-[408px] xl:translate-x-2"
       onMouseMove={(event) => {
         if (reduceMotion) {
           return;
@@ -238,14 +238,14 @@ export function DashboardMockup() {
         </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-[#122661] via-[#122661]/95 to-transparent sm:h-32 lg:h-48" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-[#dbe7ff] via-[#dbe7ff]/95 to-transparent dark:from-[#122661] dark:via-[#122661]/95 sm:h-32 lg:h-48" />
 
-      <div className="absolute left-4 top-7 hidden w-32 rounded-[1.4rem] border border-white/10 bg-slate-950/80 p-3 backdrop-blur xl:block">
+      <div className="absolute left-4 top-7 hidden w-32 rounded-[1.4rem] border border-slate-200 bg-white/92 p-3 text-slate-700 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.18)] backdrop-blur xl:block dark:border-white/10 dark:bg-slate-950/80 dark:text-slate-100 dark:shadow-none">
         <Badge variant="success">Live monitoring</Badge>
-        <p className="mt-3 text-xs leading-5 text-slate-300">15 sites checked automatically before Monday morning updates.</p>
+        <p className="mt-3 text-xs leading-5 text-slate-600 dark:text-slate-300">15 sites checked automatically before Monday morning updates.</p>
       </div>
-      <div className="absolute right-4 bottom-16 hidden w-36 rounded-[1.4rem] border border-blue-300/20 bg-blue-500/10 p-3 text-slate-100 backdrop-blur xl:block">
-        <p className="text-xs uppercase tracking-[0.18em] text-blue-200">White-label ready</p>
+      <div className="absolute right-4 bottom-16 hidden w-36 rounded-[1.4rem] border border-blue-200 bg-blue-50/90 p-3 text-slate-700 shadow-[0_18px_44px_-30px_rgba(59,130,246,0.2)] backdrop-blur xl:block dark:border-blue-300/20 dark:bg-blue-500/10 dark:text-slate-100 dark:shadow-none">
+        <p className="text-xs uppercase tracking-[0.18em] text-blue-700 dark:text-blue-200">White-label ready</p>
         <p className="mt-3 text-xs leading-5">Reports and alerts carry your agency brand automatically.</p>
       </div>
     </div>

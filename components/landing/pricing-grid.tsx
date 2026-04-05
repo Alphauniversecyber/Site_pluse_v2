@@ -69,7 +69,8 @@ export function PricingGrid({ compact = false }: { compact?: boolean }) {
             plan.theme === "light" && "border-slate-200 bg-white text-slate-950",
             plan.theme === "featured" &&
               "border-blue-300 bg-white text-slate-950 shadow-[0_0_0_1px_rgba(96,165,250,0.5),0_35px_90px_-40px_rgba(59,130,246,0.7)]",
-            plan.theme === "dark" && "border-white/10 bg-[#141f3d] text-white"
+            plan.theme === "dark" &&
+              "border-slate-200 bg-[linear-gradient(180deg,rgba(238,244,255,0.98),rgba(223,232,250,0.96))] text-slate-950 shadow-[0_18px_48px_-34px_rgba(59,130,246,0.24)] dark:border-white/10 dark:bg-[#141f3d] dark:text-white dark:shadow-none"
           )}
         >
           {plan.theme === "featured" ? (
@@ -82,7 +83,7 @@ export function PricingGrid({ compact = false }: { compact?: boolean }) {
                 compact ? "w-fit px-3 py-1 text-xs tracking-normal normal-case" : "w-fit px-3.5 py-1.5 text-[13px] tracking-normal normal-case",
                 plan.theme === "light" && "bg-slate-100 text-slate-700",
                 plan.theme === "featured" && "bg-gradient-to-r from-blue-500 to-blue-600 text-white",
-                plan.theme === "dark" && "bg-white/10 text-white"
+                plan.theme === "dark" && "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white"
               )}
             >
               {plan.badge}
@@ -92,32 +93,32 @@ export function PricingGrid({ compact = false }: { compact?: boolean }) {
               <span className={cn("font-display font-semibold tracking-tight", compact ? "text-[2.5rem] lg:text-[2.65rem]" : "text-[2.85rem] lg:text-[3rem]")}>
                 {plan.amount}
               </span>
-              <span className={cn(compact ? "pb-0.5 text-base lg:text-[1.15rem]" : "pb-1 text-lg lg:text-[1.35rem]", plan.theme === "dark" ? "text-slate-300" : "text-slate-500")}>
+              <span className={cn(compact ? "pb-0.5 text-base lg:text-[1.15rem]" : "pb-1 text-lg lg:text-[1.35rem]", plan.theme === "dark" ? "text-slate-600 dark:text-slate-300" : "text-slate-500")}>
                 /month
               </span>
             </div>
 
             <div className={compact ? "mt-3" : "mt-3.5"}>
               <p className={cn("font-semibold leading-tight", compact ? "text-[1.6rem]" : "text-[1.9rem]")}>{plan.name}</p>
-              <p className={cn(compact ? "mt-2 text-[14px] leading-6" : "mt-2.5 text-[15px] leading-7", plan.theme === "dark" ? "text-slate-300" : "text-slate-600")}>
+              <p className={cn(compact ? "mt-2 text-[14px] leading-6" : "mt-2.5 text-[15px] leading-7", plan.theme === "dark" ? "text-slate-600 dark:text-slate-300" : "text-slate-600")}>
                 {compact ? plan.compactSubtitle : plan.subtitle}
               </p>
             </div>
 
-            <div className={cn(compact ? "my-3 h-px" : "my-4 h-px", plan.theme === "dark" ? "bg-white/10" : "bg-slate-200")} />
+            <div className={cn(compact ? "my-3 h-px" : "my-4 h-px", plan.theme === "dark" ? "bg-slate-200 dark:bg-white/10" : "bg-slate-200")} />
 
             {compact ? (
               <div
                 className={cn(
                   "rounded-[1.2rem] border px-3.5 py-3",
-                  plan.theme === "dark" ? "border-white/10 bg-white/[0.04]" : "border-slate-200 bg-slate-50/90"
+                  plan.theme === "dark" ? "border-slate-200 bg-white/40 dark:border-white/10 dark:bg-white/[0.04]" : "border-slate-200 bg-slate-50/90"
                 )}
               >
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Best for</p>
                 <p
                   className={cn(
                     "mt-1.5 text-[14px] font-medium leading-5",
-                    plan.theme === "dark" ? "text-slate-100" : "text-slate-800"
+                    plan.theme === "dark" ? "text-slate-900 dark:text-slate-100" : "text-slate-800"
                   )}
                 >
                   {plan.audience}
@@ -125,25 +126,25 @@ export function PricingGrid({ compact = false }: { compact?: boolean }) {
                 <p
                   className={cn(
                     "mt-2 text-[13px] leading-5",
-                    plan.theme === "dark" ? "text-slate-300" : "text-slate-600"
+                    plan.theme === "dark" ? "text-slate-600 dark:text-slate-300" : "text-slate-600"
                   )}
                 >
                   {plan.roiLine}
                 </p>
               </div>
             ) : (
-              <div className={cn("rounded-[1.35rem] border px-4 py-3.5", plan.theme === "dark" ? "border-white/10 bg-white/[0.04]" : "border-slate-200 bg-slate-50/90")}>
+              <div className={cn("rounded-[1.35rem] border px-4 py-3.5", plan.theme === "dark" ? "border-slate-200 bg-white/40 dark:border-white/10 dark:bg-white/[0.04]" : "border-slate-200 bg-slate-50/90")}>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Positioning</p>
-                <p className={cn("mt-2 text-[15px] font-medium leading-6", plan.theme === "dark" ? "text-slate-100" : "text-slate-800")}>
+                <p className={cn("mt-2 text-[15px] font-medium leading-6", plan.theme === "dark" ? "text-slate-900 dark:text-slate-100" : "text-slate-800")}>
                   {plan.audience}
                 </p>
-                <p className={cn("mt-2 text-[15px] leading-6", plan.theme === "dark" ? "text-slate-300" : "text-slate-600")}>
+                <p className={cn("mt-2 text-[15px] leading-6", plan.theme === "dark" ? "text-slate-600 dark:text-slate-300" : "text-slate-600")}>
                   {plan.roiLine}
                 </p>
               </div>
             )}
 
-            <ul className={cn(compact ? "mt-3 space-y-1.5 text-[14px]" : "mt-4 space-y-2 text-[15px]", plan.theme === "dark" ? "text-slate-100" : "text-slate-700")}>
+            <ul className={cn(compact ? "mt-3 space-y-1.5 text-[14px]" : "mt-4 space-y-2 text-[15px]", plan.theme === "dark" ? "text-slate-800 dark:text-slate-100" : "text-slate-700")}>
               {(compact ? plan.features.slice(0, 3) : plan.features).map((feature) => (
                 <li key={feature} className="flex items-start gap-3">
                   <Check className={cn(compact ? "mt-0.5 h-4 w-4 shrink-0" : "mt-0.5 h-[18px] w-[18px] shrink-0", plan.theme === "featured" ? "text-blue-500" : "text-emerald-500")} />
