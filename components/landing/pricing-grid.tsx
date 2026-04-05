@@ -12,6 +12,7 @@ const plans: Array<{
   amount: string;
   badge: string;
   subtitle: string;
+  compactSubtitle: string;
   audience: string;
   roiLine: string;
   features: string[];
@@ -23,6 +24,7 @@ const plans: Array<{
     amount: "$0",
     badge: "For testing value",
     subtitle: "For freelancers testing whether fast audits can open better client conversations.",
+    compactSubtitle: "For freelancers validating whether fast audits can open better client conversations.",
     audience: "Best for solo operators proving demand.",
     roiLine: "Win the first conversation with a no-risk free scan flow.",
     features: ["1 website", "Weekly scans", "30-day history", "Free scan preview funnel", "Core dashboard access"],
@@ -34,6 +36,7 @@ const plans: Array<{
     amount: "$49",
     badge: "Most popular",
     subtitle: "For agencies managing multiple clients and turning website reviews into a repeatable sales and retention process.",
+    compactSubtitle: "For agencies turning website reviews into a repeatable sales and retention system.",
     audience: "Best for growing agencies with active retainers.",
     roiLine: "Close 1 extra client and this plan pays for itself immediately.",
     features: ["5 websites", "Daily scans", "90-day history", "PDF reports", "Weekly email reports"],
@@ -45,6 +48,7 @@ const plans: Array<{
     amount: "$149",
     badge: "For serious scale",
     subtitle: "For agencies that want SitePulse to feel like a premium client-delivery system inside their own service stack.",
+    compactSubtitle: "For agencies that want a premium client-delivery system inside their own service stack.",
     audience: "Best for agencies scaling account coverage and brand authority.",
     roiLine: "One retained client usually covers this plan many times over.",
     features: ["30 websites", "Daily scans", "1-year history", "White-label reports", "Priority alerts and team access"],
@@ -53,14 +57,15 @@ const plans: Array<{
   }
 ] as const;
 
-export function PricingGrid() {
+export function PricingGrid({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
+    <div className={cn("grid lg:grid-cols-3", compact ? "gap-4 xl:gap-5" : "gap-5 xl:gap-6")}>
       {plans.map((plan) => (
         <article
           key={plan.name}
           className={cn(
-            "group relative flex h-full flex-col overflow-hidden rounded-[2rem] border p-6 transition duration-300 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-[0_34px_84px_-40px_rgba(15,23,42,0.42)] lg:p-7",
+            "group relative flex h-full flex-col overflow-hidden border transition duration-300 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-[0_34px_84px_-40px_rgba(15,23,42,0.42)]",
+            compact ? "rounded-[1.6rem] p-4 lg:p-4 xl:p-5" : "rounded-[1.8rem] p-5 lg:p-5 xl:p-6",
             plan.theme === "light" && "border-slate-200 bg-white text-slate-950",
             plan.theme === "featured" &&
               "border-blue-300 bg-white text-slate-950 shadow-[0_0_0_1px_rgba(96,165,250,0.5),0_35px_90px_-40px_rgba(59,130,246,0.7)]",
@@ -74,7 +79,7 @@ export function PricingGrid() {
           <div className="relative flex h-full flex-col">
             <Badge
               className={cn(
-                "w-fit px-4 py-2 text-sm tracking-normal normal-case",
+                compact ? "w-fit px-3 py-1 text-xs tracking-normal normal-case" : "w-fit px-3.5 py-1.5 text-[13px] tracking-normal normal-case",
                 plan.theme === "light" && "bg-slate-100 text-slate-700",
                 plan.theme === "featured" && "bg-gradient-to-r from-blue-500 to-blue-600 text-white",
                 plan.theme === "dark" && "bg-white/10 text-white"
@@ -83,37 +88,66 @@ export function PricingGrid() {
               {plan.badge}
             </Badge>
 
-            <div className="mt-6 flex items-end gap-2">
-              <span className="font-display text-[3.2rem] font-semibold tracking-tight">{plan.amount}</span>
-              <span className={cn("pb-1.5 text-xl", plan.theme === "dark" ? "text-slate-300" : "text-slate-500")}>
+            <div className={cn("flex items-end gap-2", compact ? "mt-4" : "mt-5")}>
+              <span className={cn("font-display font-semibold tracking-tight", compact ? "text-[2.5rem] lg:text-[2.65rem]" : "text-[2.85rem] lg:text-[3rem]")}>
+                {plan.amount}
+              </span>
+              <span className={cn(compact ? "pb-0.5 text-base lg:text-[1.15rem]" : "pb-1 text-lg lg:text-[1.35rem]", plan.theme === "dark" ? "text-slate-300" : "text-slate-500")}>
                 /month
               </span>
             </div>
 
-            <div className="mt-4">
-              <p className="text-2xl font-semibold">{plan.name}</p>
-              <p className={cn("mt-3 text-sm leading-6", plan.theme === "dark" ? "text-slate-300" : "text-slate-600")}>
-                {plan.subtitle}
+            <div className={compact ? "mt-3" : "mt-3.5"}>
+              <p className={cn("font-semibold leading-tight", compact ? "text-[1.6rem]" : "text-[1.9rem]")}>{plan.name}</p>
+              <p className={cn(compact ? "mt-2 text-[14px] leading-6" : "mt-2.5 text-[15px] leading-7", plan.theme === "dark" ? "text-slate-300" : "text-slate-600")}>
+                {compact ? plan.compactSubtitle : plan.subtitle}
               </p>
             </div>
 
-            <div className={cn("my-5 h-px", plan.theme === "dark" ? "bg-white/10" : "bg-slate-200")} />
+            <div className={cn(compact ? "my-3 h-px" : "my-4 h-px", plan.theme === "dark" ? "bg-white/10" : "bg-slate-200")} />
 
-            <div className={cn("rounded-[1.4rem] border px-4 py-4", plan.theme === "dark" ? "border-white/10 bg-white/[0.04]" : "border-slate-200 bg-slate-50/90")}>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Positioning</p>
-              <p className={cn("mt-2 text-sm font-medium", plan.theme === "dark" ? "text-slate-100" : "text-slate-800")}>
-                {plan.audience}
-              </p>
-              <p className={cn("mt-2 text-sm leading-6", plan.theme === "dark" ? "text-slate-300" : "text-slate-600")}>
-                {plan.roiLine}
-              </p>
-            </div>
+            {compact ? (
+              <div
+                className={cn(
+                  "rounded-[1.2rem] border px-3.5 py-3",
+                  plan.theme === "dark" ? "border-white/10 bg-white/[0.04]" : "border-slate-200 bg-slate-50/90"
+                )}
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Best for</p>
+                <p
+                  className={cn(
+                    "mt-1.5 text-[14px] font-medium leading-5",
+                    plan.theme === "dark" ? "text-slate-100" : "text-slate-800"
+                  )}
+                >
+                  {plan.audience}
+                </p>
+                <p
+                  className={cn(
+                    "mt-2 text-[13px] leading-5",
+                    plan.theme === "dark" ? "text-slate-300" : "text-slate-600"
+                  )}
+                >
+                  {plan.roiLine}
+                </p>
+              </div>
+            ) : (
+              <div className={cn("rounded-[1.35rem] border px-4 py-3.5", plan.theme === "dark" ? "border-white/10 bg-white/[0.04]" : "border-slate-200 bg-slate-50/90")}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Positioning</p>
+                <p className={cn("mt-2 text-[15px] font-medium leading-6", plan.theme === "dark" ? "text-slate-100" : "text-slate-800")}>
+                  {plan.audience}
+                </p>
+                <p className={cn("mt-2 text-[15px] leading-6", plan.theme === "dark" ? "text-slate-300" : "text-slate-600")}>
+                  {plan.roiLine}
+                </p>
+              </div>
+            )}
 
-            <ul className={cn("mt-5 space-y-2.5 text-[15px]", plan.theme === "dark" ? "text-slate-100" : "text-slate-700")}>
-              {plan.features.map((feature) => (
+            <ul className={cn(compact ? "mt-3 space-y-1.5 text-[14px]" : "mt-4 space-y-2 text-[15px]", plan.theme === "dark" ? "text-slate-100" : "text-slate-700")}>
+              {(compact ? plan.features.slice(0, 3) : plan.features).map((feature) => (
                 <li key={feature} className="flex items-start gap-3">
-                  <Check className={cn("mt-1 h-5 w-5 shrink-0", plan.theme === "featured" ? "text-blue-500" : "text-emerald-500")} />
-                  <span>{feature}</span>
+                  <Check className={cn(compact ? "mt-0.5 h-4 w-4 shrink-0" : "mt-0.5 h-[18px] w-[18px] shrink-0", plan.theme === "featured" ? "text-blue-500" : "text-emerald-500")} />
+                  <span className={compact ? "leading-6" : "leading-7"}>{feature}</span>
                 </li>
               ))}
             </ul>
@@ -121,7 +155,7 @@ export function PricingGrid() {
             <Button
               asChild
               className={cn(
-                "mt-6 h-14 w-full rounded-2xl text-base",
+                compact ? "mt-4 h-11 w-full rounded-2xl text-[14px]" : "mt-5 h-12 w-full rounded-2xl text-[15px]",
                 plan.theme === "light" && "border-slate-300 bg-white text-slate-950 hover:bg-slate-100",
                 plan.theme === "featured" &&
                   "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-[0_20px_40px_-24px_rgba(59,130,246,0.9)] hover:from-blue-600 hover:to-blue-700",

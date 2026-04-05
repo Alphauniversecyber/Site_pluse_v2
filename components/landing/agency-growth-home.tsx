@@ -201,22 +201,21 @@ export function AgencyGrowthHome() {
       </section>
 
       <section className="border-y border-border bg-muted/25">
-        <div className="container grid gap-10 py-16 md:py-20 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] lg:items-center">
-          <div>
+        <div className="container grid gap-8 py-14 md:gap-10 md:py-18 xl:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] xl:items-center">
+          <div className="max-w-2xl space-y-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">ROI</p>
-            <h2 className="mt-4 font-display text-4xl font-semibold">Close one extra client and this pays for itself.</h2>
-            <p className="mt-5 max-w-xl text-lg leading-8 text-muted-foreground">
+            <h2 className="mt-4 font-display text-[2.2rem] font-semibold leading-tight md:text-[2.7rem]">
+              Close one extra client and this pays for itself.
+            </h2>
+            <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
               The real comparison is simple: one agency client can be worth $500 or more per month. SitePulse starts at $49 per month. If it helps you close one deal or retain one shaky account, the return is obvious.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Badge variant="outline">Close 1 client = $500+</Badge>
               <Badge variant="outline">SitePulse = $49/month</Badge>
             </div>
-          </div>
 
-          <div className="space-y-6">
-            <EmailReportPreview />
-            <div className="rounded-[1.8rem] border border-border/80 bg-card/75 p-6">
+            <div className="max-w-xl rounded-[1.6rem] border border-border/80 bg-card/75 p-5 md:p-6">
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Retention angle</p>
               <p className="mt-3 text-lg font-semibold">Stay valuable after the close.</p>
               <p className="mt-3 text-sm leading-7 text-muted-foreground">
@@ -224,17 +223,21 @@ export function AgencyGrowthHome() {
               </p>
             </div>
           </div>
+
+          <div className="mx-auto w-full max-w-[620px] xl:mt-6 xl:justify-self-end xl:max-w-[660px]">
+            <EmailReportPreview compact />
+          </div>
         </div>
       </section>
 
-      <section id="pricing" className="container py-16 md:py-20">
+      <section id="pricing" className="container py-10 md:py-12">
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Pricing</p>
-        <h2 className="mt-4 font-display text-4xl font-semibold">Plans framed around agency value, not tool complexity.</h2>
-        <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
+        <h2 className="mt-3 max-w-4xl font-display text-[2.1rem] font-semibold leading-tight md:text-[2.45rem]">Plans framed around agency value, not tool complexity.</h2>
+        <p className="mt-3 max-w-[50rem] text-[15px] leading-7 text-muted-foreground md:text-base">
           Position SitePulse as part of your revenue engine, not another software expense. Start with one free scan, then choose the plan that matches how you sell and scale.
         </p>
-        <div className="mt-10">
-          <PricingGrid />
+        <div className="mt-6">
+          <PricingGrid compact />
         </div>
       </section>
 

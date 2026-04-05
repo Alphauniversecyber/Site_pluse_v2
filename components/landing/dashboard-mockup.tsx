@@ -104,7 +104,7 @@ export function DashboardMockup() {
 
   return (
     <div
-      className="relative mx-auto w-full max-w-[320px] max-h-[430px] overflow-hidden rounded-[1.85rem] border border-blue-400/15 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.14),_transparent_42%),linear-gradient(180deg,_#091024,_#122661)] p-2.5 shadow-[0_24px_56px_-40px_rgba(37,99,235,0.35)] sm:max-w-[372px] sm:max-h-none sm:p-4 md:max-w-[390px] lg:h-[480px] lg:-translate-y-10 lg:translate-x-8"
+      className="relative mx-auto w-full max-w-[304px] max-h-[430px] overflow-hidden rounded-[1.85rem] border border-blue-400/15 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.14),_transparent_42%),linear-gradient(180deg,_#091024,_#122661)] p-2.5 shadow-[0_24px_56px_-40px_rgba(37,99,235,0.35)] sm:max-w-[352px] sm:max-h-none sm:p-4 md:max-w-[376px] lg:h-[468px] lg:max-w-[392px] lg:translate-y-0 lg:translate-x-0 xl:max-w-[408px] xl:translate-x-2"
       onMouseMove={(event) => {
         if (reduceMotion) {
           return;
@@ -125,7 +125,7 @@ export function DashboardMockup() {
       <div className="hero-glow-pulse absolute bottom-12 right-4 h-14 w-14 rounded-full bg-blue-400/12 blur-3xl sm:right-7 sm:h-24 sm:w-24" />
 
       <div
-        className="hero-device-float relative mx-auto w-full max-w-[152px] rounded-[1.75rem] border border-white/20 bg-slate-950 p-2 shadow-[0_24px_48px_-28px_rgba(15,23,42,0.92)] transition-transform duration-300 ease-out sm:max-w-[172px] sm:rounded-[2rem] md:max-w-[186px]"
+        className="hero-device-float relative mx-auto w-full max-w-[148px] rounded-[1.75rem] border border-white/20 bg-slate-950 p-2 shadow-[0_24px_48px_-28px_rgba(15,23,42,0.92)] transition-transform duration-300 ease-out sm:max-w-[166px] sm:rounded-[2rem] md:max-w-[180px]"
         style={
           reduceMotion
             ? undefined
@@ -240,11 +240,11 @@ export function DashboardMockup() {
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-[#122661] via-[#122661]/95 to-transparent sm:h-32 lg:h-48" />
 
-      <div className="absolute left-5 top-8 hidden w-36 rounded-[1.4rem] border border-white/10 bg-slate-950/80 p-3 backdrop-blur xl:block">
+      <div className="absolute left-4 top-7 hidden w-32 rounded-[1.4rem] border border-white/10 bg-slate-950/80 p-3 backdrop-blur xl:block">
         <Badge variant="success">Live monitoring</Badge>
         <p className="mt-3 text-xs leading-5 text-slate-300">15 sites checked automatically before Monday morning updates.</p>
       </div>
-      <div className="absolute right-5 bottom-20 hidden w-40 rounded-[1.4rem] border border-blue-300/20 bg-blue-500/10 p-3 text-slate-100 backdrop-blur xl:block">
+      <div className="absolute right-4 bottom-16 hidden w-36 rounded-[1.4rem] border border-blue-300/20 bg-blue-500/10 p-3 text-slate-100 backdrop-blur xl:block">
         <p className="text-xs uppercase tracking-[0.18em] text-blue-200">White-label ready</p>
         <p className="mt-3 text-xs leading-5">Reports and alerts carry your agency brand automatically.</p>
       </div>

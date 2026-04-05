@@ -31,7 +31,7 @@ export function AgencyPricingPage() {
         ))}
       </div>
 
-      <div className="mt-14">
+      <div className="mt-10">
         <PricingGrid />
       </div>
 
