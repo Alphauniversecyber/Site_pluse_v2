@@ -1,5 +1,9 @@
 import "server-only";
 
+import { buildCruxSummary, buildHealthScore, buildUptimeSummary } from "@/lib/health-score";
+import { buildReportNarrative } from "@/lib/report-ai";
+import { renderReportHtml, type ReportContext } from "@/lib/report-template";
+import { formatDateTime } from "@/lib/utils";
 import type {
   AgencyBranding,
   BrokenLinkRecord,
@@ -14,51 +18,12 @@ import type {
   UserProfile,
   Website
 } from "@/types";
-import { buildCruxSummary, buildHealthScore, buildLinkHealthSummary, buildUptimeSummary } from "@/lib/health-score";
-import { buildReportNarrative, type ReportNarrative, type ReportPriority } from "@/lib/report-ai";
-import { formatDateTime } from "@/lib/utils";
 
-const NAVY = "#0F172A";
-const SLATE_950 = "#0F172A";
-const SLATE_900 = "#1E293B";
-const SLATE_700 = "#475569";
-const SLATE_600 = "#64748B";
-const SLATE_500 = "#94A3B8";
-const SLATE_300 = "#CBD5E1";
-const SURFACE = "#FFFFFF";
-const SURFACE_SOFT = "#F8FAFC";
-const SURFACE_TINT = "#EFF6FF";
-const BLUE = "#2563EB";
-const BLUE_SOFT = "rgba(37,99,235,0.10)";
-const GREEN = "#16A34A";
-const GREEN_SOFT = "rgba(22,163,74,0.10)";
-const ORANGE = "#D97706";
-const ORANGE_SOFT = "rgba(217,119,6,0.12)";
-const RED = "#DC2626";
-const RED_SOFT = "rgba(220,38,38,0.10)";
-const BORDER = "rgba(15,23,42,0.10)";
-const SHADOW = "0 18px 42px rgba(15,23,42,0.06)";
-const INDUSTRY_SCORE = 78;
-const BANNED_TERMS = /\b(LCP|FID|CLS|TBT|TTFB|INP|DOM|API|CDN|HTTP|CSS|JS)\b/gi;
-
-const SCORE_SUPPORT_LABELS = {
-  performance: "Performance Overview",
-  seo: "Search Visibility",
-  accessibility: "Accessibility Status",
-  bestPractices: "Standards Compliance"
-} as const;
-
-type Tone = {
-  color: string;
-  background: string;
-  border: string;
-};
-
-type Context = {
+type PdfRenderInput = {
   website: Website;
   scan: ScanResult;
-  previousScan: ScanResult | null;
   history: ScanResult[];
+  previousScan: ScanResult | null;
   branding?: AgencyBranding | null;
   profile: UserProfile;
   schedule?: ScanSchedule | null;
@@ -71,2195 +36,413 @@ type Context = {
   competitorScans?: CompetitorScanRecord[];
 };
 
-type PdfPage = {
-  dark?: boolean;
-  content: string;
-};
-
-type PdfIssue = {
-  title: string;
-  priority: ReportPriority;
-  what: string;
-  why: string;
-  recommendation: string;
-  difficulty: "Easy" | "Medium" | "Hard";
-  time: string;
-  scoreImpact: number;
-};
-
-type PdfRecommendation = {
-  title: string;
-  priority: ReportPriority;
-  action: string;
-  impact: string;
-  effort: "Easy" | "Medium" | "Hard";
-  time: string;
-  scoreImpact: number;
-};
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function cleanCopy(value: string) {
-  return value
-    .replace(BANNED_TERMS, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/https?:\/\/[^\s)]+/g, "")
-    .replace(/[`*_#>~]/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .replace(/\s+([.,!?;:])/g, "$1")
-    .trim();
-}
-
-function splitSentences(value: string) {
-  return cleanCopy(value)
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter(Boolean);
-}
-
-function takeSentences(value: string, count: number) {
-  const sentences = splitSentences(value);
-  if (sentences.length === 0) {
-    return cleanCopy(value);
-  }
-
-  return sentences.slice(0, count).join(" ");
-}
-
-function takeWords(value: string, count: number) {
-  return cleanCopy(value)
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, count)
-    .join(" ");
-}
-
-function chunk<T>(items: T[], size: number) {
-  const result: T[][] = [];
-
-  for (let index = 0; index < items.length; index += size) {
-    result.push(items.slice(index, index + size));
-  }
-
-  return result;
-}
-
-function priorityRank(priority: ReportPriority) {
-  return priority === "Critical" ? 0 : priority === "High" ? 1 : priority === "Medium" ? 2 : 3;
+function clampScore(value: number | null | undefined) {
+  return Math.max(0, Math.min(100, Math.round(value ?? 0)));
 }
 
 function overallScore(scan: ScanResult) {
-  return Math.round(
+  return clampScore(
     (scan.performance_score + scan.seo_score + scan.accessibility_score + scan.best_practices_score) / 4
   );
 }
 
-function brandName(input: Context) {
-  return (
-    input.branding?.agency_name ||
-    input.branding?.email_from_name ||
-    input.profile.full_name ||
-    "Your Agency"
+function addDays(value: string, days: number) {
+  const date = new Date(value);
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
+function nextReportDate(scan: ScanResult, schedule: ScanSchedule | null | undefined, profile: UserProfile) {
+  const frequency = schedule?.frequency ?? profile.email_report_frequency ?? "weekly";
+  const days = frequency === "daily" ? 1 : frequency === "monthly" ? 30 : 7;
+  return formatDateTime(addDays(scan.scanned_at, days));
+}
+
+function statusFromScore(score: number): ReportContext["devices"]["mobile"]["status"] {
+  if (score < 50) return "critical";
+  if (score < 70) return "needs_attention";
+  if (score < 85) return "good";
+  return "excellent";
+}
+
+function securityStatus(sslCheck?: SslCheckRecord | null): ReportContext["security"]["ssl_status"] {
+  if (!sslCheck) return "warning";
+  if (!sslCheck.is_valid || sslCheck.grade === "red" || sslCheck.grade === "critical") return "expired";
+  if ((sslCheck.days_until_expiry ?? 0) <= 30 || sslCheck.grade === "orange") return "warning";
+  return "healthy";
+}
+
+function passFail(value: boolean) {
+  return value ? "pass" : "fail";
+}
+
+function normalizeDifficulty(value: string | null | undefined): "easy" | "medium" | "hard" {
+  const normalized = (value ?? "").toLowerCase();
+  if (normalized.includes("easy")) return "easy";
+  if (normalized.includes("hard") || normalized.includes("complex")) return "hard";
+  return "medium";
+}
+
+function normalizePriority(value: string | null | undefined): "critical" | "high" | "medium" {
+  const normalized = (value ?? "").toLowerCase();
+  if (normalized.includes("critical")) return "critical";
+  if (normalized.includes("high")) return "high";
+  return "medium";
+}
+
+function buildIssueList(narrative: Awaited<ReturnType<typeof buildReportNarrative>>) {
+  const recommendationMap = new Map(
+    narrative.recommendations.map((item) => [item.insight.id, item.ai])
   );
-}
 
-function contactEmail(input: Context) {
-  return input.profile.email;
-}
-
-function nextReportDate(input: Context) {
-  const anchor = new Date(input.scan.scanned_at);
-  const frequency =
-    (input.schedule?.frequency as "daily" | "weekly" | "monthly" | undefined) ??
-    input.profile.email_report_frequency ??
-    "weekly";
-  if (frequency === "daily") {
-    anchor.setDate(anchor.getDate() + 1);
-  } else if (frequency === "weekly") {
-    anchor.setDate(anchor.getDate() + 7);
-  } else {
-    anchor.setDate(anchor.getDate() + 30);
-  }
-
-  return formatDateTime(anchor);
-}
-
-function issueSummaryLine(issues: PdfIssue[]) {
-  const counts = issues.reduce(
-    (acc, issue) => {
-      if (issue.priority === "Critical") {
-        acc.critical += 1;
-      } else if (issue.priority === "High") {
-        acc.high += 1;
-      } else if (issue.priority === "Medium") {
-        acc.medium += 1;
-      }
-
-      return acc;
-    },
-    { critical: 0, high: 0, medium: 0 }
-  );
-
-  return `${issues.length} issues found &mdash; ${counts.critical} critical, ${counts.high} high, ${counts.medium} medium priority`;
-}
-
-function truncateHeaderValue(value: string, maxLength = 45) {
-  const cleaned = cleanCopy(value);
-  if (cleaned.length <= maxLength) {
-    return cleaned;
-  }
-
-  const shortened = cleaned.slice(0, Math.max(0, maxLength - 3));
-  const boundary = shortened.search(/\s+\S*$/);
-  const safe = boundary > 18 ? shortened.slice(0, boundary) : shortened;
-  return `${safe.trim()}...`;
-}
-
-function hasRenderablePageContent(content: string) {
-  const visibleText = content
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&[a-z0-9#]+;/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return visibleText.length > 24;
-}
-
-async function fetchImageAsDataUrl(url: string) {
-  const response = await fetch(url, {
-    cache: "no-store",
-    signal: AbortSignal.timeout(15000)
-  });
-
-  if (!response.ok) {
-    throw new Error("Unable to load branding logo.");
-  }
-
-  const buffer = Buffer.from(await response.arrayBuffer());
-  const contentType = response.headers.get("content-type") ?? "image/png";
-  return `data:${contentType};base64,${buffer.toString("base64")}`;
-}
-
-function healthLabel(scan: ScanResult, overview: ReportNarrative["overview"]) {
-  if (overview.overall_health === "EXCELLENT") {
-    return "EXCELLENT";
-  }
-
-  const score = overallScore(scan);
-  if (score >= 90 && scan.performance_score >= 85) {
-    return "EXCELLENT";
-  }
-
-  return overview.overall_health;
-}
-
-function tone(color: string, background: string): Tone {
-  return {
-    color,
-    background,
-    border: color
-  };
-}
-
-function healthTone(label: string) {
-  if (label === "EXCELLENT") return tone(GREEN, GREEN_SOFT);
-  if (label === "GOOD") return tone(BLUE, BLUE_SOFT);
-  if (label === "NEEDS ATTENTION") return tone(ORANGE, ORANGE_SOFT);
-  return tone(RED, RED_SOFT);
-}
-
-function priorityTone(priority: ReportPriority) {
-  if (priority === "Critical") return tone(RED, RED_SOFT);
-  if (priority === "High") return tone(ORANGE, ORANGE_SOFT);
-  if (priority === "Medium") return tone(BLUE, BLUE_SOFT);
-  return tone(GREEN, GREEN_SOFT);
-}
-
-function neutralTone(): Tone {
-  return {
-    color: SLATE_700,
-    background: "rgba(148,163,184,0.12)",
-    border: "rgba(148,163,184,0.24)"
-  };
-}
-
-function scoreTone(score: number) {
-  if (score >= 90) {
-    return { label: "Excellent", tone: tone(GREEN, GREEN_SOFT) };
-  }
-  if (score >= 75) {
-    return { label: "Good", tone: tone(BLUE, BLUE_SOFT) };
-  }
-  if (score >= 50) {
-    return { label: "Needs attention", tone: tone(ORANGE, ORANGE_SOFT) };
-  }
-  return { label: "Critical", tone: tone(RED, RED_SOFT) };
-}
-
-function withDeviceNote(value: string, device: "mobile" | "desktop" | "both" | null) {
-  if (device !== "both" || /both mobile and desktop/i.test(value)) {
-    return value;
-  }
-
-  return `${cleanCopy(value)} This affects both mobile and desktop visitors.`;
-}
-
-function difficultyLabel(value: "Easy" | "Medium" | "Hard") {
-  return value === "Hard" ? "Complex" : value;
-}
-
-function badgeHtml(label: string, badgeTone: Tone, className = "") {
-  return `<span class="pill ${className}" style="--pill-color:${badgeTone.color}; --pill-bg:${badgeTone.background}; --pill-border:${badgeTone.border};">${escapeHtml(
-    label
-  )}</span>`;
-}
-
-function metaChipHtml(label: string) {
-  return badgeHtml(label, neutralTone(), "pill--meta");
-}
-
-function sectionHeaderHtml(input: {
-  eyebrow?: string;
-  title: string;
-  subtitle?: string;
-}) {
-  return `
-    <header class="section-header">
-      ${input.eyebrow ? `<p class="section-header__eyebrow">${escapeHtml(input.eyebrow)}</p>` : ""}
-      <h1>${escapeHtml(input.title)}</h1>
-      ${input.subtitle ? `<p class="section-header__subtitle">${escapeHtml(input.subtitle)}</p>` : ""}
-    </header>
-  `;
-}
-
-function footerHtml(
-  pageNumber: number,
-  totalPages: number,
-  name: string,
-  email: string,
-  logo: string | null,
-  dark?: boolean
-) {
-  const logoHtml = logo
-    ? `<img class="footer-logo ${dark ? "footer-logo--white" : ""}" src="${logo}" alt="${escapeHtml(
-        name
-      )} logo" />`
-    : `<span class="footer-wordmark">${escapeHtml(name)}</span>`;
-
-  return `
-    <footer class="page-footer ${dark ? "page-footer--dark" : ""}">
-      <div class="page-footer__left">${logoHtml}<span>${escapeHtml(name)}</span></div>
-      <div class="page-footer__right"><span>${escapeHtml(email)}</span><span>Page ${pageNumber} of ${totalPages}</span></div>
-    </footer>
-  `;
-}
-
-function scoreCardHtml(input: {
-  title: string;
-  supportLabel: string;
-  score: number;
-  summary: string;
-}) {
-  const status = scoreTone(input.score);
-
-  return `
-    <article class="surface-card score-card">
-      <div class="score-card__top">
-        <p class="score-card__eyebrow">${escapeHtml(input.title)}</p>
-        ${badgeHtml(status.label, status.tone)}
-      </div>
-      <div class="score-card__circle-wrap">
-        <div class="score-circle" style="--circle-color:${status.tone.color};">${input.score}</div>
-      </div>
-      <div class="score-card__copy">
-        <p class="score-card__support">${escapeHtml(input.supportLabel)}</p>
-        <p class="score-card__summary">${escapeHtml(cleanCopy(input.summary))}</p>
-      </div>
-    </article>
-  `;
-}
-
-function issueKey(value: string) {
-  return cleanCopy(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function selectPdfIssues(narrative: ReportNarrative): PdfIssue[] {
-  const recommendationMap = new Map(narrative.recommendations.map((item) => [item.insight.id, item]));
-  const merged = new Map<
-    string,
-    {
-      issue: ReportNarrative["issues"][number];
-      recommendation: ReportNarrative["recommendations"][number] | undefined;
-      device: "mobile" | "desktop" | "both" | null;
-      scoreImpact: number;
-    }
-  >();
-
-  for (const item of narrative.issues) {
-    if (item.insight.priority === "Low") {
-      continue;
-    }
-
-    const key = item.insight.category === "other" ? issueKey(item.ai.title) : item.insight.category;
-    const recommendation = recommendationMap.get(item.insight.id);
-    const existing = merged.get(key);
-
-    if (!existing) {
-      merged.set(key, {
-        issue: item,
-        recommendation,
-        device: item.insight.device,
-        scoreImpact: item.insight.scoreImpact
-      });
-      continue;
-    }
-
-    const shouldReplace =
-      priorityRank(item.insight.priority) < priorityRank(existing.issue.insight.priority) ||
-      (priorityRank(item.insight.priority) === priorityRank(existing.issue.insight.priority) &&
-        item.insight.scoreImpact > existing.scoreImpact);
-
-    merged.set(key, {
-      issue: shouldReplace ? item : existing.issue,
-      recommendation: shouldReplace ? recommendation : existing.recommendation,
-      device:
-        existing.device === "both" ||
-        item.insight.device === "both" ||
-        (existing.device && item.insight.device && existing.device !== item.insight.device)
-          ? "both"
-          : existing.device ?? item.insight.device,
-      scoreImpact: Math.max(existing.scoreImpact, item.insight.scoreImpact)
+  return narrative.issues
+    .map((item) => {
+      const recommendation = recommendationMap.get(item.insight.id);
+      return {
+        priority: normalizePriority(item.ai.priority),
+        title: item.ai.title,
+        estimated_time: item.insight.timeToFix,
+        difficulty: normalizeDifficulty(recommendation?.effort ?? item.insight.difficulty),
+        what_is_happening: item.ai.what_is_happening,
+        why_it_matters: item.ai.why_it_matters,
+        root_cause: item.ai.root_cause,
+        how_to_fix: recommendation?.action ?? item.ai.root_cause
+      };
+    })
+    .filter((item) => item.priority !== "medium" || item.title)
+    .sort((a, b) => {
+      const rank = { critical: 0, high: 1, medium: 2 };
+      return rank[a.priority] - rank[b.priority];
     });
+}
+
+function buildPriorityActions(
+  narrative: Awaited<ReturnType<typeof buildReportNarrative>>,
+  issues: ReportContext["issues"]
+): ReportContext["plan"]["priority_actions"] {
+  const issueById = new Map(issues.map((issue) => [issue.title.toLowerCase(), issue]));
+  const actions = narrative.recommendations
+    .filter((item) => {
+      const priority = normalizePriority(item.ai.priority);
+      return priority === "critical" || priority === "high";
+    })
+    .slice(0, 4)
+    .map((item) => ({
+      priority: normalizePriority(item.ai.priority) as "critical" | "high",
+      difficulty: item.ai.effort,
+      time: item.insight.timeToFix,
+      title: item.ai.title,
+      action: item.ai.action,
+      expected_impact: item.ai.expected_impact
+    }));
+
+  if (actions.length > 0) {
+    return actions;
   }
 
-  return Array.from(merged.values())
-    .map((entry) => ({
-      title: takeWords(entry.issue.ai.title || entry.issue.insight.title, 10),
-      priority: entry.issue.insight.priority,
-      what: takeSentences(withDeviceNote(entry.issue.ai.what_is_happening, entry.device), 2),
-      why: takeSentences(entry.issue.ai.why_it_matters, 2),
-      recommendation: takeSentences(
-        entry.recommendation?.ai.action ||
-          entry.issue.insight.relatedRecommendations[0]?.description ||
-          entry.issue.insight.rootCause,
-        2
-      ),
-      difficulty: entry.issue.insight.difficulty,
-      time: cleanCopy(entry.issue.insight.timeToFix),
-      scoreImpact: entry.scoreImpact
-    }))
-    .sort((left, right) => {
-      const priorityDelta = priorityRank(left.priority) - priorityRank(right.priority);
-      if (priorityDelta !== 0) {
-        return priorityDelta;
-      }
-
-      return right.scoreImpact - left.scoreImpact;
-    })
-    .slice(0, 6);
+  return issues.slice(0, 3).map((issue) => ({
+    priority: issue.priority === "medium" ? "high" : issue.priority,
+    difficulty: issue.difficulty,
+    time: issue.estimated_time,
+    title: issue.title,
+    action: issue.how_to_fix,
+    expected_impact: issue.why_it_matters
+  }));
 }
 
-function selectPdfRecommendations(narrative: ReportNarrative): PdfRecommendation[] {
-  const deduplicated = new Map<
-    string,
-    {
-      recommendation: ReportNarrative["recommendations"][number];
-      scoreImpact: number;
-    }
-  >();
-
-  for (const item of narrative.recommendations) {
-    if (item.insight.priority === "Low") {
-      continue;
-    }
-
-    const key = item.insight.category === "other" ? issueKey(item.ai.title) : item.insight.id;
-    const existing = deduplicated.get(key);
-
-    if (!existing) {
-      deduplicated.set(key, {
-        recommendation: item,
-        scoreImpact: item.insight.scoreImpact
-      });
-      continue;
-    }
-
-    const shouldReplace =
-      priorityRank(item.insight.priority) < priorityRank(existing.recommendation.insight.priority) ||
-      (priorityRank(item.insight.priority) ===
-        priorityRank(existing.recommendation.insight.priority) &&
-        item.insight.scoreImpact > existing.scoreImpact);
-
-    if (shouldReplace) {
-      deduplicated.set(key, {
-        recommendation: item,
-        scoreImpact: item.insight.scoreImpact
-      });
-    }
+function parseProjectedRange(value: string | null | undefined, currentScore: number) {
+  const match = value?.match(/(\d+)\D+(\d+)/);
+  if (match) {
+    return {
+      min: clampScore(Number(match[1])),
+      max: clampScore(Number(match[2]))
+    };
   }
 
-  return Array.from(deduplicated.values())
-    .map((entry) => ({
-      title: takeWords(entry.recommendation.ai.title || entry.recommendation.insight.title, 8),
-      priority: entry.recommendation.insight.priority,
-      action: takeSentences(entry.recommendation.ai.action, 2),
-      impact: takeSentences(entry.recommendation.ai.expected_impact, 2),
-      effort: entry.recommendation.ai.effort,
-      time: cleanCopy(entry.recommendation.insight.timeToFix),
-      scoreImpact: entry.scoreImpact
-    }))
-    .sort((left, right) => {
-      const priorityDelta = priorityRank(left.priority) - priorityRank(right.priority);
-      if (priorityDelta !== 0) {
-        return priorityDelta;
-      }
-
-      return right.scoreImpact - left.scoreImpact;
-    })
-    .slice(0, 2);
-}
-function issueCardHtml(issue: PdfIssue) {
-  return `
-    <article class="surface-card issue-card">
-      <div class="card-header-row">
-        ${badgeHtml(issue.priority, priorityTone(issue.priority))}
-        <div class="card-header-row__meta">
-          ${metaChipHtml(`Estimated time: ${issue.time}`)}
-          ${metaChipHtml(`Difficulty: ${difficultyLabel(issue.difficulty)}`)}
-        </div>
-      </div>
-      <h2 class="card-title">${escapeHtml(issue.title)}</h2>
-      <div class="issue-card__grid">
-        <div class="detail-block">
-          <p class="detail-block__label">What&#39;s happening</p>
-          <p class="detail-block__copy">${escapeHtml(issue.what)}</p>
-        </div>
-        <div class="detail-block">
-          <p class="detail-block__label">Why it matters</p>
-          <p class="detail-block__copy">${escapeHtml(issue.why)}</p>
-        </div>
-        <div class="detail-block">
-          <p class="detail-block__label">How to fix it</p>
-          <p class="detail-block__copy">${escapeHtml(issue.recommendation)}</p>
-        </div>
-      </div>
-    </article>
-  `;
+  return {
+    min: clampScore(currentScore + 5),
+    max: clampScore(currentScore + 12)
+  };
 }
 
-function recommendationCardHtml(recommendation: PdfRecommendation) {
-  return `
-    <article class="surface-card recommendation-card">
-      <div class="card-header-row">
-        ${badgeHtml(recommendation.priority, priorityTone(recommendation.priority))}
-        ${metaChipHtml(`${difficultyLabel(recommendation.effort)} - ${recommendation.time}`)}
-      </div>
-      <h3 class="card-title card-title--sm">${escapeHtml(recommendation.title)}</h3>
-      <div class="detail-stack">
-        <div class="detail-block detail-block--compact">
-          <p class="detail-block__label">Action</p>
-          <p class="detail-block__copy">${escapeHtml(recommendation.action)}</p>
-        </div>
-        <div class="detail-block detail-block--compact">
-          <p class="detail-block__label">Expected impact</p>
-          <p class="detail-block__copy">${escapeHtml(recommendation.impact)}</p>
-        </div>
-      </div>
-    </article>
-  `;
+function buildBusinessImpact(
+  scan: ScanResult,
+  issues: ReportContext["issues"]
+): ReportContext["business_impact"] {
+  const traffic = `SEO score is ${scan.seo_score}/100. Current search signal gaps reduce how often key pages can rank for non-brand searches.`;
+  const conversions = `Performance score is ${scan.performance_score}/100. Speed friction increases abandonment before visitors complete forms, enquiries, or purchases.`;
+  const engagement = `Accessibility is ${scan.accessibility_score}/100 and best practices are ${scan.best_practices_score}/100. Usability and trust friction reduce session depth and repeat confidence.`;
+  const callout = issues.some((issue) => issue.priority === "critical")
+    ? "The highest-value opportunity is to remove the critical blockers first, then use the remaining month to improve speed, trust, and search visibility."
+    : "This site is already functional, but the current fixes should improve discoverability, reduce drop-off, and make the experience more credible.";
+
+  return { traffic, conversions, engagement, callout };
 }
 
-function planBoxHtml(title: string, expected: string, tasks: Array<{ task: string; time: string }>) {
-  return `
-    <article class="surface-card plan-box">
-      <div class="plan-box__header">
-        <h3>${escapeHtml(title)}</h3>
-        <p>${escapeHtml(cleanCopy(expected))}</p>
-      </div>
-      <div class="plan-box__tasks">
-        ${tasks
-          .map(
-            (task) => `
-              <div class="plan-task">
-                <div class="plan-task__marker"></div>
-                <div class="plan-task__copy">
-                  <p class="plan-task__title">${escapeHtml(cleanCopy(task.task))}</p>
-                  <p class="plan-task__time">Time: ${escapeHtml(cleanCopy(task.time))}</p>
-                </div>
-              </div>
-            `
-          )
-          .join("")}
-      </div>
-    </article>
-  `;
+function buildPlan(
+  narrative: Awaited<ReturnType<typeof buildReportNarrative>>,
+  currentScore: number,
+  priorityActions: ReportContext["plan"]["priority_actions"]
+): ReportContext["plan"] {
+  const phases = narrative.overview.action_plan.slice(0, 3);
+  const fallbackTasks = [{ label: "Review the highest-impact issues and assign fixes", time: "1-2 hours" }];
+  const projected = parseProjectedRange(narrative.overview.projected_score_range, currentScore);
+
+  return {
+    week1: {
+      goal: phases[0]?.focus ?? "Quick wins to remove the most visible friction.",
+      tasks: phases[0]?.tasks.map((task) => ({ label: task.task, time: task.time })) ?? fallbackTasks
+    },
+    week2: {
+      goal: phases[1]?.focus ?? "Performance work to reduce load-time and interaction delays.",
+      tasks: phases[1]?.tasks.map((task) => ({ label: task.task, time: task.time })) ?? fallbackTasks
+    },
+    week3_4: {
+      goal: phases[2]?.focus ?? "Polish trust, SEO, and accessibility details that affect long-term value.",
+      tasks: phases[2]?.tasks.map((task) => ({ label: task.task, time: task.time })) ?? fallbackTasks
+    },
+    priority_actions: priorityActions,
+    current_score: currentScore,
+    projected_min: projected.min,
+    projected_max: projected.max
+  };
 }
 
-function measurementCardHtml(input: {
-  title: string;
-  value: string;
-  status: string;
-  summary: string;
-}) {
-  const statusTone = /excellent|good|passing/i.test(input.status)
-    ? tone(GREEN, GREEN_SOFT)
-    : /watch|okay|average/i.test(input.status)
-      ? tone(ORANGE, ORANGE_SOFT)
-      : tone(RED, RED_SOFT);
-
-  return `
-    <article class="surface-card measurement-card">
-      <div class="measurement-card__top">
-        <div class="measurement-card__title-row">
-          <span class="measurement-card__dot" style="background:${statusTone.color};"></span>
-          <p class="measurement-card__title">${escapeHtml(input.title)}</p>
-        </div>
-        ${badgeHtml(input.status, statusTone)}
-      </div>
-      <p class="measurement-card__value">${escapeHtml(cleanCopy(input.value))}</p>
-      <p class="measurement-card__summary">${escapeHtml(cleanCopy(input.summary))}</p>
-    </article>
-  `;
-}
-
-function deviceCardHtml(input: {
-  title: string;
-  score: number;
-  summary: string;
-}) {
-  const status = scoreTone(input.score);
-
-  return `
-    <article class="surface-card device-card">
-      <div class="card-header-row">
-        <p class="device-card__title">${escapeHtml(input.title)}</p>
-        ${badgeHtml(status.label, status.tone)}
-      </div>
-      <div class="device-card__circle-wrap">
-        <div class="score-circle" style="--circle-color:${status.tone.color};">${input.score}</div>
-      </div>
-      <div class="device-card__copy">
-        <p class="device-card__support">${escapeHtml(
-          input.title === "Mobile" ? "Mobile visitor experience" : "Desktop visitor experience"
-        )}</p>
-        <p class="device-card__summary">${escapeHtml(cleanCopy(input.summary))}</p>
-      </div>
-    </article>
-  `;
-}
-
-function metricRowHtml(label: string, value: string, status?: string, statusTone?: Tone) {
-  return `
-    <div class="metric-row">
-      <div class="metric-row__copy">
-        <p class="metric-row__label">${escapeHtml(label)}</p>
-        <p class="metric-row__value">${escapeHtml(value)}</p>
-      </div>
-      ${status && statusTone ? badgeHtml(status, statusTone, "pill--meta") : ""}
-    </div>
-  `;
-}
-
-function statusToneFromBoolean(value: boolean) {
-  return value ? tone(GREEN, GREEN_SOFT) : tone(RED, RED_SOFT);
-}
-
-function smallSignalCardHtml(input: {
-  title: string;
-  value: string;
-  subtitle: string;
-  tone?: Tone;
-}) {
-  return `
-    <article class="surface-card signal-card">
-      <div class="signal-card__top">
-        <p class="signal-card__title">${escapeHtml(input.title)}</p>
-        ${input.tone ? badgeHtml(input.value, input.tone, "pill--meta") : `<p class="signal-card__value">${escapeHtml(input.value)}</p>`}
-      </div>
-      <p class="signal-card__subtitle">${escapeHtml(cleanCopy(input.subtitle))}</p>
-    </article>
-  `;
-}
-
-function competitorCardHtml(input: {
-  competitorUrl: string;
-  performance: number;
-  seo: number;
-  accessibility: number;
-  bestPractices: number;
-}) {
-  const overall = Math.round(
-    (input.performance + input.seo + input.accessibility + input.bestPractices) / 4
+function buildSeoAuditContext(seoAudit?: SeoAuditRecord | null): ReportContext["seo_audit"] {
+  const actionChips: string[] = [];
+  const titleLength = seoAudit?.title_tag.length ?? 0;
+  const metaLength = seoAudit?.meta_description.length ?? 0;
+  const h1Count = seoAudit?.headings.h1_count ?? 0;
+  const openGraphComplete = Boolean(
+    seoAudit?.og_tags.title && seoAudit?.og_tags.description && seoAudit?.og_tags.image
   );
+  const canonicalStatus = seoAudit?.canonical.exists
+    ? seoAudit?.canonical.self_referencing
+      ? "self_referencing"
+      : "not_self_referencing"
+    : "missing";
 
-  return `
-    <article class="surface-card competitor-card">
-      <div class="card-header-row">
-        <p class="device-card__title">${escapeHtml(input.competitorUrl.replace(/^https?:\/\//, ""))}</p>
-        ${badgeHtml(`${overall}/100`, scoreTone(overall).tone)}
-      </div>
-      <div class="competitor-metrics">
-        ${metricRowHtml("Performance", `${input.performance}`, undefined, undefined)}
-        ${metricRowHtml("SEO", `${input.seo}`, undefined, undefined)}
-        ${metricRowHtml("Accessibility", `${input.accessibility}`, undefined, undefined)}
-        ${metricRowHtml("Best Practices", `${input.bestPractices}`, undefined, undefined)}
-      </div>
-    </article>
-  `;
+  if (!(titleLength >= 30 && titleLength <= 60)) actionChips.push("Improve title tag");
+  if (!(metaLength >= 70 && metaLength <= 160)) actionChips.push("Add a meta description");
+  if (h1Count === 0) actionChips.push("Add one main heading");
+  if ((seoAudit?.images_missing_alt ?? 0) > 0) actionChips.push("Add alt text to images");
+  if (!openGraphComplete) actionChips.push("Add Open Graph tags");
+  if (canonicalStatus !== "self_referencing") actionChips.push("Fix canonical tag");
+
+  return {
+    title_tag: {
+      value: seoAudit?.title_tag.value ?? "",
+      chars: titleLength,
+      status: titleLength >= 30 && titleLength <= 60 ? "pass" : "fail"
+    },
+    meta_description: {
+      value: seoAudit?.meta_description.value ?? "",
+      chars: metaLength,
+      status: metaLength >= 70 ? "pass" : "fail"
+    },
+    heading_structure: {
+      h1: h1Count,
+      h2: seoAudit?.headings.h2_count ?? 0,
+      h3: seoAudit?.headings.h3_count ?? 0,
+      status: h1Count > 0 ? "pass" : "fail"
+    },
+    images_missing_alt: seoAudit?.images_missing_alt ?? 0,
+    open_graph: {
+      status: seoAudit
+        ? openGraphComplete
+          ? "complete"
+          : "needs_attention"
+        : "missing"
+    },
+    canonical: {
+      status: canonicalStatus
+    },
+    action_chips: actionChips.slice(0, 6)
+  };
 }
 
-function buildHtml(input: Context, narrative: ReportNarrative, logo: string | null) {
-  const name = brandName(input);
-  const email = contactEmail(input);
-  const nextDate = nextReportDate(input);
-  const health = healthLabel(input.scan, narrative.overview);
-  const healthStatusTone = healthTone(health);
-  const overall = overallScore(input.scan);
-  const healthScore = buildHealthScore({
+function buildIndustryScore(
+  currentScore: number,
+  competitorScans?: CompetitorScanRecord[]
+) {
+  const successful = (competitorScans ?? []).filter((scan) => scan.scan_status === "success");
+  if (!successful.length) {
+    return Math.min(95, Math.max(55, currentScore - 6));
+  }
+
+  const average =
+    successful.reduce((sum, scan) => {
+      return sum + (scan.performance + scan.seo + scan.accessibility + scan.best_practices) / 4;
+    }, 0) / successful.length;
+
+  return clampScore(average);
+}
+
+function buildReportContext(
+  input: PdfRenderInput,
+  narrative: Awaited<ReturnType<typeof buildReportNarrative>>
+): ReportContext {
+  const score = overallScore(input.scan);
+  const securityBreakdown = buildHealthScore({
     scan: input.scan,
     seoAudit: input.seoAudit,
     sslCheck: input.sslCheck,
     securityHeaders: input.securityHeaders,
-    uptimeChecks: input.uptimeChecks ?? []
-  });
-  const linkHealth = buildLinkHealthSummary(input.brokenLinks);
-  const uptimeSummary = buildUptimeSummary(input.uptimeChecks ?? []);
+    uptimeChecks: input.uptimeChecks
+  }).breakdown.security;
+  const uptimeSummary = buildUptimeSummary(input.uptimeChecks);
   const cruxSummary = buildCruxSummary(input.cruxData);
-  const latestCompetitors = Array.from(
-    (input.competitorScans ?? [])
-      .filter((item) => item.scan_status === "success")
-      .reduce((map, item) => {
-        if (!map.has(item.competitor_url)) {
-          map.set(item.competitor_url, item);
+  const headerCount =
+    Number(Boolean(input.securityHeaders?.hsts)) +
+    Number(Boolean(input.securityHeaders?.csp)) +
+    Number(Boolean(input.securityHeaders?.x_frame_options)) +
+    Number(Boolean(input.securityHeaders?.referrer_policy)) +
+    Number(Boolean(input.securityHeaders?.permissions_policy)) +
+    Number(Boolean(input.securityHeaders?.x_content_type));
+  const issues = buildIssueList(narrative);
+  const priorityActions = buildPriorityActions(narrative, issues);
+  const plan = buildPlan(narrative, score, priorityActions);
+  const mobileScore = clampScore(input.scan.mobile_snapshot?.performance_score ?? input.scan.performance_score);
+  const desktopScore = clampScore(input.scan.desktop_snapshot?.performance_score ?? input.scan.performance_score);
+  const clientName = input.website.label || input.profile.full_name || input.website.url;
+  const agencyName = input.branding?.agency_name || "SitePulse";
+  const agencyEmail = process.env.FROM_EMAIL ?? input.profile.email;
+  const brandColor = input.branding?.brand_color || "#2563EB";
+  const monitoringSamples = (input.uptimeChecks ?? []).length;
+
+  return {
+    agency_name: agencyName,
+    agency_logo_url: input.branding?.logo_url ?? "",
+    agency_email: agencyEmail,
+    brand_color: brandColor,
+    client_name: clientName,
+    website_url: input.website.url,
+    report_date: formatDateTime(input.scan.scanned_at),
+    next_report_date: nextReportDate(input.scan, input.schedule, input.profile),
+    health_score: score,
+    scores: {
+      performance: clampScore(input.scan.performance_score),
+      seo: clampScore(input.scan.seo_score),
+      accessibility: clampScore(input.scan.accessibility_score),
+      best_practices: clampScore(input.scan.best_practices_score)
+    },
+    deltas: {
+      performance: input.previousScan
+        ? clampScore(input.scan.performance_score) - clampScore(input.previousScan.performance_score)
+        : 0,
+      seo: input.previousScan ? clampScore(input.scan.seo_score) - clampScore(input.previousScan.seo_score) : 0,
+      accessibility: input.previousScan
+        ? clampScore(input.scan.accessibility_score) - clampScore(input.previousScan.accessibility_score)
+        : 0,
+      best_practices: input.previousScan
+        ? clampScore(input.scan.best_practices_score) - clampScore(input.previousScan.best_practices_score)
+        : 0,
+      is_baseline: !input.previousScan
+    },
+    industry_score: buildIndustryScore(score, input.competitorScans),
+    seo_audit: buildSeoAuditContext(input.seoAudit),
+    link_health: {
+      total_links: input.brokenLinks?.total_links ?? 0,
+      broken_links: input.brokenLinks?.broken_links ?? 0,
+      redirect_chains: input.brokenLinks?.redirect_chains ?? 0
+    },
+    security: {
+      ssl_status: securityStatus(input.sslCheck),
+      ssl_days_until_expiry: input.sslCheck?.days_until_expiry ?? 0,
+      ssl_authority: input.sslCheck?.issuer ?? "Unknown issuer",
+      headers_grade: input.securityHeaders?.grade ?? "F",
+      headers_present: headerCount,
+      health_score: clampScore(securityBreakdown),
+      headers: {
+        hsts: {
+          value: input.securityHeaders?.hsts_value ?? null,
+          status: passFail(Boolean(input.securityHeaders?.hsts))
+        },
+        content_security_policy: {
+          value: input.securityHeaders?.csp_value ?? null,
+          status: passFail(Boolean(input.securityHeaders?.csp))
+        },
+        x_frame_options: {
+          value: input.securityHeaders?.x_frame_options_value ?? null,
+          status: passFail(Boolean(input.securityHeaders?.x_frame_options))
+        },
+        referrer_policy: {
+          value: input.securityHeaders?.referrer_policy_value ?? null,
+          status: passFail(Boolean(input.securityHeaders?.referrer_policy))
+        },
+        permissions_policy: {
+          value: input.securityHeaders?.permissions_policy_value ?? null,
+          status: passFail(Boolean(input.securityHeaders?.permissions_policy))
+        },
+        x_content_type_options: {
+          value: input.securityHeaders?.x_content_type_value ?? null,
+          status: passFail(Boolean(input.securityHeaders?.x_content_type))
         }
-        return map;
-      }, new Map<string, CompetitorScanRecord>())
-      .values()
-  ).slice(0, 3);
-  const summary = takeSentences(
-    `${narrative.overview.executive_sentences.join(" ")} ${narrative.overview.projected_summary}`,
-    3
-  );
-  const issues = selectPdfIssues(narrative);
-  const recommendations = selectPdfRecommendations(narrative);
-  const issuePages = issues.length > 0 ? chunk(issues, 3).filter((pageIssues) => pageIssues.length > 0) : [];
-  const businessImpactItems = [
-    {
-      title: "Traffic",
-      body:
-        input.scan.seo_score < 80
-          ? "Search visibility gaps can reduce the number of qualified visitors reaching your highest-value pages consistently."
-          : "Search signals are mostly healthy, which helps protect steady discovery and keeps valuable pages visible."
-    },
-    {
-      title: "Conversions",
-      body:
-        input.scan.performance_score < 75
-          ? "Speed and usability friction can cause visitors to leave before they enquire, book, or buy."
-          : "The current experience gives visitors a better chance of staying long enough to complete key actions."
-    },
-    {
-      title: "Engagement",
-      body:
-        input.scan.accessibility_score < 80 || input.scan.best_practices_score < 80
-          ? "Trust and usability issues can quietly lower confidence, page depth, and the quality of each visit."
-          : "A steadier, easier experience supports longer sessions, stronger trust, and better engagement."
-    }
-  ];
-  const businessImpactCards = businessImpactItems
-    .map(
-      (item) => `
-        <article class="surface-card business-card">
-          <div class="section-card__header">
-            <h2>${escapeHtml(item.title)}</h2>
-          </div>
-          <p>${escapeHtml(cleanCopy(item.body))}</p>
-        </article>
-      `
-    )
-    .join("");
-  const businessImpactSummary =
-    overall >= 85
-      ? "This website is in a strong position, but staying proactive will help protect traffic, conversion confidence, and client trust."
-      : overall >= 60
-        ? "There is meaningful upside available here. Addressing the current issues should improve how visitors discover, trust, and act on the website."
-        : "This website is carrying clear commercial risk right now. Fixing the priority issues should reduce visitor drop-off and support stronger lead generation.";
-  const scoreCards = [
-    scoreCardHtml({
-      title: "Performance",
-      supportLabel: SCORE_SUPPORT_LABELS.performance,
-      score: input.scan.performance_score,
-      summary: narrative.overview.score_summaries.performance.summary
-    }),
-    scoreCardHtml({
-      title: "SEO",
-      supportLabel: SCORE_SUPPORT_LABELS.seo,
-      score: input.scan.seo_score,
-      summary: narrative.overview.score_summaries.seo.summary
-    }),
-    scoreCardHtml({
-      title: "Accessibility",
-      supportLabel: SCORE_SUPPORT_LABELS.accessibility,
-      score: input.scan.accessibility_score,
-      summary: narrative.overview.score_summaries.accessibility.summary
-    }),
-    scoreCardHtml({
-      title: "Best Practices",
-      supportLabel: SCORE_SUPPORT_LABELS.bestPractices,
-      score: input.scan.best_practices_score,
-      summary: narrative.overview.score_summaries.best_practices.summary
-    })
-  ].join("");
-
-  const scoreChanges = [
-    {
-      label: "Performance",
-      value: input.previousScan ? input.scan.performance_score - input.previousScan.performance_score : 0
-    },
-    {
-      label: "SEO",
-      value: input.previousScan ? input.scan.seo_score - input.previousScan.seo_score : 0
-    },
-    {
-      label: "Accessibility",
-      value: input.previousScan
-        ? input.scan.accessibility_score - input.previousScan.accessibility_score
-        : 0
-    },
-    {
-      label: "Best Practices",
-      value: input.previousScan
-        ? input.scan.best_practices_score - input.previousScan.best_practices_score
-        : 0
-    }
-  ]
-    .map((item) => {
-      const isPositive = item.value > 0;
-      const isNegative = item.value < 0;
-      const changeTone = isPositive
-        ? { color: "#22C55E", background: "rgba(34,197,94,0.10)", border: "#22C55E" }
-        : isNegative
-          ? { color: "#EF4444", background: "rgba(239,68,68,0.10)", border: "#EF4444" }
-          : { color: "#94A3B8", background: "rgba(148,163,184,0.12)", border: "rgba(148,163,184,0.24)" };
-      const arrow = isPositive ? "↑" : isNegative ? "↓" : "→";
-      const formattedValue = isPositive ? `+${item.value}` : `${item.value}`;
-
-      return `
-        <div class="change-chip">
-          <p class="change-chip__label">${escapeHtml(item.label)}</p>
-          <span class="change-chip__value" style="color:${changeTone.color}; background:${changeTone.background}; border-color:${changeTone.border};">
-            ${isPositive ? "&uarr;" : isNegative ? "&darr;" : "&rarr;"} ${formattedValue}
-          </span>
-        </div>
-      `;
-    })
-    .join("");
-
-  const planBoxes = narrative.overview.action_plan
-    .slice(0, 3)
-    .map((week) =>
-      planBoxHtml(
-        `${cleanCopy(week.phase)} - ${cleanCopy(week.focus)}`,
-        week.expected_result,
-        week.tasks.slice(0, 3)
-      )
-    )
-    .join("");
-
-  const recommendationCards = recommendations.length
-    ? recommendations.map((item) => recommendationCardHtml(item)).join("")
-    : `<article class="surface-card recommendation-card"><p class="empty-copy">There are no urgent recommendations to highlight right now.</p></article>`;
-
-  const vitals = [
-    measurementCardHtml({
-      title: narrative.overview.vitals[0]?.title ?? "Page Load Speed",
-      value:
-        narrative.overview.vitals[0]?.value_label ??
-        `${((input.scan.lcp ?? 0) / 1000).toFixed(2)} seconds`,
-      status: narrative.overview.vitals[0]?.status_label ?? "Needs work",
-      summary: narrative.overview.vitals[0]?.explanation ?? ""
-    }),
-    measurementCardHtml({
-      title: narrative.overview.vitals[1]?.title ?? "Click Response",
-      value: narrative.overview.vitals[1]?.value_label ?? `${Math.round(input.scan.fid ?? 0)} ms`,
-      status: narrative.overview.vitals[1]?.status_label ?? "Needs work",
-      summary: narrative.overview.vitals[1]?.explanation ?? ""
-    }),
-    measurementCardHtml({
-      title: narrative.overview.vitals[2]?.title ?? "Visual Stability",
-      value: narrative.overview.vitals[2]?.value_label ?? `${(input.scan.cls ?? 0).toFixed(4)}`,
-      status: narrative.overview.vitals[2]?.status_label ?? "Needs work",
-      summary: narrative.overview.vitals[2]?.explanation ?? ""
-    })
-  ].join("");
-
-  const mobileScore = input.scan.mobile_snapshot?.performance_score ?? input.scan.performance_score;
-  const desktopScore = input.scan.desktop_snapshot?.performance_score ?? input.scan.performance_score;
-
-  const coverLogo = logo
-    ? `<img class="cover-logo cover-logo--white" src="${logo}" alt="${escapeHtml(name)} logo" />`
-    : `<div class="cover-wordmark">${escapeHtml(name)}</div>`;
-
-  const contactLogo = logo
-    ? `<img class="contact-logo contact-logo--white" src="${logo}" alt="${escapeHtml(name)} logo" />`
-    : `<div class="contact-wordmark">${escapeHtml(name)}</div>`;
-
-  const seoAuditSection = input.seoAudit
-    ? `
-        <section class="surface-card section-card">
-          <div class="section-card__header">
-            <h2>On-Page SEO Audit</h2>
-            <p>Quick checks from the page HTML so you can see what search engines and visitors find immediately.</p>
-          </div>
-          <div class="two-column-grid">
-            ${metricRowHtml("Title tag", `${input.seoAudit.title_tag.status} • ${input.seoAudit.title_tag.length ?? 0} chars`, input.seoAudit.title_tag.exists ? "Pass" : "Fail", statusToneFromBoolean(input.seoAudit.title_tag.exists))}
-            ${metricRowHtml("Meta description", `${input.seoAudit.meta_description.status} • ${input.seoAudit.meta_description.length ?? 0} chars`, input.seoAudit.meta_description.exists ? "Pass" : "Fail", statusToneFromBoolean(input.seoAudit.meta_description.exists))}
-            ${metricRowHtml("Heading structure", `${input.seoAudit.headings.status} • H1 ${input.seoAudit.headings.h1_count}, H2 ${input.seoAudit.headings.h2_count}, H3 ${input.seoAudit.headings.h3_count}`)}
-            ${metricRowHtml("Images missing alt text", `${input.seoAudit.images_missing_alt}`)}
-            ${metricRowHtml("Open Graph tags", input.seoAudit.og_tags.title && input.seoAudit.og_tags.description && input.seoAudit.og_tags.image ? "Complete" : "Needs attention")}
-            ${metricRowHtml("Canonical tag", input.seoAudit.canonical.status)}
-          </div>
-          ${
-            input.seoAudit.fix_suggestions.length
-              ? `<div class="tag-list">${input.seoAudit.fix_suggestions
-                  .slice(0, 4)
-                  .map((item) => badgeHtml(item.title, priorityTone(item.severity === "high" ? "High" : item.severity === "medium" ? "Medium" : "Low"), "pill--meta"))
-                  .join("")}</div>`
-              : ""
-          }
-        </section>
-      `
-    : "";
-
-  const linkHealthSection = linkHealth
-    ? `
-        <section class="surface-card section-card">
-          <div class="section-card__header">
-            <h2>Link Health</h2>
-            <p>Internal link quality from the latest weekly crawl.</p>
-          </div>
-          <div class="signal-grid">
-            ${smallSignalCardHtml({
-              title: "Total links checked",
-              value: `${linkHealth.totalLinks}`,
-              subtitle: "Internal links scanned from your website."
-            })}
-            ${smallSignalCardHtml({
-              title: "Broken links",
-              value: `${linkHealth.brokenLinks}`,
-              subtitle: linkHealth.brokenLinks ? "Broken links should be fixed to avoid frustrating visitors." : "No broken internal links were found."
-            })}
-            ${smallSignalCardHtml({
-              title: "Redirect chains",
-              value: `${linkHealth.redirectChains}`,
-              subtitle: "Long redirect paths can slow visitors down and dilute trust."
-            })}
-          </div>
-          ${
-            linkHealth.brokenUrls.length
-              ? `<div class="list-block">${linkHealth.brokenUrls
-                  .slice(0, 5)
-                  .map((item) => `<p><strong>${escapeHtml(item.status.toString())}</strong> ${escapeHtml(item.url)}</p>`)
-                  .join("")}</div>`
-              : ""
-          }
-        </section>
-      `
-    : "";
-
-  const securitySection = `
-    <section class="surface-card section-card">
-      <div class="section-card__header">
-        <h2>Security & SSL</h2>
-        <p>Certificate health and key response headers that help browsers trust your site.</p>
-      </div>
-      <div class="signal-grid">
-        ${smallSignalCardHtml({
-          title: "SSL status",
-          value: input.sslCheck
-            ? input.sslCheck.grade === "green"
-              ? "Healthy"
-              : input.sslCheck.grade === "orange"
-                ? "Renew soon"
-                : input.sslCheck.grade === "red"
-                  ? "Urgent"
-                  : "Critical"
-            : "Unknown",
-          subtitle: input.sslCheck
-            ? input.sslCheck.days_until_expiry === null
-              ? "No valid SSL expiry was detected."
-              : `${input.sslCheck.days_until_expiry} day(s) until expiry with ${input.sslCheck.issuer ?? "unknown issuer"}.`
-            : "No SSL check data is available yet.",
-          tone: input.sslCheck ? priorityTone(input.sslCheck.grade === "green" ? "Low" : input.sslCheck.grade === "orange" ? "Medium" : "Critical") : neutralTone()
-        })}
-        ${smallSignalCardHtml({
-          title: "Security headers",
-          value: input.securityHeaders?.grade ?? "N/A",
-          subtitle: input.securityHeaders
-            ? `${[
-                input.securityHeaders.hsts,
-                input.securityHeaders.csp,
-                input.securityHeaders.x_frame_options,
-                input.securityHeaders.x_content_type,
-                input.securityHeaders.referrer_policy,
-                input.securityHeaders.permissions_policy
-              ].filter(Boolean).length} of 6 headers are present.`
-            : "Header audit data is not available yet.",
-          tone: input.securityHeaders ? priorityTone(input.securityHeaders.grade === "A" ? "Low" : input.securityHeaders.grade === "B" ? "Medium" : input.securityHeaders.grade === "C" ? "High" : "Critical") : neutralTone()
-        })}
-        ${smallSignalCardHtml({
-          title: "Health score security",
-          value: `${healthScore.breakdown.security}/100`,
-          subtitle: "Combined score from SSL certificate status and security headers."
-        })}
-      </div>
-      ${
-        input.securityHeaders
-          ? `<div class="two-column-grid">
-              ${metricRowHtml("HSTS", truncateHeaderValue(input.securityHeaders.hsts_value || "Missing"), input.securityHeaders.hsts ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.hsts))}
-              ${metricRowHtml("Content Security Policy", truncateHeaderValue(input.securityHeaders.csp_value || "Missing"), input.securityHeaders.csp ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.csp))}
-              ${metricRowHtml("X-Frame-Options", truncateHeaderValue(input.securityHeaders.x_frame_options_value || "Missing"), input.securityHeaders.x_frame_options ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.x_frame_options))}
-              ${metricRowHtml("Referrer-Policy", truncateHeaderValue(input.securityHeaders.referrer_policy_value || "Missing"), input.securityHeaders.referrer_policy ? "Pass" : "Fail", statusToneFromBoolean(input.securityHeaders.referrer_policy))}
-            </div>`
-          : ""
       }
-    </section>
-  `;
-
-  const uptimeAndCruxSection = `
-    <section class="surface-card section-card">
-      <div class="section-card__header">
-        <h2>Uptime & Real User Data</h2>
-        <p>A quick view of availability plus how real visitors experience the website outside the lab.</p>
-      </div>
-      <div class="signal-grid">
-        ${smallSignalCardHtml({
-          title: "30-day uptime",
-          value:
-            uptimeSummary.percentage > 0
-              ? `${uptimeSummary.percentage}%`
-              : "Monitoring active",
-          subtitle:
-            uptimeSummary.percentage > 0
-              ? uptimeSummary.averageResponseMs !== null
-                ? `Average response time: ${uptimeSummary.averageResponseMs} ms.`
-                : "Waiting for more uptime samples to calculate response time."
-              : "First report ready in 7 days.",
-          tone:
-            uptimeSummary.percentage > 0
-              ? undefined
-              : tone(BLUE, BLUE_SOFT)
-        })}
-        ${smallSignalCardHtml({
-          title: "Recent incidents",
-          value: `${uptimeSummary.incidents.length}`,
-          subtitle: uptimeSummary.incidents.length ? "These are the most recent downtime events captured in the last 30 days." : "No downtime incidents were captured in the latest period."
-        })}
-        ${smallSignalCardHtml({
-          title: "Real-user speed",
-          value: cruxSummary ? `${cruxSummary.lcp.good}% good` : "No data",
-          subtitle: cruxSummary ? "Share of real visitors seeing good loading performance." : "CrUX data is not available for this origin yet."
-        })}
-      </div>
-      ${
-        cruxSummary
-          ? `<div class="two-column-grid">
-              ${metricRowHtml("Loading performance", `${cruxSummary.lcp.good}% good / ${cruxSummary.lcp.poor}% poor`)}
-              ${metricRowHtml("Layout stability", `${cruxSummary.cls.good}% good / ${cruxSummary.cls.poor}% poor`)}
-              ${metricRowHtml("Interaction speed", `${cruxSummary.inp.good}% good / ${cruxSummary.inp.poor}% poor`)}
-              ${metricRowHtml("Time to first byte", `${cruxSummary.ttfb.good}% good / ${cruxSummary.ttfb.poor}% poor`)}
-            </div>`
-          : ""
-      }
-    </section>
-  `;
-
-  const competitorSection = latestCompetitors.length
-    ? `
-        <section class="surface-card section-card">
-          <div class="section-card__header">
-            <h2>Competitor Comparison</h2>
-            <p>How your website currently compares against the competitor URLs you are tracking.</p>
-          </div>
-          <div class="recommendation-stack">
-            ${latestCompetitors
-              .map((item) =>
-                competitorCardHtml({
-                  competitorUrl: item.competitor_url,
-                  performance: item.performance,
-                  seo: item.seo,
-                  accessibility: item.accessibility,
-                  bestPractices: item.best_practices
-                })
-              )
-              .join("")}
-          </div>
-        </section>
-      `
-    : "";
-
-  const pages: PdfPage[] = [
-    {
-      dark: true,
-      content: `
-        <div class="cover-page">
-          <div class="cover-page__top">
-            ${coverLogo}
-            <p class="cover-page__agency">${escapeHtml(name)}</p>
-          </div>
-          <div class="cover-page__middle">
-            <p class="cover-page__kicker">Monthly Website Report</p>
-            <h1 class="cover-page__url">${escapeHtml(input.website.url)}</h1>
-            <p class="cover-page__date">${escapeHtml(formatDateTime(input.scan.scanned_at))}</p>
-          </div>
-          <div class="surface-card cover-page__meta">
-            <div>
-              <p class="meta-label">Prepared for</p>
-              <p class="meta-value">${escapeHtml(input.website.label)}</p>
-            </div>
-            <div>
-              <p class="meta-label">Prepared by</p>
-              <p class="meta-value">${escapeHtml(name)}</p>
-            </div>
-            <div>
-              <p class="meta-label">Health score</p>
-              <p class="meta-value meta-value--score">${healthScore.overall}/100</p>
-            </div>
-            <div class="meta-divider"></div>
-            <div>
-              <p class="meta-label">Next report date</p>
-              <p class="meta-value">${escapeHtml(nextDate)}</p>
-            </div>
-          </div>
-        </div>
-      `
     },
-    {
-      content: `
-        <div class="page-stack">
-          ${sectionHeaderHtml({
-            eyebrow: "Executive Summary",
-            title: "Executive Summary",
-            subtitle: "A clear, client-ready view of your latest website health report."
-          })}
-          <section class="surface-card health-card">
-            <div class="health-card__top">
-              ${badgeHtml(health, healthStatusTone, "pill--lg")}
-              <div class="health-card__score">
-                <span>Overall score</span>
-                <strong>${overall}/100</strong>
-              </div>
-            </div>
-            <p class="health-card__summary">${escapeHtml(summary)}</p>
-          </section>
-          <section class="score-grid">${scoreCards}</section>
-          <section class="executive-grid">
-            <article class="surface-card section-card">
-              <div class="section-card__header">
-                <h2>Score Changes</h2>
-                <p>${escapeHtml(cleanCopy(narrative.overview.changes_summary))}</p>
-              </div>
-              <div class="changes-grid">${scoreChanges}</div>
-            </article>
-            <article class="surface-card section-card">
-              <div class="section-card__header">
-                <h2>Industry Comparison</h2>
-                <p>Your latest scan compared against a typical industry benchmark.</p>
-              </div>
-              <div class="comparison-stack">
-                <div class="comparison-row">
-                  <span>Your site</span>
-                  <div class="progress-track"><div class="progress-fill progress-fill--brand" style="width:${overall}%;"></div></div>
-                  <strong>${overall}</strong>
-                </div>
-                <div class="comparison-row">
-                  <span>Industry</span>
-                  <div class="progress-track"><div class="progress-fill progress-fill--muted" style="width:${INDUSTRY_SCORE}%;"></div></div>
-                  <strong>${INDUSTRY_SCORE}</strong>
-                </div>
-              </div>
-            </article>
-          </section>
-        </div>
-      `
+    issues,
+    business_impact: buildBusinessImpact(input.scan, issues),
+    plan,
+    vitals: {
+      lcp: {
+        value: Number((input.scan.lcp ?? 0).toFixed(2)),
+        status:
+          (input.scan.lcp ?? 0) <= 2.5 ? "good" : (input.scan.lcp ?? 0) <= 4 ? "needs_improvement" : "slow"
+      },
+      inp: {
+        value: clampScore(input.scan.fid ?? input.scan.tbt ?? 0),
+        status:
+          (input.scan.fid ?? input.scan.tbt ?? 0) <= 200
+            ? "good"
+            : (input.scan.fid ?? input.scan.tbt ?? 0) <= 500
+              ? "needs_improvement"
+              : "poor"
+      },
+      cls: {
+        value: Number((input.scan.cls ?? 0).toFixed(4)),
+        status:
+          (input.scan.cls ?? 0) <= 0.1 ? "good" : (input.scan.cls ?? 0) <= 0.25 ? "needs_improvement" : "poor"
+      },
+      summary: narrative.overview.vitals_overall
     },
-    {
-      content: `
-        <div class="page-stack">
-          ${sectionHeaderHtml({
-            eyebrow: "Website Signals",
-            title: "SEO, Links, and Security",
-            subtitle: "Additional checks beyond performance to show how the site is structured, trusted, and maintained."
-          })}
-          ${seoAuditSection}
-          ${linkHealthSection}
-          ${securitySection}
-        </div>
-      `
+    uptime: {
+      status:
+        monitoringSamples < 7 || uptimeSummary.percentage === 0 ? "monitoring_active" : "data_available",
+      percentage:
+        monitoringSamples < 7 || uptimeSummary.percentage === 0 ? null : Number(uptimeSummary.percentage.toFixed(1)),
+      incidents: uptimeSummary.incidents.length,
+      avg_response_ms: uptimeSummary.averageResponseMs,
+      crux_available: Boolean(cruxSummary),
+      real_user_speed_pct: cruxSummary ? clampScore(cruxSummary.lcp.good) : null,
+      loading_good: cruxSummary ? clampScore(cruxSummary.lcp.good) : null,
+      loading_poor: cruxSummary ? clampScore(cruxSummary.lcp.poor) : null,
+      stability_good: cruxSummary ? clampScore(cruxSummary.cls.good) : null,
+      stability_poor: cruxSummary ? clampScore(cruxSummary.cls.poor) : null,
+      interaction_good: cruxSummary ? clampScore(cruxSummary.inp.good) : null,
+      interaction_poor: cruxSummary ? clampScore(cruxSummary.inp.poor) : null,
+      ttfb_good: cruxSummary ? clampScore(cruxSummary.ttfb.good) : null,
+      ttfb_poor: cruxSummary ? clampScore(cruxSummary.ttfb.poor) : null
     },
-    ...issuePages.map((pageIssues, index) => ({
-      content: `
-        <div class="page-stack">
-          ${sectionHeaderHtml({
-            eyebrow: index === 0 ? "Issues Found" : "More Findings",
-            title: index === 0 ? "What Needs Attention" : "Additional Findings",
-            subtitle:
-              index === 0
-                ? "These are the highest-impact issues to discuss with your client or developer next."
-                : "The next most important fixes once the urgent work is underway."
-          })}
-          ${index === 0 ? `<p class="issue-summary-line">${issueSummaryLine(issues)}</p>` : ""}
-          <section class="issue-stack">
-            ${
-              pageIssues.length
-                ? pageIssues.map((item) => issueCardHtml(item)).join("")
-                : `<article class="surface-card issue-empty-card"><p class="empty-copy">Your latest scan did not surface any urgent issues that need immediate attention.</p></article>`
-            }
-          </section>
-        </div>
-      `
-    })),
-    {
-      content: `
-        <div class="page-stack">
-          ${sectionHeaderHtml({
-            eyebrow: "Business Impact",
-            title: "How This Affects The Business",
-            subtitle: "Use this page to connect technical fixes to traffic, conversions, and engagement outcomes."
-          })}
-          <section class="business-grid">
-            ${businessImpactCards}
-          </section>
-          <section class="surface-card summary-card">
-            <p>${escapeHtml(cleanCopy(businessImpactSummary))}</p>
-          </section>
-        </div>
-      `
-    },
-    {
-      content: `
-        <div class="page-stack">
-          ${sectionHeaderHtml({
-            eyebrow: "Recommendations",
-            title: "Your 30-Day Plan",
-            subtitle: cleanCopy(narrative.overview.action_plan_intro)
-          })}
-          <section class="plan-layout">
-            <div class="plan-layout__main">
-              ${planBoxes}
-            </div>
-            <aside class="plan-layout__side">
-              <div class="side-section">
-                <div class="side-section__header">
-                  <p class="side-section__eyebrow">Priority Recommendations</p>
-                  <h2>Recommended next actions</h2>
-                </div>
-                <div class="recommendation-stack">
-                  ${recommendationCards}
-                </div>
-              </div>
-              <article class="surface-card outcome-card">
-                <div class="section-card__header">
-                  <h2>Expected Outcome</h2>
-                  <p>${escapeHtml(cleanCopy(narrative.overview.projected_summary))}</p>
-                </div>
-                <div class="outcome-inline">
-                  <div class="outcome-chip">
-                    <span>Current score</span>
-                    <strong>${overall}/100</strong>
-                  </div>
-                  <div class="outcome-inline__arrow">→</div>
-                  <div class="outcome-chip outcome-chip--expected">
-                    <span>Expected range</span>
-                    <strong>${escapeHtml(cleanCopy(narrative.overview.projected_score_range))}/100</strong>
-                  </div>
-                </div>
-              </article>
-            </aside>
-          </section>
-        </div>
-      `
-    },
-    {
-      content: `
-        <div class="page-stack">
-          ${sectionHeaderHtml({
-            eyebrow: "Google's Health Checks",
-            title: "Google's Health Checks",
-            subtitle: cleanCopy(narrative.overview.vitals_intro)
-          })}
-          <section class="measurements-grid">${vitals}</section>
-          <section class="surface-card summary-card">
-            <p>${escapeHtml(
-              takeSentences(`${narrative.overview.vitals_overall}`, 2)
-            )}</p>
-          </section>
-          ${uptimeAndCruxSection}
-        </div>
-      `
-    },
-    {
-      content: `
-        <div class="page-stack">
-          ${sectionHeaderHtml({
-            eyebrow: "Device Comparison",
-            title: "Mobile vs Desktop",
-            subtitle: cleanCopy(narrative.overview.device_intro)
-          })}
-          <section class="device-grid">
-            ${deviceCardHtml({
-              title: "Mobile",
-              score: mobileScore,
-              summary: narrative.overview.mobile_summary
-            })}
-            ${deviceCardHtml({
-              title: "Desktop",
-              score: desktopScore,
-              summary: narrative.overview.desktop_summary
-            })}
-          </section>
-          <section class="surface-card summary-card">
-            <p>${escapeHtml(cleanCopy(narrative.overview.device_tip))}</p>
-          </section>
-          ${competitorSection}
-        </div>
-      `
-    },
-    {
-      dark: true,
-      content: `
-        <div class="contact-page">
-          ${contactLogo}
-          <h1>Thank you for choosing ${escapeHtml(name)}</h1>
-          <div class="contact-divider"></div>
-          <p class="contact-page__prompt">Questions about this report?</p>
-          <a class="contact-page__email" href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>
-          <div class="contact-divider"></div>
-          <p class="contact-page__prompt">Your next report will be delivered:</p>
-          <p class="contact-page__date">${escapeHtml(nextDate)}</p>
-          <div class="contact-divider"></div>
-      <p class="contact-page__note">Report generated by ${escapeHtml(name)} using SitePulse's client reporting system</p>
-        </div>
-      `
-    }
-  ];
-
-  const filteredPages = pages.filter((page) => hasRenderablePageContent(page.content));
-  const totalPages = filteredPages.length;
-  const css = `
-    @page { size: A4; margin: 0; }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      padding: 0;
-      font-family: Inter, Manrope, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: ${SLATE_950};
-      background: ${SURFACE};
-      -webkit-font-smoothing: antialiased;
-    }
-    body {
-      font-size: 13px;
-      line-height: 1.6;
-    }
-    p, h1, h2, h3, h4, span, strong {
-      max-width: 100%;
-      overflow-wrap: break-word;
-      word-break: normal;
-    }
-    .page {
-      width: 210mm;
-      height: 297mm;
-      min-height: 297mm;
-      max-height: 297mm;
-      padding: 17mm 17mm 14mm;
-      display: flex;
-      flex-direction: column;
-      page-break-after: always;
-      background: ${SURFACE};
-      overflow: hidden;
-    }
-    .page:last-child {
-      page-break-after: auto;
-    }
-    .page--dark {
-      background: ${NAVY};
-      color: #F8FAFC;
-    }
-    .page-content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-      min-width: 0;
-      min-height: 0;
-    }
-    .page-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-      min-width: 0;
-      min-height: 0;
-    }
-    .surface-card {
-      min-width: 0;
-      border-radius: 22px;
-      border: 1px solid ${BORDER};
-      background: ${SURFACE};
-      box-shadow: ${SHADOW};
-      padding: 24px;
-      overflow: hidden;
-      break-inside: avoid;
-    }
-    .section-header {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin: 0;
-    }
-    .section-header__eyebrow {
-      margin: 0;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: ${BLUE};
-    }
-    .section-header h1 {
-      margin: 0;
-      font-size: 28px;
-      line-height: 1.18;
-      color: ${SLATE_950};
-    }
-    .section-header__subtitle {
-      margin: 0;
-      font-size: 14px;
-      line-height: 1.7;
-      color: ${SLATE_600};
-    }
-    .issue-summary-line {
-      margin: -4px 0 0;
-      font-size: 13px;
-      line-height: 1.6;
-      color: ${SLATE_700};
-    }
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: fit-content;
-      min-width: 74px;
-      min-height: 30px;
-      padding: 6px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--pill-border);
-      background: var(--pill-bg);
-      color: var(--pill-color);
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-    .pill--lg {
-      min-height: 36px;
-      padding: 9px 18px;
-      font-size: 12px;
-      letter-spacing: 0.12em;
-    }
-    .pill--meta {
-      font-size: 10px;
-      letter-spacing: 0.06em;
-      text-transform: none;
-      font-weight: 600;
-    }
-    .card-header-row {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .card-header-row__meta {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-    .card-title {
-      margin: 14px 0 0;
-      font-size: 20px;
-      line-height: 1.28;
-      color: ${SLATE_950};
-    }
-    .card-title--sm {
-      font-size: 18px;
-      margin-top: 12px;
-    }
-    .section-card__header {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    .section-card__header h2,
-    .side-section__header h2,
-    .plan-box__header h3 {
-      margin: 0;
-      font-size: 18px;
-      line-height: 1.25;
-      color: ${SLATE_950};
-    }
-    .section-card__header p,
-    .side-section__header p,
-    .plan-box__header p,
-    .summary-card p,
-    .empty-copy {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.7;
-      color: ${SLATE_700};
-    }
-    .health-card {
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-    }
-    .health-card__top {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: start;
-      gap: 18px;
-    }
-    .health-card__score {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 4px;
-      text-align: right;
-    }
-    .health-card__score span {
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: ${SLATE_600};
-      white-space: nowrap;
-      overflow-wrap: normal;
-      word-break: keep-all;
-    }
-    .health-card__score strong {
-      font-size: 34px;
-      font-weight: 800;
-      letter-spacing: -0.04em;
-      line-height: 1;
-      color: ${SLATE_950};
-      white-space: nowrap;
-      overflow-wrap: normal;
-      word-break: keep-all;
-    }
-    .health-card__summary {
-      margin: 0;
-      font-size: 14px;
-      line-height: 1.78;
-      color: ${SLATE_700};
-    }
-    .score-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 16px;
-    }
-    .score-card {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      align-items: stretch;
-      text-align: left;
-    }
-    .score-card__top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .score-card__eyebrow {
-      margin: 0;
-      font-size: 12px;
-      line-height: 1.4;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: ${SLATE_600};
-    }
-    .score-card__circle-wrap,
-    .device-card__circle-wrap {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 2px 0;
-    }
-    .score-circle {
-      width: 88px;
-      height: 88px;
-      border-radius: 50%;
-      border: 6px solid var(--circle-color);
-      color: var(--circle-color);
-      background: ${SURFACE};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 28px;
-      font-weight: 800;
-      line-height: 1;
-      flex-shrink: 0;
-      white-space: nowrap;
-    }
-    .score-card__copy,
-    .device-card__copy {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      align-items: center;
-      text-align: center;
-    }
-    .score-card__support,
-    .device-card__support {
-      margin: 0;
-      font-size: 13px;
-      font-weight: 700;
-      color: ${SLATE_900};
-    }
-    .score-card__summary,
-    .device-card__summary,
-    .measurement-card__summary {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.7;
-      color: ${SLATE_700};
-    }
-    .executive-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-      gap: 16px;
-    }
-    .changes-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-    .change-chip {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      min-width: 0;
-      padding: 14px 16px;
-      border-radius: 16px;
-      border: 1px solid ${BORDER};
-      background: ${SURFACE_SOFT};
-    }
-    .change-chip__label {
-      margin: 0;
-      font-size: 12px;
-      font-weight: 600;
-      color: ${SLATE_700};
-    }
-    .change-chip__value {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 28px;
-      min-width: 74px;
-      padding: 4px 12px;
-      border-radius: 999px;
-      border: 1px solid;
-      font-size: 12px;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-    .comparison-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .comparison-row {
-      display: grid;
-      grid-template-columns: 76px minmax(0, 1fr) 40px;
-      align-items: center;
-      gap: 14px;
-      font-size: 13px;
-      color: ${SLATE_700};
-    }
-    .comparison-row strong {
-      text-align: right;
-      color: ${SLATE_950};
-      white-space: nowrap;
-    }
-    .progress-track {
-      height: 14px;
-      border-radius: 999px;
-      background: #E2E8F0;
-      overflow: hidden;
-      border: 1px solid rgba(148,163,184,0.18);
-    }
-    .progress-fill {
-      height: 100%;
-      border-radius: inherit;
-    }
-    .progress-fill--brand {
-      background: linear-gradient(90deg, ${BLUE}, #60A5FA);
-    }
-    .progress-fill--muted {
-      background: linear-gradient(90deg, ${SLATE_500}, ${SLATE_300});
-    }
-    .issue-stack,
-    .recommendation-stack,
-    .plan-layout__main {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      min-width: 0;
-    }
-    .issue-card__grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px 16px;
-      margin-top: 16px;
-    }
-    .detail-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-top: 14px;
-    }
-    .detail-block {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      min-width: 0;
-      padding: 14px 16px;
-      border-radius: 16px;
-      border: 1px solid ${BORDER};
-      background: ${SURFACE_SOFT};
-    }
-    .detail-block--compact {
-      padding: 13px 14px;
-    }
-    .detail-block__label {
-      margin: 0;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: ${SLATE_600};
-    }
-    .detail-block__copy {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.65;
-      color: ${SLATE_700};
-    }
-    .issue-empty-card {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 150px;
-      text-align: center;
-    }
-    .plan-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.95fr);
-      gap: 18px;
-      align-items: start;
-    }
-    .plan-layout__side {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      min-width: 0;
-    }
-    .side-section {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      min-width: 0;
-    }
-    .side-section__eyebrow {
-      margin: 0;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: ${BLUE};
-    }
-    .plan-box {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .plan-box__tasks {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .plan-task {
-      display: grid;
-      grid-template-columns: 14px minmax(0, 1fr);
-      gap: 10px;
-      align-items: start;
-    }
-    .plan-task__marker {
-      width: 10px;
-      height: 10px;
-      margin-top: 5px;
-      border-radius: 999px;
-      background: ${BLUE};
-      box-shadow: 0 0 0 4px ${BLUE_SOFT};
-    }
-    .plan-task__copy {
-      min-width: 0;
-    }
-    .plan-task__title,
-    .plan-task__time {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.6;
-    }
-    .plan-task__title {
-      font-weight: 600;
-      color: ${SLATE_900};
-    }
-    .plan-task__time {
-      color: ${SLATE_600};
-    }
-    .recommendation-card {
-      padding: 20px;
-    }
-    .outcome-card {
-      background: ${SURFACE_TINT};
-      border-color: rgba(37,99,235,0.18);
-    }
-    .outcome-inline {
-      display: grid;
-      grid-template-columns: minmax(160px, 1fr) auto minmax(180px, 1.1fr);
-      align-items: center;
-      gap: 12px;
-      margin-top: 16px;
-    }
-    .outcome-chip {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      min-width: 150px;
-      padding: 14px 16px;
-      border-radius: 16px;
-      border: 1px solid rgba(37,99,235,0.14);
-      background: rgba(255,255,255,0.72);
-    }
-    .outcome-chip--expected {
-      background: rgba(219,234,254,0.7);
-    }
-    .outcome-chip span {
-      font-size: 11px;
-      letter-spacing: 0.10em;
-      text-transform: uppercase;
-      color: ${SLATE_600};
-      white-space: nowrap;
-      overflow-wrap: normal;
-      word-break: keep-all;
-    }
-    .outcome-chip strong {
-      font-size: 28px;
-      line-height: 1.1;
-      color: ${SLATE_950};
-      white-space: nowrap;
-      overflow-wrap: normal;
-      word-break: keep-all;
-    }
-    .outcome-inline__arrow {
-      font-size: 24px;
-      font-weight: 700;
-      color: ${SLATE_600};
-      white-space: nowrap;
-    }
-    .measurements-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 16px;
-    }
-    .measurement-card {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      min-height: 0;
-    }
-    .measurement-card__top {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      align-items: flex-start;
-    }
-    .measurement-card__title-row {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-    .measurement-card__dot {
-      width: 10px;
-      height: 10px;
-      flex-shrink: 0;
-      border-radius: 999px;
-      box-shadow: 0 0 0 5px rgba(148,163,184,0.14);
-    }
-    .measurement-card__title {
-      margin: 0;
-      font-size: 16px;
-      line-height: 1.35;
-      font-weight: 700;
-      color: ${SLATE_950};
-    }
-    .measurement-card__value {
-      margin: 0;
-      font-size: 28px;
-      line-height: 1;
-      font-weight: 800;
-      color: ${SLATE_950};
-      white-space: nowrap;
-      overflow-wrap: normal;
-      word-break: keep-all;
-    }
-    .summary-card {
-      background: ${SURFACE_TINT};
-      border-color: rgba(37,99,235,0.18);
-    }
-    .summary-card p {
-      color: #1E40AF;
-    }
-    .business-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 18px;
-    }
-    .business-card {
-      padding: 22px;
-    }
-    .business-card p {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.75;
-      color: ${SLATE_700};
-    }
-    .device-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 18px;
-    }
-    .device-card {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      min-height: 0;
-    }
-    .device-card__title {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 700;
-      color: ${SLATE_950};
-    }
-    .signal-grid,
-    .two-column-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-    }
-    .signal-card {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      padding: 20px;
-    }
-    .signal-card__top {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .signal-card__title,
-    .metric-row__label {
-      margin: 0;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: ${SLATE_600};
-    }
-    .signal-card__value,
-    .metric-row__value {
-      margin: 6px 0 0;
-      font-size: 24px;
-      line-height: 1.1;
-      font-weight: 800;
-      color: ${SLATE_950};
-      white-space: nowrap;
-      overflow-wrap: normal;
-      word-break: keep-all;
-    }
-    .signal-card__subtitle {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.65;
-      color: ${SLATE_700};
-    }
-    .metric-row {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      min-width: 0;
-      padding: 14px 16px;
-      border-radius: 16px;
-      border: 1px solid ${BORDER};
-      background: ${SURFACE_SOFT};
-    }
-    .metric-row__copy {
-      min-width: 0;
-    }
-    .metric-row__value {
-      font-size: 14px;
-      font-weight: 600;
-      line-height: 1.55;
-      color: ${SLATE_900};
-    }
-    .tag-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 16px;
-    }
-    .list-block {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 16px;
-      padding: 14px 16px;
-      border-radius: 16px;
-      border: 1px solid ${BORDER};
-      background: ${SURFACE_SOFT};
-    }
-    .list-block p {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.65;
-      color: ${SLATE_700};
-    }
-    .competitor-card {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .competitor-metrics {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-    .page-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      margin-top: auto;
-      padding-top: 12px;
-      border-top: 1px solid ${BORDER};
-      font-size: 11px;
-      color: ${SLATE_600};
-    }
-    .page-footer--dark {
-      color: rgba(241,245,249,0.82);
-      border-top-color: rgba(255,255,255,0.14);
-    }
-    .page-footer__left,
-    .page-footer__right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-    .page-footer__right {
-      margin-left: auto;
-    }
-    .footer-logo,
-    .contact-logo,
-    .cover-logo {
-      display: block;
-      object-fit: contain;
-    }
-    .footer-logo {
-      width: 22px;
-      height: 22px;
-    }
-    .contact-logo,
-    .cover-logo {
-      width: 92px;
-      height: 92px;
-    }
-    .footer-logo--white,
-    .contact-logo--white,
-    .cover-logo--white {
-      filter: brightness(0) invert(1);
-    }
-    .footer-wordmark,
-    .cover-wordmark,
-    .contact-wordmark {
-      font-weight: 700;
-      letter-spacing: 0.03em;
-    }
-    .cover-page,
-    .contact-page {
-      display: flex;
-      flex: 1;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      min-width: 0;
-    }
-    .cover-page {
-      justify-content: space-between;
-      padding: 4mm 0 1mm;
-    }
-    .cover-page__top {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 20px;
-    }
-    .cover-page__agency {
-      margin: 0;
-      font-size: 18px;
-      letter-spacing: 0.04em;
-      color: #F8FAFC;
-    }
-    .cover-page__middle {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      align-items: center;
-      max-width: 140mm;
-    }
-    .cover-page__kicker {
-      margin: 0;
-      color: #E2E8F0;
-      font-size: 28px;
-      font-weight: 300;
-    }
-    .cover-page__url {
-      margin: 0;
-      font-size: 19px;
-      line-height: 1.45;
-      color: #60A5FA;
-      font-weight: 700;
-    }
-    .cover-page__date {
-      margin: 0;
-      font-size: 14px;
-      color: #94A3B8;
-    }
-    .cover-page__meta {
-      width: 100%;
-      text-align: left;
-      background: rgba(255,255,255,0.97);
-      box-shadow: none;
-    }
-    .meta-label {
-      margin: 0;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: ${SLATE_600};
-    }
-    .meta-value {
-      margin: 6px 0 0;
-      font-size: 16px;
-      line-height: 1.45;
-      font-weight: 600;
-      color: ${SLATE_950};
-    }
-    .meta-value--score {
-      font-size: 28px;
-      line-height: 1.1;
-      white-space: nowrap;
-      overflow-wrap: normal;
-      word-break: keep-all;
-    }
-    .meta-divider,
-    .contact-divider {
-      width: 100%;
-      height: 1px;
-      margin: 18px 0;
-      background: rgba(148,163,184,0.28);
-    }
-    .contact-page {
-      gap: 18px;
-    }
-    .contact-page h1 {
-      margin: 0;
-      font-size: 30px;
-      line-height: 1.24;
-      color: #F8FAFC;
-      max-width: 140mm;
-    }
-    .contact-page__prompt {
-      margin: 0;
-      font-size: 16px;
-      color: #CBD5E1;
-    }
-    .contact-page__email {
-      color: #60A5FA;
-      font-size: 26px;
-      font-weight: 700;
-      text-decoration: none;
-      line-height: 1.3;
-    }
-    .contact-page__date {
-      margin: 0;
-      font-size: 28px;
-      font-weight: 700;
-      color: #60A5FA;
-    }
-    .contact-page__note {
-      margin: 0;
-      font-size: 12px;
-      color: #CBD5E1;
-    }
-  `;
-
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><style>${css}</style></head><body>${filteredPages
-    .map(
-      (page, index) => `
-        <section class="page ${page.dark ? "page--dark" : ""}">
-          <div class="page-content">${page.content}</div>
-          ${footerHtml(index + 1, totalPages, name, email, logo, page.dark)}
-        </section>
-      `
-    )
-    .join("")}</body></html>`;
-
-  return html
-    .replace(/â†‘/g, "&uarr;")
-    .replace(/â†“/g, "&darr;")
-    .replace(/â†’/g, "&rarr;")
-    .replace(/â€¢/g, "-");
+    devices: {
+      mobile: {
+        score: mobileScore,
+        status: statusFromScore(mobileScore)
+      },
+      desktop: {
+        score: desktopScore,
+        status: statusFromScore(desktopScore)
+      },
+      callout:
+        mobileScore + 8 < desktopScore
+          ? "Prioritize mobile first. The largest current gap is on smaller screens, where visitor patience is lowest."
+          : desktopScore + 8 < mobileScore
+            ? "Desktop needs more attention than mobile right now, especially for research-heavy sessions."
+            : "Mobile and desktop are performing in a similar range, so focus first on the shared highest-impact fixes."
+    }
+  };
 }
 
-export async function renderAiReportPdf(input: Context) {
+export async function renderAiReportPdf(input: PdfRenderInput): Promise<Buffer> {
   const narrative = await buildReportNarrative({
     website: input.website,
     scan: input.scan,
@@ -2267,15 +450,13 @@ export async function renderAiReportPdf(input: Context) {
     branding: input.branding ?? null,
     profile: input.profile
   });
-  const logo = input.branding?.logo_url
-    ? await fetchImageAsDataUrl(input.branding.logo_url).catch(() => null)
-    : null;
-  const html = buildHtml(input, narrative, logo);
-
-  const browser = await launchPdfBrowser();
+  const context = buildReportContext(input, narrative);
+  const html = renderReportHtml(context);
+  const browser = await getBrowser();
 
   try {
     const page = await browser.newPage();
+
     await page.setViewport({ width: 1200, height: 1697, deviceScaleFactor: 2 });
     await page.setContent(html, { waitUntil: "networkidle0" });
     await page.emulateMediaType("screen");
@@ -2286,13 +467,14 @@ export async function renderAiReportPdf(input: Context) {
       margin: { top: "0", right: "0", bottom: "0", left: "0" }
     });
 
+    await page.close();
     return Buffer.from(pdf);
   } finally {
     await browser.close();
   }
 }
 
-async function launchPdfBrowser() {
+async function getBrowser() {
   const launchArgs = ["--no-sandbox", "--disable-setuid-sandbox"];
   const useServerlessChromium =
     process.env.VERCEL === "1" ||
