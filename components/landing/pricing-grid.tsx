@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 const plans: Array<{
   name: string;
   amount: string;
+  yearlyAmount: string;
   badge: string;
   subtitle: string;
   compactSubtitle: string;
@@ -22,6 +23,7 @@ const plans: Array<{
   {
     name: "Starter",
     amount: "$0",
+    yearlyAmount: "$0",
     badge: "For testing value",
     subtitle: "For freelancers testing whether fast audits can open better client conversations.",
     compactSubtitle: "For freelancers validating whether fast audits can open better client conversations.",
@@ -34,6 +36,7 @@ const plans: Array<{
   {
     name: "Growth",
     amount: "$49",
+    yearlyAmount: "$470",
     badge: "Most popular",
     subtitle: "For agencies managing multiple clients and turning website reviews into a repeatable sales and retention process.",
     compactSubtitle: "For agencies turning website reviews into a repeatable sales and retention system.",
@@ -46,6 +49,7 @@ const plans: Array<{
   {
     name: "Pro",
     amount: "$149",
+    yearlyAmount: "$1,430",
     badge: "For serious scale",
     subtitle: "For agencies that want SitePulse to feel like a premium client-delivery system inside their own service stack.",
     compactSubtitle: "For agencies that want a premium client-delivery system inside their own service stack.",
@@ -97,6 +101,25 @@ export function PricingGrid({ compact = false }: { compact?: boolean }) {
                 /month
               </span>
             </div>
+            <p
+              className={cn(
+                compact ? "mt-1 text-[13px] leading-6" : "mt-1.5 text-[14px] leading-6",
+                plan.theme === "dark" ? "text-slate-600 dark:text-slate-300" : "text-slate-500"
+              )}
+            >
+              {plan.yearlyAmount} / year
+              {plan.name !== "Starter" ? " (Save 20%)" : ""}
+            </p>
+            {plan.name !== "Starter" ? (
+              <p
+                className={cn(
+                  compact ? "mt-1 text-[12px] leading-5" : "mt-1.5 text-[13px] leading-6",
+                  plan.theme === "dark" ? "text-slate-600 dark:text-slate-300" : "text-slate-500"
+                )}
+              >
+                14-day free trial included on paid plans
+              </p>
+            ) : null}
 
             <div className={compact ? "mt-3" : "mt-3.5"}>
               <p className={cn("font-semibold leading-tight", compact ? "text-[1.6rem]" : "text-[1.9rem]")}>{plan.name}</p>

@@ -1,6 +1,15 @@
 export type PlanKey = "free" | "starter" | "agency";
+export type BillingCycle = "monthly" | "yearly";
 export type ScanFrequency = "daily" | "weekly" | "monthly";
 export type Severity = "low" | "medium" | "high";
+export type SubscriptionStatus =
+  | "inactive"
+  | "approval_pending"
+  | "trialing"
+  | "active"
+  | "cancelled"
+  | "suspended"
+  | "payment_denied";
 export type NotificationType =
   | "score_drop"
   | "critical_score"
@@ -23,6 +32,14 @@ export interface UserProfile {
   plan: PlanKey;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  paypal_subscription_id: string | null;
+  paypal_plan_id: string | null;
+  paypal_payer_id: string | null;
+  billing_cycle: BillingCycle | null;
+  subscription_price: number | null;
+  subscription_status: SubscriptionStatus | null;
+  next_billing_date: string | null;
+  trial_end_date: string | null;
   email_report_frequency: ScanFrequency;
   email_reports_enabled: boolean;
   email_notifications_enabled: boolean;

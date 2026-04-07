@@ -18,6 +18,22 @@ begin
     create type public.severity_level as enum ('low', 'medium', 'high');
   end if;
 
+  if not exists (select 1 from pg_type where typname = 'billing_cycle') then
+    create type public.billing_cycle as enum ('monthly', 'yearly');
+  end if;
+
+  if not exists (select 1 from pg_type where typname = 'subscription_status') then
+    create type public.subscription_status as enum (
+      'inactive',
+      'approval_pending',
+      'trialing',
+      'active',
+      'cancelled',
+      'suspended',
+      'payment_denied'
+    );
+  end if;
+
   if not exists (select 1 from pg_type where typname = 'notification_type') then
     create type public.notification_type as enum ('score_drop', 'critical_score', 'scan_failure', 'report_ready', 'accessibility_regression');
   end if;
@@ -61,6 +77,14 @@ create table if not exists public.users (
   plan public.plan_tier not null default 'free',
   stripe_customer_id text,
   stripe_subscription_id text,
+  paypal_subscription_id text,
+  paypal_plan_id text,
+  paypal_payer_id text,
+  billing_cycle public.billing_cycle,
+  subscription_price integer,
+  subscription_status public.subscription_status default 'inactive',
+  next_billing_date timestamptz,
+  trial_end_date timestamptz,
   email_report_frequency public.scan_frequency not null default 'weekly',
   email_reports_enabled boolean not null default false,
   email_notifications_enabled boolean not null default false,
@@ -283,7 +307,16 @@ create table if not exists public.competitor_scans (
 );
 
 alter table public.users add column if not exists uptimerobot_api_key text;
+alter table public.users add column if not exists paypal_subscription_id text;
+alter table public.users add column if not exists paypal_plan_id text;
+alter table public.users add column if not exists paypal_payer_id text;
+alter table public.users add column if not exists billing_cycle public.billing_cycle;
+alter table public.users add column if not exists subscription_price integer;
+alter table public.users add column if not exists subscription_status public.subscription_status;
+alter table public.users add column if not exists next_billing_date timestamptz;
+alter table public.users add column if not exists trial_end_date timestamptz;
 alter table public.websites add column if not exists competitor_urls jsonb not null default '[]'::jsonb;
+alter table public.users alter column subscription_status set default 'inactive';
 
 alter table public.websites
   drop constraint if exists websites_competitor_urls_is_array;

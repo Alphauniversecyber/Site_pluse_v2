@@ -101,6 +101,19 @@ export const checkoutSchema = z.object({
   plan: z.enum(["starter", "agency"])
 });
 
+export const paypalSubscribeSchema = z.object({
+  plan: z.enum(["starter", "agency"]),
+  billingCycle: z.enum(["monthly", "yearly"])
+});
+
+export const paypalConfirmSchema = z.object({
+  subscriptionId: z.string().trim().min(3, "Subscription id is required.")
+});
+
+export const paypalCancelSchema = z.object({
+  reason: z.string().trim().max(120).optional()
+});
+
 export const settingsSchema = z.object({
   full_name: z.string().trim().min(2, "Full name is required."),
   email: z.string().email(),
