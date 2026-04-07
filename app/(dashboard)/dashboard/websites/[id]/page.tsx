@@ -30,12 +30,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type {
+  BrokenLinkRecord,
   CompetitorScanRecord,
   CruxDataRecord,
   PlainLanguageDifficulty,
   ScanResult,
   SecurityHeadersRecord,
   Severity,
+  SeoAuditRecord,
   Website,
   WebsiteScanPlainEnglish
 } from "@/types";
@@ -75,6 +77,10 @@ function statusFromBoolean(value: boolean) {
   return value ? "Pass" : "Fail";
 }
 
+function seoStatusPass(status: string | null | undefined) {
+  return (status ?? "").trim().toLowerCase() === "good";
+}
+
 function cleanRawText(text: string, maxLength = 150) {
   const cleaned = text
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
@@ -111,6 +117,78 @@ function compactDisplayUrl(value: string, maxLength = 56) {
   } catch {
     return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
   }
+}
+
+function normalizeSeoAuditRecord(seoAudit: Website["seo_audit"] | null): SeoAuditRecord | null {
+  if (!seoAudit) {
+    return null;
+  }
+
+  return {
+    ...seoAudit,
+    title_tag: {
+      exists: Boolean(seoAudit.title_tag?.exists),
+      length: seoAudit.title_tag?.length ?? 0,
+      status: seoAudit.title_tag?.status ?? (seoAudit.title_tag?.exists ? "Detected" : "Missing"),
+      value: seoAudit.title_tag?.value ?? null
+    },
+    meta_description: {
+      exists: Boolean(seoAudit.meta_description?.exists),
+      length: seoAudit.meta_description?.length ?? 0,
+      status:
+        seoAudit.meta_description?.status ??
+        (seoAudit.meta_description?.exists ? "Detected" : "Missing"),
+      value: seoAudit.meta_description?.value ?? null
+    },
+    headings: {
+      h1_count: seoAudit.headings?.h1_count ?? 0,
+      h2_count: seoAudit.headings?.h2_count ?? 0,
+      h3_count: seoAudit.headings?.h3_count ?? 0,
+      status: seoAudit.headings?.status ?? "Missing",
+      outline: Array.isArray(seoAudit.headings?.outline) ? seoAudit.headings.outline : []
+    },
+    images_missing_alt: seoAudit.images_missing_alt ?? 0,
+    images_missing_alt_urls: Array.isArray(seoAudit.images_missing_alt_urls)
+      ? seoAudit.images_missing_alt_urls
+      : [],
+    og_tags: {
+      title: Boolean(seoAudit.og_tags?.title),
+      description: Boolean(seoAudit.og_tags?.description),
+      image: Boolean(seoAudit.og_tags?.image),
+      card: Boolean(seoAudit.og_tags?.card)
+    },
+    twitter_tags: {
+      title: Boolean(seoAudit.twitter_tags?.title),
+      description: Boolean(seoAudit.twitter_tags?.description),
+      image: Boolean(seoAudit.twitter_tags?.image),
+      card: Boolean(seoAudit.twitter_tags?.card)
+    },
+    canonical: {
+      exists: Boolean(seoAudit.canonical?.exists),
+      href: seoAudit.canonical?.href ?? null,
+      self_referencing: Boolean(seoAudit.canonical?.self_referencing),
+      status: seoAudit.canonical?.status ?? "Missing"
+    },
+    schema_present: Boolean(seoAudit.schema_present),
+    schema_types: Array.isArray(seoAudit.schema_types) ? seoAudit.schema_types : [],
+    fix_suggestions: Array.isArray(seoAudit.fix_suggestions) ? seoAudit.fix_suggestions : []
+  };
+}
+
+function normalizeBrokenLinksRecord(brokenLinks: Website["broken_links"] | null): BrokenLinkRecord | null {
+  if (!brokenLinks) {
+    return null;
+  }
+
+  return {
+    ...brokenLinks,
+    total_links: brokenLinks.total_links ?? 0,
+    working_links: brokenLinks.working_links ?? 0,
+    broken_links: brokenLinks.broken_links ?? 0,
+    redirect_chains: brokenLinks.redirect_chains ?? 0,
+    broken_urls: Array.isArray(brokenLinks.broken_urls) ? brokenLinks.broken_urls : [],
+    redirect_urls: Array.isArray(brokenLinks.redirect_urls) ? brokenLinks.redirect_urls : []
+  };
 }
 
 function getCoreVitalStatus(metric: "lcp" | "fid" | "cls" | "tbt", value: number | null | undefined) {
@@ -448,17 +526,17 @@ function WebsiteHealthSignalsCard(input: {
                     {
                       label: "Title tag",
                       value: `${seoAudit.title_tag.status} / ${seoAudit.title_tag.length ?? 0} chars`,
-                      pass: seoAudit.title_tag.exists
+                      pass: seoStatusPass(seoAudit.title_tag.status)
                     },
                     {
                       label: "Meta description",
                       value: `${seoAudit.meta_description.status} / ${seoAudit.meta_description.length ?? 0} chars`,
-                      pass: seoAudit.meta_description.exists
+                      pass: seoStatusPass(seoAudit.meta_description.status)
                     },
                     {
                       label: "Headings",
                       value: `${seoAudit.headings.status} / H1 ${seoAudit.headings.h1_count}, H2 ${seoAudit.headings.h2_count}, H3 ${seoAudit.headings.h3_count}`,
-                      pass: seoAudit.headings.status === "Good"
+                      pass: seoStatusPass(seoAudit.headings.status)
                     },
                     {
                       label: "Canonical",
@@ -767,11 +845,11 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const scoreDelta =
     currentScan && previousScan ? currentScan.performance_score - previousScan.performance_score : null;
   const healthScore = data?.health_score ?? null;
-  const seoAudit = data?.seo_audit ?? null;
+  const seoAudit = normalizeSeoAuditRecord(data?.seo_audit ?? null);
   const sslCheck = data?.ssl_check ?? null;
   const securityHeaders = data?.security_headers ?? null;
   const cruxData = data?.crux_data ?? null;
-  const brokenLinks = data?.broken_links ?? null;
+  const brokenLinks = normalizeBrokenLinksRecord(data?.broken_links ?? null);
   const uptimeSummary = buildUptimeSummary(data?.uptime_checks ?? []);
   const competitorEntries = latestCompetitorEntries(data?.competitor_scans ?? []);
   const businessImpact = buildSiteBusinessImpact(currentScan ?? null);

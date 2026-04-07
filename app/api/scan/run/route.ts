@@ -29,7 +29,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await executeWebsiteScan(parsed.data.websiteId);
+    const result = await executeWebsiteScan(parsed.data.websiteId, {
+      forceHealthSignals: true
+    });
     return apiSuccess(result);
   } catch (error) {
     return apiError(getFriendlyScanFailureMessage(error instanceof Error ? error.message : "Scan failed."), 500);

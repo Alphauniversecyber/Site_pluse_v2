@@ -370,10 +370,25 @@ export function LinkHealthPanel({ brokenLinks, websiteUrl }: LinkHealthPanelProp
   const [sortBy, setSortBy] = useState("impact");
   const [page, setPage] = useState(1);
   const [selectedIssue, setSelectedIssue] = useState<LinkIssueRow | null>(null);
+  const safeRecord = useMemo(
+    () =>
+      brokenLinks
+        ? {
+            ...brokenLinks,
+            total_links: brokenLinks.total_links ?? 0,
+            working_links: brokenLinks.working_links ?? 0,
+            broken_links: brokenLinks.broken_links ?? 0,
+            redirect_chains: brokenLinks.redirect_chains ?? 0,
+            broken_urls: Array.isArray(brokenLinks.broken_urls) ? brokenLinks.broken_urls : [],
+            redirect_urls: Array.isArray(brokenLinks.redirect_urls) ? brokenLinks.redirect_urls : []
+          }
+        : null,
+    [brokenLinks]
+  );
 
   const derived = useMemo(
-    () => (brokenLinks ? buildLinkIssues(brokenLinks, websiteUrl) : null),
-    [brokenLinks, websiteUrl]
+    () => (safeRecord ? buildLinkIssues(safeRecord, websiteUrl) : null),
+    [safeRecord, websiteUrl]
   );
 
   const filteredIssues = useMemo(() => {
@@ -451,7 +466,7 @@ export function LinkHealthPanel({ brokenLinks, websiteUrl }: LinkHealthPanelProp
   const pagedIssues = filteredIssues.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const recommendations = useMemo(() => buildRecommendations(derived?.issues ?? []), [derived?.issues]);
 
-  const summaryHeadline = `${brokenLinks?.broken_links ?? 0} broken links and ${brokenLinks?.redirect_chains ?? 0} redirect chains found`;
+  const summaryHeadline = `${safeRecord?.broken_links ?? 0} broken links and ${safeRecord?.redirect_chains ?? 0} redirect chains found`;
   const summaryBody = `SitePulse grouped ${filteredIssues.length || derived?.issues.length || 0} unique link issues across ${
     derived?.uniqueSourcePages ?? 0
   } source page${(derived?.uniqueSourcePages ?? 0) === 1 ? "" : "s"}.`;
@@ -465,10 +480,10 @@ export function LinkHealthPanel({ brokenLinks, websiteUrl }: LinkHealthPanelProp
     }
   };
 
-  if (!brokenLinks) {
+  if (!safeRecord) {
     return (
       <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
-        Link health data will appear here after the weekly broken-link crawl runs.
+        Link health data will appear here after the next completed scan or manual link crawl runs.
       </p>
     );
   }
@@ -478,15 +493,15 @@ export function LinkHealthPanel({ brokenLinks, websiteUrl }: LinkHealthPanelProp
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="rounded-2xl border border-border bg-background p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total links</p>
-          <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.total_links}</p>
+          <p className="mt-2 font-display text-3xl font-semibold">{safeRecord.total_links}</p>
         </div>
         <div className="rounded-2xl border border-border bg-background p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Broken links</p>
-          <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.broken_links}</p>
+          <p className="mt-2 font-display text-3xl font-semibold">{safeRecord.broken_links}</p>
         </div>
         <div className="rounded-2xl border border-border bg-background p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Redirect chains</p>
-          <p className="mt-2 font-display text-3xl font-semibold">{brokenLinks.redirect_chains}</p>
+          <p className="mt-2 font-display text-3xl font-semibold">{safeRecord.redirect_chains}</p>
         </div>
       </div>
 

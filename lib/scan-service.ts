@@ -182,9 +182,15 @@ async function pruneHistory(websiteId: string, plan: UserProfile["plan"]) {
     .lt("scanned_at", cutoff.toISOString());
 }
 
-export async function executeWebsiteScan(websiteId: string) {
+export async function executeWebsiteScan(
+  websiteId: string,
+  options?: {
+    forceHealthSignals?: boolean;
+  }
+) {
   const admin = createSupabaseAdminClient();
   const { website, profile, schedule } = await getWebsiteContext(websiteId);
+  const forceHealthSignals = options?.forceHealthSignals ?? false;
 
   const { data: priorRows } = await admin
     .from("scan_results")
@@ -200,11 +206,13 @@ export async function executeWebsiteScan(websiteId: string) {
     runAccessibilityScan(website.url),
     ensureSslCheck({
       websiteId: website.id,
-      url: website.url
+      url: website.url,
+      force: forceHealthSignals
     }),
     ensureSecurityHeadersCheck({
       websiteId: website.id,
-      url: website.url
+      url: website.url,
+      force: forceHealthSignals
     })
   ]);
 
@@ -319,14 +327,16 @@ export async function executeWebsiteScan(websiteId: string) {
     ensureSeoAudit({
       websiteId: website.id,
       scanId: currentScan.id,
-      url: website.url
+      url: website.url,
+      force: forceHealthSignals
     })
   ]);
   const brokenLinksResult = await Promise.allSettled([
     ensureBrokenLinkCheck({
       websiteId: website.id,
       url: website.url,
-      scanId: currentScan.id
+      scanId: currentScan.id,
+      force: forceHealthSignals
     })
   ]);
   const cruxDataResult = await Promise.allSettled([
