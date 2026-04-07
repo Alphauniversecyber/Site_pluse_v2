@@ -365,6 +365,25 @@ export async function executeWebsiteScan(
     securityHeadersResult.status === "fulfilled"
       ? securityHeadersResult.value
       : null;
+
+  if (seoAuditResult[0]?.status === "rejected") {
+    console.warn("[scan:seo_audit_failed]", {
+      websiteId: website.id,
+      scanId: currentScan.id,
+      error: seoAuditResult[0].reason instanceof Error ? seoAuditResult[0].reason.message : "Unknown SEO audit error"
+    });
+  }
+
+  if (brokenLinksResult[0]?.status === "rejected") {
+    console.warn("[scan:broken_links_failed]", {
+      websiteId: website.id,
+      scanId: currentScan.id,
+      error:
+        brokenLinksResult[0].reason instanceof Error
+          ? brokenLinksResult[0].reason.message
+          : "Unknown broken link error"
+    });
+  }
   const currentAccessibilityCount =
     currentScan.accessibility_violations?.length ??
     ((currentScan.raw_data as { accessibility?: { accessibilityViolations?: unknown[] } }).accessibility

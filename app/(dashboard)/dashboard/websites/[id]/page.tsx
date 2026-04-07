@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useState, useTransition } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -479,6 +479,8 @@ function WebsiteHealthSignalsCard(input: {
   onSaveCompetitors: () => void;
   isPending: boolean;
   healthScore: Website["health_score"] | null;
+  healthSignalsSyncing: boolean;
+  hasCurrentScan: boolean;
 }) {
   const {
     websiteUrl,
@@ -493,7 +495,9 @@ function WebsiteHealthSignalsCard(input: {
     onCompetitorInputChange,
     onSaveCompetitors,
     isPending,
-    healthScore
+    healthScore,
+    healthSignalsSyncing,
+    hasCurrentScan
   } = input;
 
   return (
@@ -620,13 +624,19 @@ function WebsiteHealthSignalsCard(input: {
               </div>
             ) : (
               <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
-                SEO audit data will appear here after the next completed scan.
+                {healthSignalsSyncing && hasCurrentScan
+                  ? "Generating SEO audit data from the latest scan. This usually takes a few seconds."
+                  : "SEO audit data will appear here after the next completed scan."}
               </p>
             )}
           </TabsContent>
 
           <TabsContent value="link-health" className="mt-5">
-            <LinkHealthPanel brokenLinks={brokenLinks ?? null} websiteUrl={websiteUrl} />
+            <LinkHealthPanel
+              brokenLinks={brokenLinks ?? null}
+              websiteUrl={websiteUrl}
+              isHydrating={healthSignalsSyncing && !brokenLinks && hasCurrentScan}
+            />
           </TabsContent>
 
           <TabsContent value="security" className="mt-5">
@@ -816,8 +826,10 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const [loading, setLoading] = useState(true);
   const [plainLanguage, setPlainLanguage] = useState<WebsiteScanPlainEnglish | null>(null);
   const [plainLanguageLoading, setPlainLanguageLoading] = useState(false);
+  const [healthSignalsSyncing, setHealthSignalsSyncing] = useState(false);
   const [competitorInput, setCompetitorInput] = useState("");
   const [isPending, startTransition] = useTransition();
+  const healthSignalAttemptKeysRef = useRef(new Set<string>());
 
   const refetch = async () => {
     setLoading(true);
@@ -891,6 +903,76 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
       cancelled = true;
     };
   }, [currentScan?.id, currentScanFailed]);
+
+  useEffect(() => {
+    if (!currentScan || currentScanFailed) {
+      return;
+    }
+
+    const needsSeoAudit = !seoAudit;
+    const needsLinkHealth = !brokenLinks;
+
+    if (!needsSeoAudit && !needsLinkHealth) {
+      return;
+    }
+
+    const attemptKey = [
+      currentScan.id,
+      needsSeoAudit ? "seo" : null,
+      needsLinkHealth ? "links" : null
+    ]
+      .filter(Boolean)
+      .join(":");
+
+    if (!attemptKey || healthSignalAttemptKeysRef.current.has(attemptKey)) {
+      return;
+    }
+
+    healthSignalAttemptKeysRef.current.add(attemptKey);
+
+    let cancelled = false;
+    setHealthSignalsSyncing(true);
+
+    void Promise.allSettled([
+      needsSeoAudit
+        ? fetchJson(`/api/scan/seo`, {
+            method: "POST",
+            body: JSON.stringify({
+              websiteId: params.id,
+              scanId: currentScan.id
+            })
+          })
+        : Promise.resolve(null),
+      needsLinkHealth
+        ? fetchJson(`/api/scan/links`, {
+            method: "POST",
+            body: JSON.stringify({
+              websiteId: params.id,
+              scanId: currentScan.id
+            })
+          })
+        : Promise.resolve(null)
+    ])
+      .then(async (results) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (results.some((result) => result.status === "fulfilled")) {
+          await refetch();
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) {
+          setHealthSignalsSyncing(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [brokenLinks, currentScan, currentScanFailed, params.id, seoAudit]);
 
   const runScan = () =>
     startTransition(async () => {
@@ -1624,6 +1706,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             onSaveCompetitors={saveCompetitors}
             isPending={isPending}
             healthScore={healthScore}
+            healthSignalsSyncing={healthSignalsSyncing}
+            hasCurrentScan={Boolean(currentScan)}
           />
 
           <Card>
@@ -1677,6 +1761,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             onSaveCompetitors={saveCompetitors}
             isPending={isPending}
             healthScore={healthScore}
+            healthSignalsSyncing={healthSignalsSyncing}
+            hasCurrentScan={Boolean(currentScan)}
           />
         </>
       )}

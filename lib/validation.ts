@@ -78,11 +78,14 @@ export const previewScanSchema = z.object({
     }, "Enter a valid website URL.")
 });
 
-export const linkScanSchema = z.object({
+const websiteSignalScanSchema = z.object({
   websiteId: z.string().uuid("Invalid website id."),
   scanId: z.string().uuid().optional(),
   force: z.boolean().optional().default(false)
 });
+
+export const linkScanSchema = websiteSignalScanSchema;
+export const seoScanSchema = websiteSignalScanSchema;
 
 export const reportGenerationSchema = z.object({
   websiteId: z.string().uuid(),

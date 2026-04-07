@@ -42,6 +42,7 @@ type LinkIssueRow = {
 type LinkHealthPanelProps = {
   brokenLinks: BrokenLinkRecord | null;
   websiteUrl: string;
+  isHydrating?: boolean;
 };
 
 const PAGE_SIZE = 10;
@@ -362,7 +363,7 @@ function buildRecommendations(issues: LinkIssueRow[]) {
   return suggestions.slice(0, 3);
 }
 
-export function LinkHealthPanel({ brokenLinks, websiteUrl }: LinkHealthPanelProps) {
+export function LinkHealthPanel({ brokenLinks, websiteUrl, isHydrating = false }: LinkHealthPanelProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [scopeFilter, setScopeFilter] = useState("all");
@@ -483,7 +484,9 @@ export function LinkHealthPanel({ brokenLinks, websiteUrl }: LinkHealthPanelProp
   if (!safeRecord) {
     return (
       <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
-        Link health data will appear here after the next completed scan or manual link crawl runs.
+        {isHydrating
+          ? "Generating link health data from the latest scan. This usually takes a few seconds."
+          : "Link health data will appear here after the next completed scan or manual link crawl runs."}
       </p>
     );
   }
