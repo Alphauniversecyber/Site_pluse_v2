@@ -26,7 +26,7 @@ const GROQ_MODEL = "llama-3.3-70b-versatile";
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 const CACHE_TTL_HOURS = 24;
 const SYSTEM_PROMPT =
-  "You are an expert website consultant writing for non-technical clients. Be direct, confident, professional, and clear. Do not use fluff or generic phrases. Explain business impact in plain English and focus on traffic, conversions, engagement, trust, and revenue outcomes.";
+  "You are a professional website health report generator, technical website auditor, and conversion analyst. Write for non-technical clients, but keep every statement strict, evidence-based, direct, and measurable. Do not use fluff, vague claims, or repeated explanations. Explain business impact in plain English and focus on traffic, conversions, engagement, trust, and revenue outcomes.";
 const WEBSITE_DETAIL_SYSTEM_PROMPT =
   "You are an expert website consultant writing for non-technical business owners. Transform technical website issues into plain English. Never use technical terms like LCP, CLS, FID, TBT, DOM, API, CDN, HTTP, CSS, JS, render-blocking, or viewport. Always focus on business impact, client retention, conversions, trust, and revenue. Return ONLY valid JSON, nothing else.";
 const BANNED_CLIENT_TERMS = /\b(LCP|FID|CLS|TBT|TTFB|INP|DOM|API|CDN|HTTP|CSS|JS|viewport)\b|render-blocking/gi;
@@ -521,16 +521,29 @@ function fallbackIssueWhatText(insight: ReportInsight) {
   return templates[insight.category];
 }
 
-function fallbackIssueWhyText(priority: ReportPriority) {
-  if (priority === "Critical" || priority === "High") {
-    return "When pages feel slow or awkward, visitors leave sooner, trust drops, and you lose more enquiries, sales, and search visibility.";
-  }
+function fallbackIssueWhyText(insight: ReportInsight) {
+  const templates: Record<InsightCategory, string> = {
+    "speed-assets":
+      "Heavy pages increase abandonment before visitors see key offers, and that lowers conversions while making every click from ads or search work less efficiently.",
+    "speed-delivery":
+      "Inefficient delivery slows repeat visits and wastes server capacity, which makes the site feel less reliable and weakens conversion performance over time.",
+    "seo-snippets":
+      "Weak search snippets reduce click-through rate from search results, which limits new visitor acquisition and lowers the return from your content investment.",
+    "seo-discovery":
+      "Search engines receive weaker discovery signals, which can reduce rankings, limit organic traffic, and make new customer acquisition harder.",
+    "accessibility-content":
+      "Accessibility barriers block some visitors from using key content, increase legal exposure, and also weaken quality signals that search engines consider.",
+    "accessibility-structure":
+      "Structural accessibility problems make forms and navigation harder to use, which lowers completion rates and creates avoidable friction for visitors with disabilities.",
+    stability:
+      "Layout shifts increase accidental clicks and form mistakes, which frustrates visitors and makes the website feel less trustworthy during key actions.",
+    trust:
+      "Missing trust and security signals can trigger browser caution, reduce confidence in the site, and lower the chance that visitors return or convert.",
+    other:
+      "This issue creates measurable friction in the journey, which reduces user confidence, weakens engagement, and makes conversion paths less dependable."
+  };
 
-  if (priority === "Medium") {
-    return "If this stays unresolved, the website can feel less reliable, which quietly reduces trust, engagement, and future conversion opportunities.";
-  }
-
-  return "This is not urgent, but fixing it still improves trust, usability, and the overall impression your business makes online.";
+  return templates[insight.category];
 }
 
 function fallbackIssueActionText(insight: ReportInsight) {
@@ -688,7 +701,7 @@ function mergeReportIssueWithFallback(
     ),
     why_it_matters: enforceSentenceRange(
       sanitized.why_it_matters,
-      fallbackIssueWhyText(insight.priority),
+      fallbackIssueWhyText(insight),
       15,
       25,
       { requireBusinessImpact: true, requireProfessional: true }
@@ -1995,7 +2008,7 @@ function fallbackReportIssue(insight: ReportInsight): ReportSectionIssue {
     title: insight.title,
     priority: insight.priority,
     what_is_happening: fallbackIssueWhatText(insight),
-    why_it_matters: fallbackIssueWhyText(insight.priority),
+    why_it_matters: fallbackIssueWhyText(insight),
     root_cause: insight.rootCause
   };
 }
@@ -2277,6 +2290,9 @@ Return JSON with this exact shape:
 }
 
 Rules:
+- Be strict, concise, and evidence-based.
+- Do not use vague phrases like "may affect performance", "could improve experience", "worth improving", or "meaningful upside".
+- If you mention speed or performance, anchor the explanation to the provided metric values and compare them against the expected target where possible.
 - Every score_summaries.*.summary field must be one complete sentence between 15 and 25 words.
 - Every score_summaries.*.summary field must mention business impact like visitors, customers, sales, trust, or rankings.
 - Every action_plan[*].expected_result field must be a professional sentence with at least 8 words.
@@ -2304,11 +2320,14 @@ Rules:
 - Produce exactly one issue and one recommendation for every insight_id.
 - Do not repeat the same root problem in multiple titles.
 - Keep language plain-English, specific, and business-focused.
+- Every issue must stay evidence-based: use the supplied metrics, findings, root causes, and thresholds instead of generic advice.
+- Do not use vague phrases like "may affect performance", "could improve experience", "worth improving", or "meaningful upside".
 - Do not copy raw Lighthouse wording directly.
 - Recommendation priority must match the issue priority.
 - Recommendation should clearly map to the matching issue via insight_id.
 - what_is_happening must be 20 to 35 words, explain the specific problem clearly, and mention both mobile and desktop.
 - why_it_matters must be 15 to 25 words and clearly mention business impact.
+- root_cause must explain the technical cause directly and stay specific.
 - action must be 15 to 25 words, specific, and clearly tell a developer or owner what to do next.
 - expected_impact must be 15 to 25 words and mention business impact.
 - Never return one-word responses or incomplete sentences.
@@ -2433,24 +2452,55 @@ function mergeSectionsWithFallback(
     }
   }
 
-  return {
-    issues: insights.map((insight) => {
-      const fallback = fallbackReportIssue(insight);
-      const issue = issueMap.get(insight.id) ?? fallback;
-      return mergeReportIssueWithFallback(
-        {
-          ...issue,
-          insight_id: insight.id,
-          priority: insight.priority
-        },
-        {
-          ...fallback,
-          insight_id: insight.id,
-          priority: insight.priority
-        },
-        insight
+  const mergedIssues = insights.map((insight) => {
+    const fallback = fallbackReportIssue(insight);
+    const issue = issueMap.get(insight.id) ?? fallback;
+    return mergeReportIssueWithFallback(
+      {
+        ...issue,
+        insight_id: insight.id,
+        priority: insight.priority
+      },
+      {
+        ...fallback,
+        insight_id: insight.id,
+        priority: insight.priority
+      },
+      insight
+    );
+  });
+
+  const seenWhyText = new Set<string>();
+  const uniqueIssues = mergedIssues.map((issue, index) => {
+    const normalizedWhy = sanitizeClientText(issue.why_it_matters).toLowerCase();
+    if (!normalizedWhy || seenWhyText.has(normalizedWhy)) {
+      const insight = insights[index];
+      const uniqueFallbackSeed = `${fallbackIssueWhyText(insight).replace(/[.!?]+$/, "")} It specifically affects ${cleanRawText(
+        insight.title,
+        28
+      ).toLowerCase()}.`;
+      const fallbackWhy = enforceSentenceRange(
+        uniqueFallbackSeed,
+        uniqueFallbackSeed,
+        15,
+        25,
+        { requireBusinessImpact: true, requireProfessional: true }
       );
-    }),
+
+      seenWhyText.add(sanitizeClientText(fallbackWhy).toLowerCase());
+
+      return {
+        ...issue,
+        why_it_matters: fallbackWhy
+      };
+    }
+
+    seenWhyText.add(normalizedWhy);
+    return issue;
+  });
+
+  return {
+    issues: uniqueIssues,
     recommendations: insights.map((insight) => {
       const fallback = fallbackReportRecommendation(insight);
       const recommendation = recommendationMap.get(insight.id) ?? fallback;

@@ -46,6 +46,11 @@ function overallScore(scan: ScanResult) {
   );
 }
 
+function normalizeLcpSeconds(value: number | null | undefined) {
+  const raw = value ?? 0;
+  return raw > 100 ? raw / 1000 : raw;
+}
+
 function addDays(value: string, days: number) {
   const date = new Date(value);
   date.setDate(date.getDate() + days);
@@ -385,9 +390,13 @@ function buildReportContext(
     plan,
     vitals: {
       lcp: {
-        value: Number((input.scan.lcp ?? 0).toFixed(2)),
+        value: Number(normalizeLcpSeconds(input.scan.lcp).toFixed(2)),
         status:
-          (input.scan.lcp ?? 0) <= 2.5 ? "good" : (input.scan.lcp ?? 0) <= 4 ? "needs_improvement" : "slow"
+          normalizeLcpSeconds(input.scan.lcp) <= 2.5
+            ? "good"
+            : normalizeLcpSeconds(input.scan.lcp) <= 4
+              ? "needs_improvement"
+              : "slow"
       },
       inp: {
         value: clampScore(input.scan.fid ?? input.scan.tbt ?? 0),
