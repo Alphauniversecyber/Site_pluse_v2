@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 
 import type { UserProfile } from "@/types";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export function apiError(message: string, status = 400) {
@@ -19,6 +20,54 @@ export async function requireApiUser() {
     data: { user },
     error: authError
   } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return {
+      supabase,
+      user: null,
+      profile: null,
+      errorResponse: apiError("Unauthorized", 401)
+    };
+  }
+
+  const { data: profile } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", user.id)
+    .single<UserProfile>();
+
+  if (!profile) {
+    return {
+      supabase,
+      user,
+      profile: null,
+      errorResponse: apiError("User profile not found", 404)
+    };
+  }
+
+  return {
+    supabase,
+    user,
+    profile,
+    errorResponse: null
+  };
+}
+
+export async function requireApiUserFromRequest(request: Request) {
+  const authorization = request.headers.get("authorization");
+  const bearerToken = authorization?.startsWith("Bearer ")
+    ? authorization.slice("Bearer ".length).trim()
+    : null;
+
+  if (!bearerToken) {
+    return requireApiUser();
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const {
+    data: { user },
+    error: authError
+  } = await supabase.auth.getUser(bearerToken);
 
   if (authError || !user) {
     return {

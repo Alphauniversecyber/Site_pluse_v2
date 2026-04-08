@@ -9,6 +9,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 type AnalyticsIdentity = {
   id: string;
   email: string;
+  firstName?: string | null;
   fullName?: string | null;
 };
 
@@ -46,6 +47,10 @@ function toAnalyticsIdentity(user: {
   return {
     id: user.id,
     email: user.email,
+    firstName:
+      typeof user.user_metadata?.full_name === "string"
+        ? user.user_metadata.full_name.trim().split(/\s+/)[0]
+        : null,
     fullName:
       typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : null
   };
@@ -92,7 +97,7 @@ export function AnalyticsRoot() {
     let attempts = 0;
     const visitor = authUser
       ? {
-          name: authUser.fullName || authUser.email,
+          name: authUser.firstName || authUser.fullName || authUser.email,
           email: authUser.email
         }
       : null;
@@ -106,7 +111,13 @@ export function AnalyticsRoot() {
       if (visitor) {
         tawkApi.visitor = visitor;
         try {
-          tawkApi.setAttributes?.(visitor, () => undefined);
+          tawkApi.setAttributes?.(
+            {
+              ...visitor,
+              firstName: authUser?.firstName ?? ""
+            },
+            () => undefined
+          );
         } catch {
           // Tawk secure attributes can be optional; visitor assignment is the safe fallback.
         }
@@ -140,7 +151,7 @@ export function AnalyticsRoot() {
   const tawkBootScript = useMemo(() => {
     const visitorScript = authUser?.email
       ? `window.Tawk_API.visitor=${JSON.stringify({
-          name: authUser.fullName || authUser.email,
+          name: authUser.firstName || authUser.fullName || authUser.email,
           email: authUser.email
         })};`
       : "";
@@ -150,6 +161,11 @@ export function AnalyticsRoot() {
 
   return (
     <>
+      {!shouldHideTawk && authUser?.firstName ? (
+        <div className="pointer-events-none fixed bottom-24 right-20 z-30 hidden rounded-2xl border border-slate-200 bg-white/96 px-5 py-3 text-sm text-slate-800 shadow-[0_20px_45px_-25px_rgba(15,23,42,0.24)] sm:block dark:border-white/10 dark:bg-slate-950/90 dark:text-slate-100">
+          {`Hi ${authUser.firstName}! How can we help?`}
+        </div>
+      ) : null}
       {!shouldHideTawk && TAWK_PROPERTY_ID && TAWK_WIDGET_ID ? (
         <>
           <Script id="sitepulse-tawk-bootstrap" strategy="afterInteractive">

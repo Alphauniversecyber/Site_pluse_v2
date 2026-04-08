@@ -78,6 +78,8 @@ export const previewScanSchema = z.object({
     }, "Enter a valid website URL.")
 });
 
+export const authenticatedScanSchema = previewScanSchema;
+
 const websiteSignalScanSchema = z.object({
   websiteId: z.string().uuid("Invalid website id."),
   scanId: z.string().uuid().optional(),

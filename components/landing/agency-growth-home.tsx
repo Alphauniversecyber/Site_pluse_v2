@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight, BellRing, BriefcaseBusiness, Gauge, LayoutTemplate, SearchCheck, ShieldAlert, Smartphone } from "lucide-react";
 
@@ -8,6 +10,7 @@ import { PricingGrid } from "@/components/landing/pricing-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useUser } from "@/hooks/useUser";
 import { marketingCopy, marketingFaq } from "@/lib/marketing-copy";
 
 const solutionPillars = [
@@ -75,13 +78,23 @@ const repositionedFeatures = [
   }
 ] as const;
 
-const proofStats = [
-  { label: "Free scan preview", value: "30 sec", note: "No-login first impression" },
-  { label: "Client-ready proof", value: "1 click", note: "Unlock the full report after signup" },
-  { label: "Retention angle", value: "Weekly", note: "Ongoing value delivery after close" }
-] as const;
-
 export function AgencyGrowthHome() {
+  const { user } = useUser();
+  const isAuthenticated = Boolean(user);
+  const proofStats = [
+    {
+      label: "Free scan preview",
+      value: "30 sec",
+      note: isAuthenticated ? "Scan saved to your workspace" : "No-login first impression"
+    },
+    {
+      label: "Client-ready proof",
+      value: "1 click",
+      note: isAuthenticated ? "View full report" : "Unlock the full report after signup"
+    },
+    { label: "Retention angle", value: "Weekly", note: "Ongoing value delivery after close" }
+  ] as const;
+
   return (
     <main>
       <section className="mx-auto grid w-full max-w-[1480px] gap-14 px-5 py-12 sm:px-6 md:px-8 md:py-16 lg:grid-cols-[minmax(0,1.08fr)_minmax(440px,0.92fr)] lg:items-center lg:px-10 xl:px-14 xl:py-20">
@@ -268,8 +281,8 @@ export function AgencyGrowthHome() {
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg" className="rounded-2xl px-6">
-                <Link href="/#free-scan">
-                  Scan a website (free)
+                <Link href={isAuthenticated ? "/dashboard" : "/#free-scan"}>
+                  {isAuthenticated ? "Go to Dashboard" : "Scan a website (free)"}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>

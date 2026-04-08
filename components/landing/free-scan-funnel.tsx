@@ -4,13 +4,16 @@ import Link from "next/link";
 import type { Route } from "next";
 import { ArrowRight, Gauge, Lock, Search, Sparkles, WandSparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { fetchJson } from "@/lib/api-client";
+import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import type { PreviewScanResult } from "@/types";
+import { useUser } from "@/hooks/useUser";
 
 const scanStages = [
   "Analyzing performance...",
@@ -36,11 +39,14 @@ function ScoreChip({ label, value }: { label: string; value: number }) {
 }
 
 export function FreeScanFunnel({ className }: { className?: string }) {
+  const router = useRouter();
+  const { user } = useUser();
   const [url, setUrl] = useState("");
   const [preview, setPreview] = useState<PreviewScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [activeStage, setActiveStage] = useState(0);
+  const isAuthenticated = Boolean(user);
 
   useEffect(() => {
     if (!isScanning) {
@@ -70,6 +76,39 @@ export function FreeScanFunnel({ className }: { className?: string }) {
     setIsScanning(true);
 
     try {
+      if (isAuthenticated) {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { session }
+        } = await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          throw new Error("Your session expired. Refresh the page and try again.");
+        }
+
+        const response = await fetch("/api/scans", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({ url })
+        });
+
+        const payload = (await response.json().catch(() => ({}))) as {
+          data?: { scanId: string };
+          error?: string;
+        };
+
+        if (!response.ok || !payload.data?.scanId) {
+          throw new Error(payload.error ?? "Unable to save the scan to your account right now.");
+        }
+
+        router.push(`/dashboard/scans/${payload.data.scanId}` as Route);
+        router.refresh();
+        return;
+      }
+
       const result = await fetchJson<PreviewScanResult>("/api/preview-scan", {
         method: "POST",
         body: JSON.stringify({ url })
@@ -96,11 +135,24 @@ export function FreeScanFunnel({ className }: { className?: string }) {
 
       <div className="relative">
         <div className="flex flex-wrap items-center gap-3">
-          <Badge className="border-blue-300/30 bg-blue-500/10 text-blue-700 dark:border-blue-300/20 dark:bg-blue-500/12 dark:text-blue-100">Free scan preview</Badge>
-          <p className="text-xs uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
+          <Badge className="border-blue-300/30 bg-blue-500/10 text-blue-700 dark:border-blue-300/20 dark:bg-blue-500/12 dark:text-blue-100">
+            {isAuthenticated ? "Saved scan" : "Free scan preview"}
+          </Badge>
+          <p
+            className={cn(
+              "text-xs uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300",
+              isAuthenticated && "hidden"
+            )}
+          >
             No signup required • Results in 30 seconds
           </p>
         </div>
+
+        {isAuthenticated ? (
+          <p className="text-xs uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
+            Scan saved to your account • Results in 30 seconds
+          </p>
+        ) : null}
 
         <form className="mt-5 space-y-4" onSubmit={runPreviewScan}>
           <div className="rounded-[1.6rem] border border-slate-200 bg-white/80 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] dark:border-white/10 dark:bg-white/[0.05] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
@@ -119,7 +171,13 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                 className="h-14 rounded-2xl bg-blue-500 px-6 text-base font-semibold text-white shadow-[0_22px_50px_-28px_rgba(59,130,246,0.9)] hover:bg-blue-600"
                 disabled={isScanning}
               >
-                {isScanning ? "Scanning..." : "Scan a website (free)"}
+                {isScanning
+                  ? isAuthenticated
+                    ? "Saving scan..."
+                    : "Scanning..."
+                  : isAuthenticated
+                    ? "Save scan to dashboard"
+                    : "Scan a website (free)"}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
@@ -144,7 +202,11 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                 <WandSparkles className="h-5 w-5 animate-pulse" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-slate-950 dark:text-white">Running your free client-closing scan</p>
+                <p className="text-sm font-semibold text-slate-950 dark:text-white">
+                  {isAuthenticated
+                    ? "Saving your account scan"
+                    : "Running your free client-closing scan"}
+                </p>
                 <p className="mt-1 text-sm text-slate-400">We’re building a near-full preview you can show before signup.</p>
               </div>
             </div>
