@@ -38,6 +38,12 @@ function buildAuthHref(pathname: "/login" | "/signup", nextPath: string): Route 
   return `${pathname}?next=${encodeURIComponent(nextPath)}` as Route;
 }
 
+function buildAuthCallbackUrl(nextPath: string) {
+  const callback = new URL("/auth/callback", window.location.origin);
+  callback.searchParams.set("next", nextPath);
+  return callback.toString();
+}
+
 export function LoginForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -174,7 +180,7 @@ export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
               email: values.email,
               password: values.password,
               options: {
-                emailRedirectTo: `${window.location.origin}/login`,
+                emailRedirectTo: buildAuthCallbackUrl(nextPath),
                 data: {
                   full_name: values.fullName,
                   agency_name: values.fullName
