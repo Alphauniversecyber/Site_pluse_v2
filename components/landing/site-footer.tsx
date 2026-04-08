@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 
 import { SitePulseLogo } from "@/components/brand/sitepulse-logo";
 
@@ -22,6 +23,15 @@ export function SiteFooter() {
           </Link>
           <Link href="/login" className="premium-link block">
             Login
+          </Link>
+          <Link href={"/terms" as Route} className="premium-link block">
+            Terms
+          </Link>
+          <Link href={"/privacy" as Route} className="premium-link block">
+            Privacy
+          </Link>
+          <Link href={"/refund" as Route} className="premium-link block">
+            Refunds
           </Link>
         </div>
         <div className="space-y-2 text-sm text-muted-foreground">
