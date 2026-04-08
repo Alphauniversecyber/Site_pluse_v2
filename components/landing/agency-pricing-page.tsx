@@ -32,7 +32,7 @@ export function AgencyPricingPage() {
       </div>
 
       <div className="mt-10">
-        <PricingGrid />
+        <PricingGrid showToggle />
       </div>
 
       <div className="mt-14 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
