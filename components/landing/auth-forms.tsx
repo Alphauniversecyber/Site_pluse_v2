@@ -295,9 +295,51 @@ export function ResetPasswordForm() {
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
-    void supabase.auth.getSession().then(({ data }) => {
-      setHasRecoverySession(Boolean(data.session));
+    let active = true;
+
+    async function hydrateRecoverySession() {
+      const { data } = await supabase.auth.getSession();
+      if (active && data.session) {
+        setHasRecoverySession(true);
+        return;
+      }
+
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const type = hash.get("type");
+      const accessToken = hash.get("access_token");
+      const refreshToken = hash.get("refresh_token");
+
+      if (type === "recovery" && accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+
+        if (!error && active) {
+          setHasRecoverySession(true);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+    }
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (!active) {
+        return;
+      }
+
+      if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
+        setHasRecoverySession(true);
+      }
     });
+
+    void hydrateRecoverySession();
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (
@@ -369,7 +411,7 @@ export function ResetPasswordForm() {
               setSubmitting(true);
               const supabase = createSupabaseBrowserClient();
               const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-                redirectTo: `${window.location.origin}/reset-password`
+                redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`
               });
               setSubmitting(false);
 

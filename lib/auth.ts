@@ -33,7 +33,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
-  const publicAuthPaths = ["/login", "/signup", "/reset-password"];
+  const guestOnlyAuthPaths = ["/login", "/signup"];
 
   if (pathname.startsWith("/dashboard") && !user) {
     const url = request.nextUrl.clone();
@@ -42,7 +42,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && publicAuthPaths.some((path) => pathname.startsWith(path))) {
+  if (user && guestOnlyAuthPaths.some((path) => pathname.startsWith(path))) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.searchParams.delete("next");
