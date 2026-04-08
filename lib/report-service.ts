@@ -306,6 +306,7 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
     seoAudit,
     sslCheck,
     securityHeaders,
+    brokenLinks,
     uptimeChecks
   } = await loadReportContext(report.website_id, report.scan_id);
   const { data: previousRows } = await admin
@@ -349,6 +350,8 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
         scan,
         previousScan: (previousRows?.[0] as ScanResult | undefined) ?? null,
         healthScore,
+        securityHeaders,
+        brokenLinks,
         pdfBuffer
       });
 
