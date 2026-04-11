@@ -851,6 +851,7 @@ export async function sendReportEmail(input: {
   securityHeaders?: SecurityHeadersRecord | null;
   brokenLinks?: BrokenLinkRecord | null;
   pdfBuffer: Buffer;
+  dashboardUrl: string;
 }) {
   const baseUrl = getBaseUrl();
   const fromName = input.branding?.email_from_name || input.branding?.agency_name || "SitePulse";
@@ -1037,6 +1038,24 @@ export async function sendReportEmail(input: {
               <div style="text-align:center;">
                 <a class="cta-button" href="${baseUrl}/dashboard/websites/${input.website.id}" style="display:inline-block; width:100%; max-width:520px; min-height:48px; border-radius:18px; background:${cta.background}; border:1px solid ${cta.border}; color:#FFFFFF; text-decoration:none; padding:16px 24px; font-size:18px; font-weight:700; line-height:1.2;">${escapeHtml(cta.label)} &rarr;</a>
                 <p style="margin:10px 0 0; font-size:12px; color:#94A3B8;">Takes 30 seconds &middot; No credit card needed to view</p>
+              </div>
+            </div>
+
+            <div style="padding-top:28px;">
+              ${sectionDivider()}
+              <div style="border-radius:24px; border:1px solid #BFDBFE; background:#EFF6FF; padding:24px 22px; text-align:center;">
+                <p style="margin:0; font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:#2563EB; font-weight:700;">📊 Your Live Dashboard</p>
+                <p style="margin:14px 0 0; font-size:18px; line-height:1.6; color:#1E293B; font-weight:700;">
+                  See your live SEO data anytime &mdash; no login needed.
+                </p>
+                <div style="margin-top:18px;">
+                  <a href="${input.dashboardUrl}" style="display:inline-block; min-width:240px; border-radius:16px; background:#2563EB; color:#FFFFFF; text-decoration:none; padding:14px 22px; font-size:16px; font-weight:700;">
+                    View Your Dashboard &rarr;
+                  </a>
+                </div>
+                <p style="margin:14px 0 0; font-size:12px; color:#475569; line-height:1.7;">
+                  Link: ${escapeHtml(stripProtocol(input.dashboardUrl))}
+                </p>
               </div>
             </div>
           </div>

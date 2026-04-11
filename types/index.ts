@@ -59,6 +59,16 @@ export interface Website {
   report_recipients?: string[];
   competitor_urls?: string[];
   created_at: string;
+  updated_at?: string;
+  magic_token?: string | null;
+  gsc_access_token?: string | null;
+  gsc_refresh_token?: string | null;
+  gsc_property?: string | null;
+  gsc_connected_at?: string | null;
+  ga_access_token?: string | null;
+  ga_refresh_token?: string | null;
+  ga_property_id?: string | null;
+  ga_connected_at?: string | null;
   health_score?: WebsiteHealthScore | null;
   latest_scan?: ScanResult | null;
   schedule?: ScanSchedule | null;
@@ -464,6 +474,141 @@ export interface CompetitorScanRecord {
   scan_status: "success" | "failed";
   error_message: string | null;
   scanned_at: string;
+}
+
+export type DashboardDataSource = "live" | "mock";
+export type ClientDashboardSeverity = "critical" | "warning" | "info";
+export type ClientDashboardPriority = "high" | "medium" | "low";
+
+export interface GscDailyPoint {
+  date: string;
+  label: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface GscTopQuery {
+  query: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface GscSitemapRecord {
+  path: string;
+  submitted: number;
+  errors: number;
+  warnings: number;
+  healthy: boolean;
+}
+
+export interface GscDashboardData {
+  connected: boolean;
+  source: DashboardDataSource;
+  property: string | null;
+  lastSyncedAt: string | null;
+  summary: {
+    clicks: number;
+    impressions: number;
+    avgPosition: number;
+    indexedPages: number;
+    sitemapSubmitted: number;
+    ctr: number;
+  };
+  comparison: {
+    clicks: number;
+    impressions: number;
+    avgPosition: number;
+    indexedPages: number;
+  };
+  daily: GscDailyPoint[];
+  topQueries: GscTopQuery[];
+  sitemaps: GscSitemapRecord[];
+}
+
+export interface GaDailyPoint {
+  date: string;
+  label: string;
+  sessions: number;
+  bounceRate: number;
+}
+
+export interface GaTopPage {
+  page: string;
+  sessions: number;
+  bounceRate: number;
+}
+
+export interface DeviceBreakdownPoint {
+  device: string;
+  sessions: number;
+  share: number;
+}
+
+export interface CountryBreakdownPoint {
+  country: string;
+  sessions: number;
+}
+
+export interface GaDashboardData {
+  connected: boolean;
+  source: DashboardDataSource;
+  propertyId: string | null;
+  lastSyncedAt: string | null;
+  summary: {
+    sessions: number;
+    bounceRate: number;
+  };
+  comparison: {
+    sessions: number;
+    bounceRate: number;
+  };
+  daily: GaDailyPoint[];
+  sparkline: number[];
+  topPages: GaTopPage[];
+  devices: DeviceBreakdownPoint[];
+  countries: CountryBreakdownPoint[];
+}
+
+export interface ClientDashboardIssue {
+  id: string;
+  severity: ClientDashboardSeverity;
+  title: string;
+  description: string;
+  affectedPages: number;
+  urls: string[];
+}
+
+export interface ClientDashboardRecommendation {
+  id: string;
+  priority: ClientDashboardPriority;
+  title: string;
+  action: string;
+  impact: string;
+}
+
+export interface ClientDashboardPayload {
+  token: string;
+  clientName: string;
+  website: {
+    id: string;
+    url: string;
+    label: string;
+  };
+  lastUpdated: string;
+  healthScore: number;
+  statusLabel: "NEEDS ATTENTION" | "GOOD" | "EXCELLENT";
+  connections: {
+    gsc: boolean;
+    ga: boolean;
+  };
+  gsc: GscDashboardData;
+  ga: GaDashboardData;
+  issues: ClientDashboardIssue[];
+  recommendations: ClientDashboardRecommendation[];
 }
 
 export interface ApiResponse<T> {

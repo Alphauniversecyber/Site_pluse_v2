@@ -316,6 +316,15 @@ alter table public.users add column if not exists subscription_status public.sub
 alter table public.users add column if not exists next_billing_date timestamptz;
 alter table public.users add column if not exists trial_end_date timestamptz;
 alter table public.websites add column if not exists competitor_urls jsonb not null default '[]'::jsonb;
+alter table public.websites add column if not exists magic_token text;
+alter table public.websites add column if not exists gsc_access_token text;
+alter table public.websites add column if not exists gsc_refresh_token text;
+alter table public.websites add column if not exists gsc_property text;
+alter table public.websites add column if not exists gsc_connected_at timestamptz;
+alter table public.websites add column if not exists ga_access_token text;
+alter table public.websites add column if not exists ga_refresh_token text;
+alter table public.websites add column if not exists ga_property_id text;
+alter table public.websites add column if not exists ga_connected_at timestamptz;
 alter table public.users alter column subscription_status set default 'inactive';
 
 alter table public.websites
@@ -341,6 +350,9 @@ create table if not exists public.notifications (
 );
 
 create index if not exists idx_websites_user_id on public.websites (user_id);
+create unique index if not exists idx_websites_magic_token
+  on public.websites (magic_token)
+  where magic_token is not null;
 create index if not exists idx_scan_results_website_id on public.scan_results (website_id);
 create index if not exists idx_scan_results_scanned_at on public.scan_results (scanned_at desc);
 create index if not exists idx_reports_website_id on public.reports (website_id);

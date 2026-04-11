@@ -15,6 +15,7 @@ import type {
   UserProfile,
   Website
 } from "@/types";
+import { ensureMagicTokenForWebsite } from "@/lib/client-token";
 import { generateScanPdf } from "@/lib/pdf";
 import { buildHealthScore } from "@/lib/health-score";
 import { sendReportEmail, trySendCriticalAlertEmail } from "@/lib/resend";
@@ -335,6 +336,13 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
     securityHeaders,
     uptimeChecks
   }).overall;
+  const dashboardToken = await ensureMagicTokenForWebsite(website.id);
+  const dashboardBaseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL ??
+    process.env.APP_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "http://localhost:3000";
+  const dashboardUrl = `${dashboardBaseUrl.replace(/\/$/, "")}/d/${dashboardToken}`;
   const deliveries: Array<{
     recipient: string;
     messageId: string;
@@ -352,7 +360,8 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
         healthScore,
         securityHeaders,
         brokenLinks,
-        pdfBuffer
+        pdfBuffer,
+        dashboardUrl
       });
 
       deliveries.push({
