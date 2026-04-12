@@ -16,10 +16,12 @@ const nextConfig = {
   experimental: {
     typedRoutes: true,
     outputFileTracingIncludes: {
-      "/api/cron/process-reports": ["./node_modules/@sparticuz/chromium/bin/**"],
-      "/api/reports/[id]": ["./node_modules/@sparticuz/chromium/bin/**"],
-      "/api/reports/generate": ["./node_modules/@sparticuz/chromium/bin/**"],
-      "/api/reports/send": ["./node_modules/@sparticuz/chromium/bin/**"]
+      outputFileTracingIncludes: {
+           "/api/cron/process-reports": ["./node_modules/@sparticuz/chromium/**"],
+           "/api/reports/[id]": ["./node_modules/@sparticuz/chromium/**"],
+           "/api/reports/generate": ["./node_modules/@sparticuz/chromium/**"],
+           "/api/reports/send": ["./node_modules/@sparticuz/chromium/**"]
+},
     }
   },
   images: {
