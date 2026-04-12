@@ -14,7 +14,13 @@ const nextConfig = {
     "url-regex-safe"
   ],
   experimental: {
-    typedRoutes: true
+    typedRoutes: true,
+    outputFileTracingIncludes: {
+      "/api/cron/process-reports": ["./node_modules/@sparticuz/chromium/**/*"],
+      "/api/reports/[id]": ["./node_modules/@sparticuz/chromium/**/*"],
+      "/api/reports/generate": ["./node_modules/@sparticuz/chromium/**/*"],
+      "/api/reports/send": ["./node_modules/@sparticuz/chromium/**/*"]
+    }
   },
   images: {
     remotePatterns: [
