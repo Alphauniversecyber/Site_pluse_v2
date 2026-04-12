@@ -6,22 +6,13 @@ import type { SeoAuditRecord, Severity } from "@/types";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const SEO_AUDIT_CACHE_HOURS = 24;
-type MetadataScraper = (input: { html: string; url: string }) => Promise<Record<string, unknown>>;
-
-let metadataScraperPromise: Promise<MetadataScraper> | null = null;
-const runtimeImport = new Function("specifier", "return import(specifier)") as <T = unknown>(
-  specifier: string
-) => Promise<T>;
 
 function isFresh(timestamp: string, hours: number) {
   return Date.now() - new Date(timestamp).getTime() < hours * 60 * 60 * 1000;
 }
 
 function resolveUrl(value: string | undefined | null, baseUrl: string) {
-  if (!value) {
-    return null;
-  }
-
+  if (!value) return null;
   try {
     return new URL(value, baseUrl).toString();
   } catch {
@@ -53,60 +44,23 @@ function descriptionStatus(length: number, exists: boolean) {
 }
 
 function buildSuggestion(title: string, description: string, severity: Severity) {
-  return {
-    title,
-    description,
-    severity
-  };
+  return { title, description, severity };
 }
 
 async function fetchHtml(url: string) {
   const response = await fetch(url, {
     cache: "no-store",
     signal: AbortSignal.timeout(20000),
-    headers: {
-      "user-agent": "SitePulse SEO Audit/1.0"
-    }
+    headers: { "user-agent": "SitePulse SEO Audit/1.0" }
   });
-
   if (!response.ok) {
     throw new Error(`SEO audit request failed with status ${response.status}.`);
   }
-
   return response.text();
 }
 
 function parseSchemaTypes(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).slice(0, 5);
-}
-
-async function getMetadataScraper() {
-  if (!metadataScraperPromise) {
-    metadataScraperPromise = (async () => {
-      const [
-        { default: metascraper },
-        { default: metascraperDescription },
-        { default: metascraperImage },
-        { default: metascraperTitle },
-        { default: metascraperUrl }
-      ] = await Promise.all([
-        runtimeImport<{ default: (...input: unknown[]) => unknown }>("metascraper"),
-        runtimeImport<{ default: (...input: unknown[]) => unknown }>("metascraper-description"),
-        runtimeImport<{ default: (...input: unknown[]) => unknown }>("metascraper-image"),
-        runtimeImport<{ default: (...input: unknown[]) => unknown }>("metascraper-title"),
-        runtimeImport<{ default: (...input: unknown[]) => unknown }>("metascraper-url")
-      ]);
-
-      return metascraper([
-        metascraperTitle(),
-        metascraperDescription(),
-        metascraperImage(),
-        metascraperUrl()
-      ]) as MetadataScraper;
-    })();
-  }
-
-  return metadataScraperPromise;
 }
 
 export async function ensureSeoAudit(input: {
@@ -128,7 +82,6 @@ export async function ensureSeoAudit(input: {
     if (latest.scan_id === input.scanId) {
       return latest;
     }
-
     const clonedPayload = {
       website_id: input.websiteId,
       scan_id: input.scanId,
@@ -145,26 +98,18 @@ export async function ensureSeoAudit(input: {
       fix_suggestions: latest.fix_suggestions,
       created_at: new Date().toISOString()
     };
-
     const { data, error } = await admin.from("seo_audit").insert(clonedPayload).select("*").single();
-    if (error || !data) {
-      throw new Error(error?.message ?? "Unable to clone SEO audit.");
-    }
+    if (error || !data) throw new Error(error?.message ?? "Unable to clone SEO audit.");
     return data as SeoAuditRecord;
   }
 
   const html = await fetchHtml(input.url);
-  const scrapeMetadata = await getMetadataScraper();
-  const metadata = await scrapeMetadata({
-    html,
-    url: input.url
-  });
   const $ = load(html);
 
-  const pageTitle = String(metadata.title || $("title").first().text() || "").trim();
-  const metaDescription = String(
-    metadata.description || $('meta[name="description"]').attr("content") || ""
-  ).trim();
+  // metascraper removed — using cheerio only
+  const pageTitle = $("title").first().text().trim();
+  const metaDescription = ($('meta[name="description"]').attr("content") || "").trim();
+
   const h1s = $("h1");
   const h2s = $("h2");
   const h3s = $("h3");
@@ -179,20 +124,14 @@ export async function ensureSeoAudit(input: {
 
   const imagesMissingAltUrls = $("img")
     .toArray()
-    .filter((element) => {
-      const alt = ($(element).attr("alt") || "").trim();
-      return !alt;
-    })
+    .filter((element) => !($(element).attr("alt") || "").trim())
     .map((element) => resolveUrl($(element).attr("src"), input.url))
     .filter((value): value is string => Boolean(value))
     .slice(0, 5);
 
   const ogTitle = $('meta[property="og:title"]').attr("content");
   const ogDescription = $('meta[property="og:description"]').attr("content");
-  const ogImage = resolveUrl(
-    $('meta[property="og:image"]').attr("content"),
-    input.url
-  );
+  const ogImage = resolveUrl($('meta[property="og:image"]').attr("content"), input.url);
   const twitterCard = $('meta[name="twitter:card"]').attr("content");
   const twitterTitle = $('meta[name="twitter:title"]').attr("content");
   const canonicalHref = resolveUrl($('link[rel="canonical"]').attr("href"), input.url);
@@ -205,10 +144,7 @@ export async function ensureSeoAudit(input: {
       .toArray()
       .flatMap((element) => {
         const raw = $(element).html()?.trim();
-        if (!raw) {
-          return [];
-        }
-
+        if (!raw) return [];
         try {
           const parsed = JSON.parse(raw) as Record<string, unknown> | Array<Record<string, unknown>>;
           const values = Array.isArray(parsed) ? parsed : [parsed];
@@ -308,10 +244,6 @@ export async function ensureSeoAudit(input: {
   };
 
   const { data, error } = await admin.from("seo_audit").insert(payload).select("*").single();
-
-  if (error || !data) {
-    throw new Error(error?.message ?? "Unable to store SEO audit.");
-  }
-
+  if (error || !data) throw new Error(error?.message ?? "Unable to store SEO audit.");
   return data as SeoAuditRecord;
 }
