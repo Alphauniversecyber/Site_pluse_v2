@@ -1,20 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  serverExternalPackages: [
+    "@sparticuz/chromium",
+    "puppeteer",
+    "puppeteer-core",
+    "linkinator",
+    "metascraper",
+    "metascraper-description",
+    "metascraper-image",
+    "metascraper-title",
+    "metascraper-url",
+    "re2",
+    "url-regex-safe"
+  ],
   experimental: {
     typedRoutes: true,
-    serverComponentsExternalPackages: [
-      "@sparticuz/chromium",
-      "puppeteer",
-      "puppeteer-core",
-      "linkinator",
-      "metascraper",
-      "metascraper-description",
-      "metascraper-image",
-      "metascraper-title",
-      "metascraper-url",
-      "re2",
-      "url-regex-safe"
-    ],
     outputFileTracingIncludes: {
       "/api/cron/process-reports": ["./node_modules/@sparticuz/chromium/bin/**"],
       "/api/reports/[id]": ["./node_modules/@sparticuz/chromium/bin/**"],
