@@ -170,6 +170,27 @@ function formatReportDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatReportMonthYear(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric"
+  }).format(new Date(value));
+}
+
+function ensureHttpsUrl(url: string) {
+  const trimmed = url.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/^http:\/\//i, "https://");
+  }
+
+  return `https://${trimmed.replace(/^\/+/, "")}`;
+}
+
 function stripProtocol(url: string) {
   return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 }
@@ -190,74 +211,73 @@ function truncateText(value: string, max = 140) {
 
 function sectionDivider() {
   return `
-    <div style="width:80%;height:1px;background:#E2E8F0;margin:0 auto 28px;"></div>
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+      <tr>
+        <td style="padding:0 0 28px 0;border-top:1px solid #E5E7EB;font-size:0;line-height:0;">&nbsp;</td>
+      </tr>
+    </table>
   `;
 }
 
-function getScorePalette(score: number) {
-  if (score >= 90) {
-    return {
-      ring: "#10B981",
-      text: "#047857",
-      background: "#ECFDF5"
-    };
-  }
+function buildScoreCircle(score: number, label: string, delta: number | null, isBaseline: boolean): string {
+  const radius = 30;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (score / 100) * circumference;
+  const color = score >= 80 ? "#22C55E" : score >= 50 ? "#F59E0B" : "#EF4444";
+  const deltaText = isBaseline
+    ? '<span style="color:#9CA3AF;font-size:11px;font-style:italic;line-height:16px;">First scan</span>'
+    : delta !== null && delta > 0
+      ? `<span style="color:#22C55E;font-size:11px;line-height:16px;">&#9650; ${delta}</span>`
+      : delta !== null && delta < 0
+        ? `<span style="color:#EF4444;font-size:11px;line-height:16px;">&#9660; ${Math.abs(delta)}</span>`
+        : '<span style="color:#9CA3AF;font-size:11px;line-height:16px;">&mdash; stable</span>';
 
-  if (score >= 70) {
-    return {
-      ring: "#F59E0B",
-      text: "#B45309",
-      background: "#FFFBEB"
-    };
-  }
-
-  if (score >= 50) {
-    return {
-      ring: "#F97316",
-      text: "#C2410C",
-      background: "#FFF7ED"
-    };
-  }
-
-  return {
-    ring: "#DC2626",
-    text: "#991B1B",
-    background: "#FEF2F2"
-  };
-}
-
-function getDeltaPresentation(current: number, previous: number | null | undefined) {
-  if (previous === null || previous === undefined) {
-    return {
-      text: "First scan - no comparison yet",
-      color: "#94A3B8",
-      trendLabel: "Stable"
-    };
-  }
-
-  const delta = current - previous;
-
-  if (delta > 0) {
-    return {
-      text: `&uarr; +${delta} from last week`,
-      color: "#16A34A",
-      trendLabel: "Improving"
-    };
-  }
-
-  if (delta < 0) {
-    return {
-      text: `&darr; ${delta} from last week`,
-      color: "#DC2626",
-      trendLabel: "Declining"
-    };
-  }
-
-  return {
-    text: "&rarr; 0 from last week",
-    color: "#64748B",
-    trendLabel: "Stable"
-  };
+  return `
+    <td align="center" valign="top" style="width:25%;padding:8px 6px 0 6px;">
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+        <tr>
+          <td align="center" style="padding:0 0 6px 0;">
+            <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+              <circle cx="40" cy="40" r="${radius}" fill="none" stroke="#E5E7EB" stroke-width="8"/>
+              <circle
+                cx="40"
+                cy="40"
+                r="${radius}"
+                fill="none"
+                stroke="${color}"
+                stroke-width="8"
+                stroke-dasharray="${circumference.toFixed(1)}"
+                stroke-dashoffset="${offset.toFixed(1)}"
+                stroke-linecap="round"
+                transform="rotate(-90 40 40)"
+              />
+              <text
+                x="40"
+                y="47"
+                text-anchor="middle"
+                font-size="22"
+                font-weight="700"
+                font-family="Arial, Helvetica, sans-serif"
+                fill="#111827"
+              >
+                ${score}
+              </text>
+            </svg>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;padding:0 4px;">
+            ${escapeHtml(label)}
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding-top:4px;">
+            ${deltaText}
+          </td>
+        </tr>
+      </table>
+    </td>
+  `;
 }
 
 function getCategoryIcon(category: EmailIssueCategory) {
@@ -273,24 +293,45 @@ function getPriorityTone(priority: EmailIssuePriority) {
       background: "#FEE2E2",
       border: "#FECACA",
       text: "#991B1B",
-      label: "HIGH PRIORITY"
+      label: "HIGH PRIORITY",
+      accent: "#EF4444"
     };
   }
 
   if (priority === "medium") {
     return {
       background: "#FEF3C7",
-      border: "#FDE68A",
+      border: "#FCD34D",
       text: "#92400E",
-      label: "MEDIUM PRIORITY"
+      label: "MEDIUM PRIORITY",
+      accent: "#F59E0B"
     };
   }
 
   return {
-    background: "#F1F5F9",
-    border: "#CBD5E1",
-    text: "#475569",
-    label: "LOW PRIORITY"
+    background: "#DBEAFE",
+    border: "#BFDBFE",
+    text: "#1D4ED8",
+    label: "LOW PRIORITY",
+    accent: "#3B82F6"
+  };
+}
+
+function getDifficultyTone(effortMinutes: number) {
+  if (effortMinutes <= 30) {
+    return {
+      label: "Easy",
+      background: "#DCFCE7",
+      border: "#BBF7D0",
+      text: "#166534"
+    };
+  }
+
+  return {
+    label: "Medium",
+    background: "#FEF3C7",
+    border: "#FCD34D",
+    text: "#92400E"
   };
 }
 
@@ -806,38 +847,22 @@ function renderScoreSummary(scan: ScanResult, previousScan?: ScanResult | null) 
   ];
 
   return `
-    <div style="border:1px solid #E2E8F0;border-radius:24px;background:#F8FAFC;padding:18px 16px 6px;">
-      <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-        <tr>
-          ${metrics
-            .map((metric) => {
-              const palette = getScorePalette(metric.value);
-              const delta = getDeltaPresentation(metric.value, metric.previous);
-              return `
-                <td class="metric-cell" style="width:25%;padding:0 8px 12px;vertical-align:top;">
-                  <div style="border:1px solid #E2E8F0;border-radius:18px;background:#FFFFFF;padding:16px;min-height:164px;">
-                    <div style="font-size:14px;color:#475569;margin-bottom:14px;font-weight:600;">${escapeHtml(metric.label)}</div>
-                    <div style="display:flex;align-items:center;gap:12px;">
-                      <span style="display:inline-flex;width:58px;height:58px;border-radius:999px;border:5px solid ${palette.ring};align-items:center;justify-content:center;background:${palette.background};font-size:22px;font-weight:700;color:${palette.text};">
-                        ${metric.value}
-                      </span>
-                      <div>
-                        <div style="font-size:14px;font-weight:700;color:${delta.color};line-height:1.5;">
-                          ${delta.text}
-                        </div>
-                        <div style="font-size:12px;color:${delta.color};margin-top:4px;">
-                          ${escapeHtml(delta.trendLabel)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </td>
-              `;
-            })
-            .join("")}
-        </tr>
-      </table>
-    </div>
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E5E7EB;background:#FFFFFF;border-radius:8px;">
+      <tr>
+        <td style="padding:20px 16px 18px 16px;">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr>
+              ${metrics
+                .map((metric) => {
+                  const delta = metric.previous === null ? null : metric.value - metric.previous;
+                  return buildScoreCircle(metric.value, metric.label, delta, metric.previous === null);
+                })
+                .join("")}
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   `;
 }
 
@@ -856,10 +881,21 @@ export async function sendReportEmail(input: {
   const baseUrl = getBaseUrl();
   const fromName = input.branding?.email_from_name || input.branding?.agency_name || "SitePulse";
   const accent = input.branding?.brand_color || "#3B82F6";
-  const sitePulseLogo = `${baseUrl}/brand/sitepulse-logo-light.svg`;
   const clientWebsiteName = getClientWebsiteName(input.website);
   const websiteHost = stripProtocol(input.website.url);
   const reportDate = formatReportDate(input.scan.scanned_at);
+  const reportMonthYear = formatReportMonthYear(input.scan.scanned_at);
+  const emailBaseUrl = ensureHttpsUrl(baseUrl).replace(/\/$/, "");
+  const websiteUrl = ensureHttpsUrl(input.website.url);
+  const reportUrl = `${emailBaseUrl}/dashboard/websites/${input.website.id}`;
+  const manageReportsUrl = `${emailBaseUrl}/dashboard/reports`;
+  const billingUrl = `${emailBaseUrl}/dashboard/billing`;
+  const unsubscribeUrl = `${emailBaseUrl}/dashboard/settings`;
+  const helpUrl = `${emailBaseUrl}/contact`;
+  const liveDashboardUrl = ensureHttpsUrl(input.dashboardUrl);
+  const dashboardLinkTextRaw = stripProtocol(liveDashboardUrl);
+  const dashboardLinkText =
+    dashboardLinkTextRaw.length > 44 ? `${dashboardLinkTextRaw.slice(0, 41)}...` : dashboardLinkTextRaw;
   const performanceDelta =
     input.previousScan !== null && input.previousScan !== undefined
       ? input.scan.performance_score - input.previousScan.performance_score
@@ -878,6 +914,134 @@ export async function sendReportEmail(input: {
     accent
   });
   const keyIssue = topIssues[0]?.title ?? "your site performance";
+  const reportYear = new Date(input.scan.scanned_at).getFullYear();
+  const heroSummaryPrimary =
+    performanceDelta !== null && performanceDelta < 0
+      ? `Performance fell by ${Math.abs(performanceDelta)} points since last week, which puts more pressure on conversions and client confidence.`
+      : "This week's scan shows where the site is helping or hurting visibility, speed, and trust.";
+  const heroSummarySecondary = `The biggest talking point this week is ${keyIssue.toLowerCase()}. Review the highest-priority fixes below, then open the full report for the complete action plan.`;
+  const businessImpactMarkup = businessImpactLines
+    .map(
+      (line) => `
+        <tr>
+          <td valign="top" style="width:28px;padding:0 12px 12px 0;font-size:16px;line-height:20px;">${line.icon}</td>
+          <td valign="top" style="padding:0 0 12px 0;font-size:14px;line-height:22px;color:#4B5563;">
+            ${escapeHtml(line.text)}
+          </td>
+        </tr>
+      `
+    )
+    .join("");
+  const issuesMarkup = topIssues.length
+    ? topIssues
+        .map((issue, index) => {
+          const priority = getPriorityTone(issue.priority);
+
+          return `
+            <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+              <tr>
+                <td style="padding:0 0 ${index < topIssues.length - 1 ? 12 : 0}px 0;">
+                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E5E7EB;border-left:4px solid ${priority.accent};border-radius:8px;background:#FFFFFF;box-shadow:0 6px 18px rgba(15,23,42,0.06);">
+                    <tr>
+                      <td style="padding:18px 18px 16px 18px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                          <tr>
+                            <td valign="top" style="padding:0 12px 10px 0;">
+                              <table cellpadding="0" cellspacing="0" role="presentation">
+                                <tr>
+                                  <td valign="top" style="padding:1px 10px 0 0;font-size:16px;line-height:20px;color:#6B7280;">${getCategoryIcon(issue.category)}</td>
+                                  <td valign="top" style="font-size:16px;line-height:24px;font-weight:700;color:#111827;">
+                                    ${escapeHtml(issue.title)}
+                                  </td>
+                                </tr>
+                              </table>
+                            </td>
+                            <td align="right" valign="top" style="white-space:nowrap;padding:0 0 10px 0;">
+                              <span style="display:inline-block;border:1px solid ${priority.border};background:${priority.background};color:${priority.text};border-radius:999px;padding:6px 10px;font-size:11px;line-height:11px;font-weight:700;letter-spacing:0.4px;">
+                                ${priority.label}
+                              </span>
+                            </td>
+                          </tr>
+                        </table>
+                        <p style="margin:0 0 10px 0;font-size:14px;line-height:22px;color:#6B7280;">
+                          ${escapeHtml(truncateText(issue.subtitle, 150))}
+                        </p>
+                        <a href="${escapeHtml(issue.learnMoreUrl)}" style="font-size:14px;line-height:20px;font-weight:700;color:${accent};text-decoration:none;">
+                          Learn more &rarr;
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          `;
+        })
+        .join("")
+    : `
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E5E7EB;border-left:4px solid #3B82F6;border-radius:8px;background:#FFFFFF;box-shadow:0 6px 18px rgba(15,23,42,0.06);">
+          <tr>
+            <td style="padding:18px 18px 16px 18px;">
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                <tr>
+                  <td valign="top" style="font-size:16px;line-height:24px;font-weight:700;color:#111827;padding:0 12px 10px 0;">
+                    No urgent issues need attention this week
+                  </td>
+                  <td align="right" valign="top" style="white-space:nowrap;padding:0 0 10px 0;">
+                    <span style="display:inline-block;border:1px solid #BFDBFE;background:#DBEAFE;color:#1D4ED8;border-radius:999px;padding:6px 10px;font-size:11px;line-height:11px;font-weight:700;letter-spacing:0.4px;">
+                      LOW PRIORITY
+                    </span>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0;font-size:14px;line-height:22px;color:#6B7280;">
+                This week looks stable overall, so the focus can stay on small improvements and ongoing monitoring.
+              </p>
+            </td>
+          </tr>
+        </table>
+      `;
+  const quickWinsMarkup = quickWins
+    .map((win, index) => {
+      const difficultyTone = getDifficultyTone(win.effortMinutes);
+      const timeEstimate = win.difficulty.includes("/") ? win.difficulty.split("/").slice(1).join("/").trim() : win.difficulty;
+
+      return `
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+          <tr>
+            <td style="padding:0 0 ${index < quickWins.length - 1 ? 12 : 0}px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E2E8F0;border-radius:8px;background:#FFFFFF;">
+                <tr>
+                  <td valign="top" style="width:44px;padding:18px 0 18px 18px;">
+                    <table width="28" cellpadding="0" cellspacing="0" role="presentation" style="width:28px;height:28px;background:#DCFCE7;border-radius:999px;">
+                      <tr>
+                        <td align="center" valign="middle" style="font-size:15px;line-height:15px;color:#166534;font-weight:700;">&#10003;</td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td valign="top" style="padding:18px 18px 18px 12px;">
+                    <p style="margin:0 0 6px 0;font-size:15px;line-height:22px;font-weight:700;color:#111827;">
+                      ${escapeHtml(win.quickAction)}
+                    </p>
+                    <p style="margin:0 0 8px 0;font-size:14px;line-height:22px;color:#6B7280;">
+                      Est. Impact: ${escapeHtml(win.quickImpact)}
+                    </p>
+                    <p style="margin:0;font-size:13px;line-height:20px;color:#6B7280;">
+                      Difficulty:
+                      <span style="display:inline-block;margin:0 6px;border:1px solid ${difficultyTone.border};background:${difficultyTone.background};color:${difficultyTone.text};border-radius:999px;padding:4px 10px;font-size:11px;line-height:11px;font-weight:700;vertical-align:middle;">
+                        ${difficultyTone.label}
+                      </span>
+                      <span style="color:#94A3B8;">${escapeHtml(timeEstimate)}</span>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      `;
+    })
+    .join("");
   const subject =
     performanceDelta !== null && performanceDelta < 0
       ? `Weekly Report: Performance dropped by ${Math.abs(performanceDelta)} points`
@@ -896,187 +1060,225 @@ export async function sendReportEmail(input: {
       recipient: input.to
     },
     html: `
-      <div style="font-family: Arial, sans-serif; background:#F8FAFC; padding:32px 20px; color:#0F172A;">
-        <style>
-          @media only screen and (max-width: 600px) {
-            .email-shell { width: 100% !important; }
-            .content-pad { padding-left: 20px !important; padding-right: 20px !important; }
-            .metric-cell { display: block !important; width: 100% !important; padding: 0 0 12px !important; }
-            .cta-button { display: block !important; width: 100% !important; }
-            .header-meta, .header-identity { display: block !important; width: 100% !important; text-align: left !important; }
-          }
-        </style>
-        <div class="email-shell" style="max-width: 920px; margin: 0 auto; border-radius: 26px; overflow: hidden; border: 1px solid #E2E8F0; background:#FFFFFF; box-shadow: 0 30px 80px -40px rgba(15, 23, 42, 0.45);">
-          <div style="background:#0F172A; padding:24px 32px;">
-            <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#F4F6F9;margin:0;padding:0;">
+        <tr>
+          <td align="center" style="padding:32px 12px;">
+            <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="width:600px;max-width:600px;background:#FFFFFF;border-collapse:separate;border-spacing:0;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;">
               <tr>
-                <td class="header-meta" valign="middle">
-                  <img src="${sitePulseLogo}" alt="SitePulse" style="max-height:42px; max-width:220px; width:auto; height:auto; object-fit:contain; display:block;" />
+                <td style="background:#0F172A;padding:0;">
+                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                    <tr>
+                      <td style="padding:22px 24px;font-family:Arial,Helvetica,sans-serif;">
+                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                          <tr>
+                            <td valign="middle" style="font-size:24px;line-height:28px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">
+                              SitePulse
+                            </td>
+                            <td align="right" valign="middle" style="font-size:13px;line-height:20px;color:#94A3AF;">
+                              Weekly Performance Report &middot; ${escapeHtml(reportMonthYear)}
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="height:4px;background:${accent};font-size:0;line-height:0;">&nbsp;</td>
+                    </tr>
+                  </table>
                 </td>
-                <td class="header-identity" valign="middle" style="text-align:right;">
-                  <div style="font-size:15px; font-weight:700; color:#F8FAFC;">SitePulse</div>
-                  <div style="font-size:13px; color:#CBD5E1; margin-top:4px;">hello@trysitepulse.com</div>
+              </tr>
+              <tr>
+                <td style="padding:24px;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                    <tr>
+                      <td style="padding:0 0 24px 0;">
+                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E5E7EB;border-radius:8px;background:#FFFFFF;">
+                          <tr>
+                            <td style="padding:28px 24px 24px 24px;">
+                              <p style="margin:0 0 8px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#94A3AF;font-weight:700;">
+                                Weekly website report
+                              </p>
+                              <h1 style="margin:0 0 10px 0;font-size:30px;line-height:38px;font-weight:700;color:#111827;">
+                                Weekly Website Report for ${escapeHtml(clientWebsiteName)}
+                              </h1>
+                              <p style="margin:0 0 8px 0;font-size:16px;line-height:24px;font-weight:700;">
+                                <a href="${escapeHtml(websiteUrl)}" style="color:#2563EB;text-decoration:none;">${escapeHtml(websiteHost)}</a>
+                              </p>
+                              <p style="margin:0 0 20px 0;font-size:13px;line-height:20px;color:#9CA3AF;">
+                                ${escapeHtml(reportDate)}
+                              </p>
+                              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#EFF6FF;border-left:4px solid ${accent};border-radius:8px;">
+                                <tr>
+                                  <td style="padding:16px 18px;">
+                                    <p style="margin:0 0 8px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#2563EB;font-weight:700;">
+                                      Why this matters now
+                                    </p>
+                                    <p style="margin:0 0 6px 0;font-size:14px;line-height:22px;color:#1E3A8A;">
+                                      ${escapeHtml(heroSummaryPrimary)}
+                                    </p>
+                                    <p style="margin:0;font-size:14px;line-height:22px;color:#475569;">
+                                      ${escapeHtml(heroSummarySecondary)}
+                                    </p>
+                                  </td>
+                                </tr>
+                              </table>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:0 0 24px 0;">
+                        ${renderScoreSummary(input.scan, input.previousScan)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:0 0 28px 0;">
+                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #FDE68A;border-left:4px solid #F59E0B;border-radius:8px;background:#FFFBEB;">
+                          <tr>
+                            <td style="padding:20px 20px 16px 20px;">
+                              <p style="margin:0 0 12px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#B45309;font-weight:700;">
+                                What this means for your business
+                              </p>
+                              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                                ${businessImpactMarkup}
+                              </table>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:0;">
+                        ${sectionDivider()}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:0 0 16px 0;">
+                        <h2 style="margin:0 0 6px 0;font-size:28px;line-height:34px;font-weight:700;color:#111827;">
+                          What needs your attention
+                        </h2>
+                        <p style="margin:0;font-size:14px;line-height:22px;color:#6B7280;">
+                          Top issues sorted by priority
+                        </p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:0 0 28px 0;">
+                        ${issuesMarkup}
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:0;">
+                        ${sectionDivider()}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:0 0 16px 0;">
+                        <h2 style="margin:0 0 6px 0;font-size:24px;line-height:30px;font-weight:700;color:#111827;">
+                          3 quick wins to improve this week
+                        </h2>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:0 0 28px 0;">
+                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E2E8F0;border-radius:8px;background:#F8FAFC;">
+                          <tr>
+                            <td style="padding:18px 18px 16px 18px;">
+                              ${quickWinsMarkup}
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:0;">
+                        ${sectionDivider()}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:0 0 28px 0;">
+                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                          <tr>
+                            <td align="center">
+                              <a href="${escapeHtml(reportUrl)}" style="display:block;width:100%;background:${cta.background};border:1px solid ${cta.border};border-radius:8px;padding:16px 24px;font-size:18px;line-height:24px;font-weight:700;color:#FFFFFF;text-decoration:none;box-sizing:border-box;">
+                                ${escapeHtml(cta.label)} &rarr;
+                              </a>
+                              <p style="margin:10px 0 0 0;font-size:12px;line-height:18px;color:#9CA3AF;">
+                                Takes 30 seconds &middot; No credit card needed to see
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:0;">
+                        ${sectionDivider()}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:0;">
+                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #BFDBFE;border-radius:8px;background:#EFF6FF;">
+                          <tr>
+                            <td style="padding:22px 22px 20px 22px;text-align:center;">
+                                              <p style="margin:0 0 8px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#2563EB;font-weight:700;">
+                                &#128202; Your live dashboard
+                              </p>
+                              <p style="margin:0 0 16px 0;font-size:22px;line-height:30px;font-weight:700;color:#1D4ED8;">
+                                See your live SEO data anytime &mdash; no login needed.
+                              </p>
+                              <table align="center" cellpadding="0" cellspacing="0" role="presentation">
+                                <tr>
+                                  <td align="center" style="border-radius:8px;background:#2563EB;">
+                                    <a href="${escapeHtml(liveDashboardUrl)}" style="display:inline-block;padding:14px 24px;font-size:15px;line-height:20px;font-weight:700;color:#FFFFFF;text-decoration:none;">
+                                      View Your Dashboard &rarr;
+                                    </a>
+                                  </td>
+                                </tr>
+                              </table>
+                              <p style="margin:12px 0 0 0;font-size:12px;line-height:18px;color:#6B7280;">
+                                ${escapeHtml(dashboardLinkText)}
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="padding:24px;background:#F9FAFB;border-top:1px solid #E5E7EB;text-align:center;font-family:Arial,Helvetica,sans-serif;">
+                  <p style="margin:0 0 12px 0;font-size:13px;line-height:20px;color:#6B7280;">
+                    This automated report was generated by SitePulse for ${escapeHtml(input.to)}
+                  </p>
+                  <p style="margin:0 0 12px 0;font-size:13px;line-height:20px;color:#6B7280;">
+                    <a href="${escapeHtml(manageReportsUrl)}" style="color:${accent};text-decoration:none;">Manage Reports</a>
+                    <span style="color:#CBD5E1;"> &middot; </span>
+                    <a href="${escapeHtml(billingUrl)}" style="color:${accent};text-decoration:none;">Billing</a>
+                    <span style="color:#CBD5E1;"> &middot; </span>
+                    <a href="${escapeHtml(unsubscribeUrl)}" style="color:${accent};text-decoration:none;">Unsubscribe</a>
+                    <span style="color:#CBD5E1;"> &middot; </span>
+                    <a href="${escapeHtml(helpUrl)}" style="color:${accent};text-decoration:none;">Help</a>
+                  </p>
+                  <p style="margin:0 0 6px 0;font-size:12px;line-height:18px;color:#9CA3AF;">
+                    &copy; ${reportYear} SitePulse
+                  </p>
+                  <p style="margin:0;font-size:12px;line-height:18px;color:#9CA3AF;">
+                    Made for agencies, not developers.
+                  </p>
                 </td>
               </tr>
             </table>
-          </div>
-
-          <div class="content-pad" style="padding:36px 32px 30px;">
-            <div style="text-align:center;">
-              <h1 style="margin:0; font-size:40px; line-height:1.1; color:#0F172A;">Weekly Website Report for ${escapeHtml(clientWebsiteName)}</h1>
-              <p style="margin:12px 0 0; font-size:24px; color:#64748B;">${escapeHtml(websiteHost)}</p>
-              <p style="margin:10px 0 0; font-size:12px; color:#94A3B8;">Weekly Performance Report &middot; ${escapeHtml(reportDate)}</p>
-            </div>
-
-            <div style="padding-top:26px;">
-              <div style="border-radius:22px; border:1px solid #DBEAFE; background:#EFF6FF; padding:18px 20px;">
-                <p style="margin:0; font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:#2563EB; font-weight:700;">Why this matters now</p>
-                <p style="margin:10px 0 0; font-size:16px; line-height:1.7; color:#1E293B;">
-                  ${performanceDelta !== null && performanceDelta < 0
-                    ? `Performance fell by ${Math.abs(performanceDelta)} points since last week, which puts more pressure on conversions and client confidence.`
-                    : "This week's scan shows where the site is helping or hurting visibility, speed, and trust."}
-                </p>
-                <p style="margin:8px 0 0; font-size:16px; line-height:1.7; color:#475569;">
-                  The biggest talking point this week is ${escapeHtml(keyIssue.toLowerCase())}. Review the highest-priority fixes below, then open the full report for the complete action plan.
-                </p>
-              </div>
-            </div>
-
-            <div style="padding-top:28px;">
-              ${renderScoreSummary(input.scan, input.previousScan)}
-            </div>
-
-            <div style="padding-top:28px;">
-              <div style="border-radius:22px; border:1px solid #DBEAFE; background:#EFF6FF; padding:18px 20px;">
-                <p style="margin:0; font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:#2563EB; font-weight:700;">What this means for your business</p>
-                <div style="margin-top:12px;">
-                  ${businessImpactLines
-                    .map(
-                      (line) => `
-                        <div style="display:flex; gap:12px; align-items:flex-start; margin-bottom:12px;">
-                          <span style="font-size:18px; line-height:1;">${line.icon}</span>
-                          <p style="margin:0; font-size:16px; line-height:1.7; color:#475569;">${escapeHtml(line.text)}</p>
-                        </div>
-                      `
-                    )
-                    .join("")}
-                </div>
-              </div>
-            </div>
-
-            <div style="padding-top:28px;">
-              ${sectionDivider()}
-              <h2 style="margin:0 0 12px; font-size:24px; color:#0F172A;">What needs your attention</h2>
-              <p style="margin:0 0 20px; font-size:14px; color:#64748B; line-height:1.7;">Top issues are sorted by priority so you can see what matters most first.</p>
-              <div style="border:1px solid #E2E8F0; border-radius:24px; background:#FFFFFF; padding:20px;">
-                <h3 style="margin:0 0 18px; font-size:22px; color:#0F172A;">Top issue summary</h3>
-                ${
-                  topIssues.length
-                    ? topIssues
-                        .map((issue, index) => {
-                          const priority = getPriorityTone(issue.priority);
-                          return `
-                            <div style="padding:18px 0;${index < topIssues.length - 1 ? "border-bottom:1px solid #E2E8F0;" : ""}">
-                              <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:10px;">
-                                <div style="display:flex; gap:10px; align-items:flex-start;">
-                                  <span style="font-size:18px; line-height:1;">${getCategoryIcon(issue.category)}</span>
-                                  <div style="font-size:18px; font-weight:700; color:#0F172A; line-height:1.45;">${escapeHtml(issue.title)}</div>
-                                </div>
-                                <span style="display:inline-block; white-space:nowrap; border-radius:999px; border:1px solid ${priority.border}; background:${priority.background}; color:${priority.text}; padding:6px 10px; font-size:11px; font-weight:700; letter-spacing:0.05em;">
-                                  ${priority.label}
-                                </span>
-                              </div>
-                              <p style="margin:0; font-size:14px; color:#64748B; line-height:1.7;">
-                                ${escapeHtml(truncateText(issue.subtitle, 150))}
-                              </p>
-                              <div style="margin-top:8px;">
-                                <a href="${issue.learnMoreUrl}" style="font-size:13px; color:${accent}; text-decoration:none; font-weight:600;">Learn more &rarr;</a>
-                              </div>
-                            </div>
-                          `;
-                        })
-                        .join("")
-                    : `<div style="padding:8px 0 2px;">
-                        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:10px;">
-                          <div style="display:flex; gap:10px; align-items:flex-start;">
-                            <span style="font-size:18px; line-height:1;">&#9989;</span>
-                            <div style="font-size:18px; font-weight:700; color:#0F172A; line-height:1.45;">No urgent issues need attention this week</div>
-                          </div>
-                          <span style="display:inline-block; white-space:nowrap; border-radius:999px; border:1px solid #CBD5E1; background:#F1F5F9; color:#475569; padding:6px 10px; font-size:11px; font-weight:700; letter-spacing:0.05em;">LOW PRIORITY</span>
-                        </div>
-                        <p style="margin:0; font-size:14px; color:#64748B; line-height:1.7;">This week looks stable overall, so the focus can stay on small improvements and ongoing monitoring.</p>
-                      </div>`
-                }
-              </div>
-            </div>
-
-            <div style="padding-top:28px;">
-              ${sectionDivider()}
-              <div style="border:1px solid #E2E8F0; border-radius:24px; background:#F8FAFC; padding:20px;">
-                <h2 style="margin:0 0 16px; font-size:24px; color:#0F172A;">3 quick wins to improve this week</h2>
-                ${quickWins
-                  .map(
-                    (win, index) => `
-                      <div style="padding:16px 0;${index < quickWins.length - 1 ? "border-bottom:1px solid #E2E8F0;" : ""}">
-                        <div style="display:flex; gap:12px; align-items:flex-start;">
-                          <span style="font-size:18px; line-height:1; color:#16A34A;">&#10003;</span>
-                          <div>
-                            <p style="margin:0; font-size:16px; font-weight:700; color:#0F172A; line-height:1.5;">${escapeHtml(win.quickAction)}</p>
-                            <p style="margin:6px 0 0; font-size:14px; color:#475569; line-height:1.7;">Est. impact: ${escapeHtml(win.quickImpact)}</p>
-                            <p style="margin:4px 0 0; font-size:14px; color:#64748B; line-height:1.7;">Difficulty: ${escapeHtml(win.difficulty)}</p>
-                          </div>
-                        </div>
-                      </div>
-                    `
-                  )
-                  .join("")}
-              </div>
-            </div>
-
-            <div style="padding-top:28px;">
-              ${sectionDivider()}
-              <div style="text-align:center;">
-                <a class="cta-button" href="${baseUrl}/dashboard/websites/${input.website.id}" style="display:inline-block; width:100%; max-width:520px; min-height:48px; border-radius:18px; background:${cta.background}; border:1px solid ${cta.border}; color:#FFFFFF; text-decoration:none; padding:16px 24px; font-size:18px; font-weight:700; line-height:1.2;">${escapeHtml(cta.label)} &rarr;</a>
-                <p style="margin:10px 0 0; font-size:12px; color:#94A3B8;">Takes 30 seconds &middot; No credit card needed to view</p>
-              </div>
-            </div>
-
-            <div style="padding-top:28px;">
-              ${sectionDivider()}
-              <div style="border-radius:24px; border:1px solid #BFDBFE; background:#EFF6FF; padding:24px 22px; text-align:center;">
-                <p style="margin:0; font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:#2563EB; font-weight:700;">📊 Your Live Dashboard</p>
-                <p style="margin:14px 0 0; font-size:18px; line-height:1.6; color:#1E293B; font-weight:700;">
-                  See your live SEO data anytime &mdash; no login needed.
-                </p>
-                <div style="margin-top:18px;">
-                  <a href="${input.dashboardUrl}" style="display:inline-block; min-width:240px; border-radius:16px; background:#2563EB; color:#FFFFFF; text-decoration:none; padding:14px 22px; font-size:16px; font-weight:700;">
-                    View Your Dashboard &rarr;
-                  </a>
-                </div>
-                <p style="margin:14px 0 0; font-size:12px; color:#475569; line-height:1.7;">
-                  Link: ${escapeHtml(stripProtocol(input.dashboardUrl))}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div style="border-top:1px solid #E2E8F0; padding:22px 32px 26px; text-align:center;">
-            <p style="margin:0; font-size:14px; color:#64748B; line-height:1.7;">
-              This automated report was generated by SitePulse for ${escapeHtml(input.to)}. You&apos;re receiving this because ${escapeHtml(clientWebsiteName)} is in your monitored websites.
-            </p>
-            <div style="margin-top:14px; font-size:14px; color:#94A3B8; line-height:1.8;">
-              <a href="${baseUrl}/dashboard/reports" style="color:${accent}; text-decoration:none;">Manage Reports</a>
-              <span style="margin:0 10px; color:#CBD5E1;">&middot;</span>
-              <a href="${baseUrl}/dashboard/billing" style="color:${accent}; text-decoration:none;">Billing</a>
-              <span style="margin:0 10px; color:#CBD5E1;">&middot;</span>
-              <a href="${baseUrl}/dashboard/settings" style="color:${accent}; text-decoration:none;">Unsubscribe</a>
-              <span style="margin:0 10px; color:#CBD5E1;">&middot;</span>
-              <a href="mailto:hello@trysitepulse.com" style="color:${accent}; text-decoration:none;">Help</a>
-            </div>
-            <p style="margin:16px 0 0; font-size:12px; color:#94A3B8;">&copy; 2025 SitePulse &middot; hello@trysitepulse.com &middot; Made for agencies, not developers.</p>
-          </div>
-        </div>
-      </div>
+          </td>
+        </tr>
+      </table>
     `,
     attachments: [
       {
@@ -1148,3 +1350,4 @@ export async function trySendCriticalAlertEmail(input: {
     return null;
   }
 }
+
