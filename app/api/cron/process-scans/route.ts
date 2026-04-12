@@ -5,12 +5,21 @@ export const runtime = "nodejs";
 
 function isAuthorized(request: Request) {
   const authHeader = request.headers.get("authorization");
-  const expected = `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`;
-  return request.headers.has("x-vercel-cron") || authHeader === expected;
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    console.error("[cron:process-scans] Missing CRON_SECRET environment variable.");
+    return false;
+  }
+
+  return authHeader === `Bearer ${cronSecret}`;
 }
 
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
+    console.warn("[cron:process-scans] Unauthorized request.", {
+      hasAuthorizationHeader: request.headers.has("authorization"),
+      userAgent: request.headers.get("user-agent")
+    });
     return apiError("Unauthorized", 401);
   }
 
