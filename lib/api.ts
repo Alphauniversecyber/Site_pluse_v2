@@ -7,11 +7,31 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export function apiError(message: string, status = 400) {
-  return NextResponse.json({ error: message }, { status });
+  return NextResponse.json(
+    { error: message },
+    {
+      status,
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0"
+      }
+    }
+  );
 }
 
 export function apiSuccess<T>(data: T, status = 200) {
-  return NextResponse.json({ data }, { status });
+  return NextResponse.json(
+    { data },
+    {
+      status,
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0"
+      }
+    }
+  );
 }
 
 export async function requireApiUser() {

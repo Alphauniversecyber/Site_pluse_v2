@@ -827,19 +827,49 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const [plainLanguage, setPlainLanguage] = useState<WebsiteScanPlainEnglish | null>(null);
   const [plainLanguageLoading, setPlainLanguageLoading] = useState(false);
   const [healthSignalsSyncing, setHealthSignalsSyncing] = useState(false);
+  const [healthSignalRetryTick, setHealthSignalRetryTick] = useState(0);
   const [competitorInput, setCompetitorInput] = useState("");
   const [isPending, startTransition] = useTransition();
-  const healthSignalAttemptKeysRef = useRef(new Set<string>());
+  const healthSignalAttemptCountsRef = useRef(new Map<string, number>());
+  const healthSignalRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const refetch = async () => {
-    setLoading(true);
+  const clearHealthSignalRetryTimeout = () => {
+    if (healthSignalRetryTimeoutRef.current) {
+      clearTimeout(healthSignalRetryTimeoutRef.current);
+      healthSignalRetryTimeoutRef.current = null;
+    }
+  };
+
+  const scheduleHealthSignalRetry = (attemptKey: string, attemptCount: number) => {
+    clearHealthSignalRetryTimeout();
+    const delayMs = Math.min(2500 * attemptCount, 8000);
+
+    healthSignalRetryTimeoutRef.current = setTimeout(() => {
+      healthSignalRetryTimeoutRef.current = null;
+      console.warn("[website:health-signals] Retrying missing health signal hydration.", {
+        websiteId: params.id,
+        attemptKey,
+        attemptCount,
+        delayMs
+      });
+      setHealthSignalRetryTick((value) => value + 1);
+    }, delayMs);
+  };
+
+  const refetch = async (options?: { background?: boolean }) => {
+    if (!options?.background) {
+      setLoading(true);
+    }
+
     try {
       const response = await fetchJson<WebsiteDetailResponse>(`/api/websites/${params.id}`);
       setData(response);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to load website.");
     } finally {
-      setLoading(false);
+      if (!options?.background) {
+        setLoading(false);
+      }
     }
   };
 
@@ -865,6 +895,16 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const uptimeSummary = buildUptimeSummary(data?.uptime_checks ?? []);
   const competitorEntries = latestCompetitorEntries(data?.competitor_scans ?? []);
   const businessImpact = buildSiteBusinessImpact(currentScan ?? null);
+
+  useEffect(() => {
+    healthSignalAttemptCountsRef.current.clear();
+    clearHealthSignalRetryTimeout();
+    setHealthSignalRetryTick(0);
+
+    return () => {
+      clearHealthSignalRetryTimeout();
+    };
+  }, [currentScan?.id, params.id]);
 
   const accessibilityViolations = useMemo(
     () => currentScan?.accessibility_violations ?? [],
@@ -906,6 +946,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
 
   useEffect(() => {
     if (!currentScan || currentScanFailed) {
+      clearHealthSignalRetryTimeout();
       return;
     }
 
@@ -913,6 +954,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
     const needsLinkHealth = !brokenLinks;
 
     if (!needsSeoAudit && !needsLinkHealth) {
+      clearHealthSignalRetryTimeout();
       return;
     }
 
@@ -924,11 +966,19 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
       .filter(Boolean)
       .join(":");
 
-    if (!attemptKey || healthSignalAttemptKeysRef.current.has(attemptKey)) {
+    if (!attemptKey) {
       return;
     }
 
-    healthSignalAttemptKeysRef.current.add(attemptKey);
+    const maxAttempts = 3;
+    const nextAttemptCount = (healthSignalAttemptCountsRef.current.get(attemptKey) ?? 0) + 1;
+
+    if (nextAttemptCount > maxAttempts) {
+      return;
+    }
+
+    healthSignalAttemptCountsRef.current.set(attemptKey, nextAttemptCount);
+    clearHealthSignalRetryTimeout();
 
     let cancelled = false;
     setHealthSignalsSyncing(true);
@@ -958,9 +1008,33 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
           return;
         }
 
-        if (results.some((result) => result.status === "fulfilled")) {
-          await refetch();
+        const fulfilled = results.some((result) => result.status === "fulfilled");
+        const rejectedMessages = results
+          .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+          .map((result) =>
+            result.reason instanceof Error ? result.reason.message : "Unknown health signal error."
+          );
+
+        if (fulfilled) {
+          await refetch({ background: true });
+          return;
         }
+
+        if (nextAttemptCount < maxAttempts) {
+          scheduleHealthSignalRetry(attemptKey, nextAttemptCount);
+          return;
+        }
+
+        console.error("[website:health-signals] Failed to hydrate SEO audit or link health data.", {
+          websiteId: params.id,
+          scanId: currentScan.id,
+          attemptKey,
+          attempts: nextAttemptCount,
+          errors: rejectedMessages
+        });
+        toast.error(
+          "SEO audit and link health data are taking longer than expected. Try refreshing again in a moment."
+        );
       })
       .catch(() => undefined)
       .finally(() => {
@@ -972,7 +1046,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
     return () => {
       cancelled = true;
     };
-  }, [brokenLinks, currentScan, currentScanFailed, params.id, seoAudit]);
+  }, [brokenLinks, currentScan, currentScanFailed, healthSignalRetryTick, params.id, seoAudit]);
 
   const runScan = () =>
     startTransition(async () => {

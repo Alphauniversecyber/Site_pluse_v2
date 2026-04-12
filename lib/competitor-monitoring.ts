@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ScanResult, UserProfile, Website } from "@/types";
+import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
 import { runPageSpeedScan } from "@/lib/pagespeed";
 import { trySendCriticalAlertEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -219,8 +220,9 @@ export async function runCompetitorScan(input: {
   }
 }
 
-export async function processCompetitorScans(limit = 20) {
+export async function processCompetitorScans(limit = getCronBatchLimit("COMPETITOR_CRON_LIMIT", 20)) {
   const admin = createSupabaseAdminClient();
+  const guard = createCronExecutionGuard("process-competitors", 45_000);
   const { data: websites, error } = await admin
     .from("websites")
     .select("*")
@@ -234,6 +236,10 @@ export async function processCompetitorScans(limit = 20) {
   const processed: string[] = [];
 
   for (const website of (websites ?? []) as Website[]) {
+    if (guard.shouldStop({ processedCount: processed.length, websiteId: website.id })) {
+      break;
+    }
+
     const competitors = Array.isArray(website.competitor_urls) ? website.competitor_urls.slice(0, 3) : [];
     if (!competitors.length) {
       continue;
@@ -250,6 +256,10 @@ export async function processCompetitorScans(limit = 20) {
     }
 
     for (const competitorUrl of competitors) {
+      if (guard.shouldStop({ processedCount: processed.length, websiteId: website.id, competitorUrl })) {
+        return processed;
+      }
+
       await runCompetitorScan({
         website,
         profile,

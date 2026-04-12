@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ScanResult, SslCheckRecord, UserProfile, Website } from "@/types";
 import { ensureBrokenLinkCheck } from "@/lib/broken-links";
+import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
 import { ensureCruxData } from "@/lib/crux";
 import { runAccessibilityScan } from "@/lib/pa11y";
 import { runPageSpeedScan } from "@/lib/pagespeed";
@@ -510,8 +511,9 @@ export async function executeWebsiteScan(
   };
 }
 
-export async function processDueScans(limit = 20) {
+export async function processDueScans(limit = getCronBatchLimit("SCAN_CRON_LIMIT", 20)) {
   const admin = createSupabaseAdminClient();
+  const guard = createCronExecutionGuard("process-scans", 45_000);
   const { data: schedules, error } = await admin
     .from("scan_schedules")
     .select("id, website_id, next_scan_at")
@@ -526,6 +528,10 @@ export async function processDueScans(limit = 20) {
   const executed: string[] = [];
 
   for (const schedule of schedules ?? []) {
+    if (guard.shouldStop({ executedCount: executed.length, nextWebsiteId: schedule.website_id })) {
+      break;
+    }
+
     const { data: website } = await admin
       .from("websites")
       .select("id, is_active")

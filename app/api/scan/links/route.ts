@@ -37,6 +37,12 @@ export async function POST(request: Request) {
 
     return apiSuccess(record);
   } catch (error) {
+    console.error("[api:scan:links] Failed to generate link health data.", {
+      websiteId: website.id,
+      scanId: parsed.data.scanId ?? null,
+      force: parsed.data.force ?? false,
+      error: error instanceof Error ? error.message : "Unknown broken link error."
+    });
     return apiError(error instanceof Error ? error.message : "Unable to complete link scan.", 500);
   }
 }

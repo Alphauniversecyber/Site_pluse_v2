@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ScanResult, UptimeCheckRecord, UserProfile, Website } from "@/types";
+import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
 import { trySendCriticalAlertEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -301,8 +302,9 @@ export async function syncUptimeRobotForUser(input: {
   return inserted;
 }
 
-export async function processDailyUptimeChecks(limit = 50) {
+export async function processDailyUptimeChecks(limit = getCronBatchLimit("UPTIME_CRON_LIMIT", 50)) {
   const admin = createSupabaseAdminClient();
+  const guard = createCronExecutionGuard("process-uptime", 45_000);
   const { data: websites, error } = await admin
     .from("websites")
     .select("*")
@@ -318,6 +320,10 @@ export async function processDailyUptimeChecks(limit = 50) {
 
   for (const row of websites ?? []) {
     const website = row as Website;
+    if (guard.shouldStop({ processedCount: processed.length, websiteId: website.id })) {
+      break;
+    }
+
     const { data: profile } = await admin
       .from("users")
       .select("*")
@@ -336,8 +342,9 @@ export async function processDailyUptimeChecks(limit = 50) {
   return processed;
 }
 
-export async function processUptimeRobotSync(limit = 20) {
+export async function processUptimeRobotSync(limit = getCronBatchLimit("UPTIMEROBOT_SYNC_LIMIT", 20)) {
   const admin = createSupabaseAdminClient();
+  const guard = createCronExecutionGuard("sync-uptimerobot", 45_000);
   const { data: profiles, error } = await admin
     .from("users")
     .select("*")
@@ -351,6 +358,10 @@ export async function processUptimeRobotSync(limit = 20) {
   const synced: string[] = [];
 
   for (const profile of (profiles ?? []) as UserProfile[]) {
+    if (guard.shouldStop({ syncedCount: synced.length, userId: profile.id })) {
+      break;
+    }
+
     if (!profile.uptimerobot_api_key) {
       continue;
     }

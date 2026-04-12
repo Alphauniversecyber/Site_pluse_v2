@@ -16,6 +16,7 @@ import type {
   Website
 } from "@/types";
 import { ensureMagicTokenForWebsite } from "@/lib/client-token";
+import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
 import { generateScanPdf } from "@/lib/pdf";
 import { buildHealthScore } from "@/lib/health-score";
 import { sendReportEmail, trySendCriticalAlertEmail } from "@/lib/resend";
@@ -437,8 +438,9 @@ function isDue(lastSentAt: string | null, frequency: UserProfile["email_report_f
   return diff >= threshold;
 }
 
-export async function processDueEmailReports(limit = 20) {
+export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_CRON_USER_LIMIT", 20)) {
   const admin = createSupabaseAdminClient();
+  const guard = createCronExecutionGuard("process-reports", 50_000);
   const { data: users } = await admin
     .from("users")
     .select("*")
@@ -449,6 +451,10 @@ export async function processDueEmailReports(limit = 20) {
   const sent: string[] = [];
 
   for (const profile of (users ?? []) as UserProfile[]) {
+    if (guard.shouldStop({ stage: "users", sentCount: sent.length, userId: profile.id })) {
+      break;
+    }
+
     const { data: websites } = await admin
       .from("websites")
       .select("*")
@@ -457,6 +463,10 @@ export async function processDueEmailReports(limit = 20) {
       .eq("email_reports_enabled", true);
 
     for (const website of (websites ?? []) as Website[]) {
+      if (guard.shouldStop({ stage: "websites", sentCount: sent.length, userId: profile.id, websiteId: website.id })) {
+        return sent;
+      }
+
       const { data: latestRows } = await admin
         .from("scan_results")
         .select("*")

@@ -41,6 +41,12 @@ export async function POST(request: Request) {
 
     return apiSuccess(record);
   } catch (error) {
+    console.error("[api:scan:seo] Failed to generate SEO audit.", {
+      websiteId: website.id,
+      scanId: parsed.data.scanId,
+      force: parsed.data.force ?? false,
+      error: error instanceof Error ? error.message : "Unknown SEO audit error."
+    });
     return apiError(error instanceof Error ? error.message : "Unable to complete SEO audit.", 500);
   }
 }
