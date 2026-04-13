@@ -496,11 +496,15 @@ async function getBrowser() {
       import("@sparticuz/chromium"),
       import("puppeteer-core")
     ]);
+    const headlessMode = "shell" as const;
 
     return puppeteerCore.launch({
-      headless: true,
-      args: [...chromium.args, ...launchArgs],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || (await chromium.executablePath("https://github.com/Sparticuz/chromium/releases/download/v131.0.0/chromium-v131.0.0-pack.tar")),
+      headless: headlessMode,
+      args: puppeteerCore.defaultArgs({
+        args: [...chromium.args, ...launchArgs],
+        headless: headlessMode
+      }),
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || (await chromium.executablePath()),
       defaultViewport: {
         width: 1200,
         height: 1697,
