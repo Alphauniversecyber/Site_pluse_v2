@@ -648,8 +648,8 @@ export async function buildClientDashboardPayload(token: string): Promise<Client
     website.ga_connected_at ??
     website.created_at;
 
-  const gscConnected = Boolean(website.gsc_refresh_token || website.gsc_access_token);
-  const gaConnected = Boolean(website.ga_refresh_token || website.ga_access_token);
+  const gscConnected = Boolean((website.gsc_refresh_token || website.gsc_access_token) && website.gsc_property);
+  const gaConnected = Boolean((website.ga_refresh_token || website.ga_access_token) && website.ga_property_id);
 
   return {
     token,

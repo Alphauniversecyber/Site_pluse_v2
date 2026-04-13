@@ -238,8 +238,7 @@ export async function pickBestGscProperty(accessToken: string, websiteUrl: strin
   return (
     properties.find((property) => property === exactOrigin) ??
     properties.find((property) => matchesProperty(property, websiteUrl)) ??
-    properties[0] ??
-    exactOrigin
+    null
   );
 }
 

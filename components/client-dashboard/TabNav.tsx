@@ -37,7 +37,7 @@ function StatusPill({
       }`}
     >
       {connected ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-      {label}: {connected ? "Live" : "Not connected"}
+      {label}: {connected ? "Connected" : "Not connected"}
     </div>
   );
 }
@@ -45,13 +45,23 @@ function StatusPill({
 function SyncNotice({
   service
 }: {
-  service: "gsc" | "ga";
+  service: "gsc_connected" | "ga_connected" | "gsc_needs_property" | "ga_needs_property";
 }) {
   return (
-    <div className="rounded-[1.6rem] border border-emerald-400/20 bg-emerald-400/10 px-5 py-4 text-sm text-emerald-100">
-      {service === "gsc"
-        ? "Google Search Console connected. Live search data will begin replacing the seeded mock data as soon as the refresh finishes."
-        : "GA4 connected. Live session and audience data will begin replacing the seeded mock data as soon as the refresh finishes."}
+    <div
+      className={`rounded-[1.6rem] border px-5 py-4 text-sm ${
+        service === "gsc_connected" || service === "ga_connected"
+          ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+          : "border-amber-400/20 bg-amber-400/10 text-amber-100"
+      }`}
+    >
+      {service === "gsc_connected"
+        ? "Google Search Console connected. SitePulse will use live search data as soon as Google returns it successfully."
+        : service === "ga_connected"
+          ? "GA4 connected. SitePulse will use live analytics data as soon as Google returns it successfully."
+          : service === "gsc_needs_property"
+            ? "Google Search Console authorization succeeded, but no matching Search Console property was found for this site."
+            : "Google Analytics authorization succeeded, but no matching GA4 web data stream was found for this site."}
     </div>
   );
 }
@@ -61,7 +71,7 @@ export function TabNav({
   connectionNotice
 }: {
   dashboard: ClientDashboardPayload;
-  connectionNotice?: "gsc" | "ga" | null;
+  connectionNotice?: "gsc_connected" | "ga_connected" | "gsc_needs_property" | "ga_needs_property" | null;
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [gsc, setGsc] = useState<GscDashboardData>(dashboard.gsc);
@@ -142,6 +152,24 @@ export function TabNav({
       .sort()
       .at(-1);
   }, [dashboard.lastUpdated, ga.lastSyncedAt, gsc.lastSyncedAt]);
+
+  const liveDataWarnings = useMemo(() => {
+    const warnings: string[] = [];
+
+    if (dashboard.connections.gsc && !gscLoading && gsc.source === "mock") {
+      warnings.push(
+        "Search Console is connected, but Google is still returning fallback data. Check Search Console property access and that the Search Console API is enabled."
+      );
+    }
+
+    if (dashboard.connections.ga && !gaLoading && ga.source === "mock") {
+      warnings.push(
+        "GA4 is connected, but Google is still returning fallback data. Check GA4 property access and that both the Analytics Data API and Analytics Admin API are enabled."
+      );
+    }
+
+    return warnings;
+  }, [dashboard.connections.ga, dashboard.connections.gsc, ga.source, gaLoading, gsc.source, gscLoading]);
 
   const content = useMemo(() => {
     switch (activeTab) {
@@ -228,6 +256,18 @@ export function TabNav({
 
         <div className="mt-6 space-y-6">
           {connectionNotice ? <SyncNotice service={connectionNotice} /> : null}
+          {liveDataWarnings.length ? (
+            <div className="space-y-3">
+              {liveDataWarnings.map((warning) => (
+                <div
+                  key={warning}
+                  className="rounded-[1.6rem] border border-amber-400/20 bg-amber-400/10 px-5 py-4 text-sm text-amber-100"
+                >
+                  {warning}
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap gap-3">
             {TAB_ITEMS.map((tab) => (

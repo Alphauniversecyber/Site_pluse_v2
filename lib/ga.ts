@@ -199,14 +199,9 @@ export async function pickBestGaPropertyId(accessToken: string, websiteUrl: stri
 
   const properties =
     payload.accountSummaries?.flatMap((summary) => summary.propertySummaries ?? []) ?? [];
-  let fallback = properties[0]?.property?.replace("properties/", "") ?? null;
 
   for (const property of properties) {
     const propertyId = property.property.replace("properties/", "");
-
-    if (!fallback) {
-      fallback = propertyId;
-    }
 
     const streamsResponse = await fetch(
       `https://analyticsadmin.googleapis.com/v1beta/${property.property}/dataStreams?pageSize=50`,
@@ -235,7 +230,7 @@ export async function pickBestGaPropertyId(accessToken: string, websiteUrl: stri
     }
   }
 
-  return fallback;
+  return null;
 }
 
 export async function fetchGaDashboardData(input: {

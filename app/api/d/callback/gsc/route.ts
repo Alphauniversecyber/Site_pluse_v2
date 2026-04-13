@@ -64,6 +64,10 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeCodeForTokens(code, redirectUri);
     const property = await pickBestGscProperty(tokens.accessToken, client.url);
 
+    if (!property) {
+      return NextResponse.redirect(new URL(`/d/${token}?gsc=needs-property`, baseUrl));
+    }
+
     await saveGSCTokens(token, tokens.accessToken, tokens.refreshToken, property);
 
     return NextResponse.redirect(new URL(`/d/${token}?gsc=connected`, baseUrl));

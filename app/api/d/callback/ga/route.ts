@@ -64,6 +64,10 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeCodeForTokens(code, redirectUri);
     const propertyId = await pickBestGaPropertyId(tokens.accessToken, client.url);
 
+    if (!propertyId) {
+      return NextResponse.redirect(new URL(`/d/${token}?ga=needs-property`, baseUrl));
+    }
+
     await saveGATokens(token, tokens.accessToken, tokens.refreshToken, propertyId);
 
     return NextResponse.redirect(new URL(`/d/${token}?ga=connected`, baseUrl));

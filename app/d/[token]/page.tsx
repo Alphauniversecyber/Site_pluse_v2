@@ -32,7 +32,15 @@ export default async function ClientDashboardPage({
   const gscState = Array.isArray(searchParams?.gsc) ? searchParams?.gsc[0] : searchParams?.gsc;
   const gaState = Array.isArray(searchParams?.ga) ? searchParams?.ga[0] : searchParams?.ga;
   const connectionNotice =
-    gscState === "connected" ? "gsc" : gaState === "connected" ? "ga" : null;
+    gscState === "connected"
+      ? "gsc_connected"
+      : gaState === "connected"
+        ? "ga_connected"
+        : gscState === "needs-property"
+          ? "gsc_needs_property"
+          : gaState === "needs-property"
+            ? "ga_needs_property"
+            : null;
 
   return <TabNav dashboard={payload} connectionNotice={connectionNotice} />;
 }
