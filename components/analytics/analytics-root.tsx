@@ -34,6 +34,7 @@ declare global {
 
 const TAWK_PROPERTY_ID = process.env.NEXT_PUBLIC_TAWK_PROPERTY_ID;
 const TAWK_WIDGET_ID = process.env.NEXT_PUBLIC_TAWK_WIDGET_ID;
+const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? "G-2W3TL7PHMG";
 
 function toAnalyticsIdentity(user: {
   id: string;
@@ -161,6 +162,18 @@ export function AnalyticsRoot() {
 
   return (
     <>
+      {GA_MEASUREMENT_ID ? (
+        <>
+          <Script
+            id="sitepulse-google-tag-loader"
+            src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+            strategy="afterInteractive"
+          />
+          <Script id="sitepulse-google-tag" strategy="afterInteractive">
+            {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}window.gtag=window.gtag||gtag;gtag('js', new Date());gtag('config', '${GA_MEASUREMENT_ID}');`}
+          </Script>
+        </>
+      ) : null}
       {!shouldHideTawk && authUser?.firstName ? (
         <div className="pointer-events-none fixed bottom-24 right-20 z-30 hidden rounded-2xl border border-slate-200 bg-white/96 px-5 py-3 text-sm text-slate-800 shadow-[0_20px_45px_-25px_rgba(15,23,42,0.24)] sm:block dark:border-white/10 dark:bg-slate-950/90 dark:text-slate-100">
           {`Hi ${authUser.firstName}! How can we help?`}
