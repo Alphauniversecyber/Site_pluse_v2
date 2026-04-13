@@ -38,6 +38,19 @@ const ISSUE_COPY = {
   impactLabel: "\u{1F4CA} Business impact:"
 } as const;
 
+function stripMarkdown(text: string | null | undefined) {
+  if (!text) {
+    return "";
+  }
+
+  return text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/https?:\/\/[^\s)]+/g, "")
+    .replace(/\[|\]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function severityMeta(severity: ClientDashboardIssue["severity"]) {
   if (severity === "critical") {
     return {
@@ -257,9 +270,6 @@ export function Issues({ issues }: { issues: ClientDashboardIssue[] }) {
           ))}
         </div>
 
-        {rewriteStatus === "fallback" ? (
-          <p className="mt-4 text-sm text-amber-200">Simplified descriptions unavailable</p>
-        ) : null}
       </div>
 
       {rewriteStatus === "loading" ? (
@@ -286,7 +296,9 @@ export function Issues({ issues }: { issues: ClientDashboardIssue[] }) {
                       </div>
                       <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-3">
-                          <p className="font-display text-xl font-semibold text-white">{issue.title}</p>
+                          <p className="font-display text-xl font-semibold text-white">
+                            {stripMarkdown(issue.title)}
+                          </p>
                           <span
                             className={cn(
                               "rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]",
@@ -296,7 +308,9 @@ export function Issues({ issues }: { issues: ClientDashboardIssue[] }) {
                             {meta.label}
                           </span>
                         </div>
-                        <p className="text-sm leading-6 text-slate-300">{issue.description}</p>
+                        <p className="text-sm leading-6 text-slate-300">
+                          {stripMarkdown(issue.description)}
+                        </p>
                         <p className="text-sm text-slate-400">
                           {issue.affectedPages} affected {issue.affectedPages === 1 ? "page" : "pages"}
                         </p>

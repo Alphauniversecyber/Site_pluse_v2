@@ -31,6 +31,19 @@ const RECOMMENDATION_COPY = {
   estimatedTimePrefix: "\u23F1 Estimated time:"
 } as const;
 
+function stripMarkdown(text: string | null | undefined) {
+  if (!text) {
+    return "";
+  }
+
+  return text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/https?:\/\/[^\s)]+/g, "")
+    .replace(/\[|\]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function priorityTone(priority: ClientDashboardRecommendation["priority"]) {
   if (priority === "high") {
     return "border-rose-400/20 bg-rose-400/10 text-rose-200";
@@ -298,9 +311,6 @@ export function Recommendations({
           </div>
         </div>
 
-        {rewriteStatus === "fallback" ? (
-          <p className="mt-4 text-sm text-amber-200">Simplified descriptions unavailable</p>
-        ) : null}
       </div>
 
       {rewriteStatus === "loading" ? (
@@ -325,7 +335,9 @@ export function Recommendations({
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-display text-2xl font-semibold text-white">{recommendation.title}</p>
+                      <p className="font-display text-2xl font-semibold text-white">
+                        {stripMarkdown(recommendation.title)}
+                      </p>
                       <span
                         className={cn(
                           "rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]",
@@ -344,7 +356,9 @@ export function Recommendations({
                       </span>
                     </div>
 
-                    <p className="text-sm leading-6 text-slate-300">{recommendation.whatToDo}</p>
+                    <p className="text-sm leading-6 text-slate-300">
+                      {stripMarkdown(recommendation.whatToDo)}
+                    </p>
 
                     <div className="rounded-2xl border border-white/10 bg-[#08101f]/75 p-4">
                       <p className="text-sm font-semibold text-white">{RECOMMENDATION_COPY.whyItMattersLabel}</p>

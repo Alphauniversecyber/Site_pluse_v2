@@ -9,6 +9,19 @@ const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_
 const cache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_TTL = 60 * 60 * 1000;
 
+export function stripMarkdown(text: string | null | undefined): string {
+  if (!text) {
+    return "";
+  }
+
+  return text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/https?:\/\/[^\s)]+/g, "")
+    .replace(/\[|\]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 export interface PlainEnglishIssue {
   title: string;
   description: string;
@@ -38,23 +51,19 @@ type RawRecommendation = {
   priority: string;
 };
 
-function stripMarkdownLinks(value: string) {
-  return value.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").trim();
-}
-
 function sanitizeIssue(input: RawIssue): RawIssue {
   return {
     ...input,
-    title: stripMarkdownLinks(input.title),
-    description: stripMarkdownLinks(input.description)
+    title: stripMarkdown(input.title),
+    description: stripMarkdown(input.description)
   };
 }
 
 function sanitizeRecommendation(input: RawRecommendation): RawRecommendation {
   return {
     ...input,
-    title: stripMarkdownLinks(input.title),
-    description: stripMarkdownLinks(input.description)
+    title: stripMarkdown(input.title),
+    description: stripMarkdown(input.description)
   };
 }
 
@@ -108,11 +117,11 @@ function normalizeIssue(item: Partial<PlainEnglishIssue>): PlainEnglishIssue {
   const category = normalizeIssueCategory(String(item.category ?? ""));
 
   return {
-    title: stripMarkdownLinks(String(item.title ?? "")).slice(0, 120) || "Issue needs review",
-    description: stripMarkdownLinks(String(item.description ?? "")) || "This issue needs review.",
-    whatToDo: stripMarkdownLinks(String(item.whatToDo ?? "")) || "Ask your developer to review this issue.",
+    title: stripMarkdown(String(item.title ?? "")).slice(0, 120) || "Issue needs review",
+    description: stripMarkdown(String(item.description ?? "")) || "This issue needs review.",
+    whatToDo: stripMarkdown(String(item.whatToDo ?? "")) || "Ask your developer to review this issue.",
     realWorldImpact:
-      stripMarkdownLinks(String(item.realWorldImpact ?? "")) ||
+      stripMarkdown(String(item.realWorldImpact ?? "")) ||
       "This means your website may be harder to use, find, or trust.",
     category,
     icon: normalizeIssueIcon(String(item.icon ?? ""), category)
@@ -129,12 +138,12 @@ function normalizeRecommendationEffort(value: string): PlainEnglishRecommendatio
 
 function normalizeRecommendation(item: Partial<PlainEnglishRecommendation>): PlainEnglishRecommendation {
   return {
-    title: stripMarkdownLinks(String(item.title ?? "")).slice(0, 120) || "Recommendation",
-    whatToDo: stripMarkdownLinks(String(item.whatToDo ?? "")) || "Ask your developer to review this recommendation.",
+    title: stripMarkdown(String(item.title ?? "")).slice(0, 120) || "Recommendation",
+    whatToDo: stripMarkdown(String(item.whatToDo ?? "")) || "Ask your developer to review this recommendation.",
     whyItMatters:
-      stripMarkdownLinks(String(item.whyItMatters ?? "")) ||
+      stripMarkdown(String(item.whyItMatters ?? "")) ||
       "This will help improve your website's performance and visibility.",
-    estimatedTime: stripMarkdownLinks(String(item.estimatedTime ?? "")) || "~30 mins",
+    estimatedTime: stripMarkdown(String(item.estimatedTime ?? "")) || "~30 mins",
     effort: normalizeRecommendationEffort(String(item.effort ?? ""))
   };
 }
@@ -148,17 +157,17 @@ function getGroqClient(): Groq {
 }
 
 export async function rewriteIssuesToPlainEnglish(issues: RawIssue[]): Promise<PlainEnglishIssue[]> {
-  const sanitized = issues.map(sanitizeIssue);
-  const cacheKey = getCacheKey("issues", sanitized);
+  const cleanedIssues = issues.map(sanitizeIssue);
+  const cacheKey = getCacheKey("issues", cleanedIssues);
   const cached = getCached<PlainEnglishIssue[]>(cacheKey);
 
   if (cached) {
     return cached;
   }
 
-  const groqClient = getGroqClient();
-
-  const prompt = `
+  try {
+    const groqClient = getGroqClient();
+    const prompt = `
 You are an SEO expert who explains technical website issues
 to non-technical business owners in plain, friendly English.
 
@@ -176,41 +185,51 @@ For each issue return:
 - icon: single emoji that represents the category
 
 Issues to rewrite:
-${JSON.stringify(sanitized, null, 2)}
+${JSON.stringify(cleanedIssues, null, 2)}
 
 Return ONLY a valid JSON array. No markdown, no explanation, no backticks.
 `.trim();
 
-  const completion = await groqClient.chat.completions.create({
-    model: "llama3-8b-8192",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.3,
-    max_tokens: 4000
-  });
+    const completion = await groqClient.chat.completions.create({
+      model: "llama3-8b-8192",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.3,
+      max_tokens: 4000
+    });
 
-  const text = completion.choices[0]?.message?.content ?? "[]";
-  const clean = text.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean) as Array<Partial<PlainEnglishIssue>>;
-  const normalized = parsed.map(normalizeIssue);
+    const text = completion.choices[0]?.message?.content ?? "[]";
+    const clean = text.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(clean) as Array<Partial<PlainEnglishIssue>>;
+    const normalized = parsed.map(normalizeIssue);
 
-  setCached(cacheKey, normalized);
-  return normalized;
+    setCached(cacheKey, normalized);
+    return normalized;
+  } catch {
+    return cleanedIssues.map((issue) => ({
+      title: stripMarkdown(issue.title),
+      description: stripMarkdown(issue.description),
+      whatToDo: "Ask your developer to review and fix this issue.",
+      realWorldImpact: "This may affect your website visibility and user experience.",
+      category: "best_practices" as const,
+      icon: "⚠️"
+    }));
+  }
 }
 
 export async function rewriteRecommendationsToPlainEnglish(
   recommendations: RawRecommendation[]
 ): Promise<PlainEnglishRecommendation[]> {
-  const sanitized = recommendations.map(sanitizeRecommendation);
-  const cacheKey = getCacheKey("recommendations", sanitized);
+  const cleanedRecommendations = recommendations.map(sanitizeRecommendation);
+  const cacheKey = getCacheKey("recommendations", cleanedRecommendations);
   const cached = getCached<PlainEnglishRecommendation[]>(cacheKey);
 
   if (cached) {
     return cached;
   }
 
-  const groqClient = getGroqClient();
-
-  const prompt = `
+  try {
+    const groqClient = getGroqClient();
+    const prompt = `
 You are an SEO expert explaining website improvements to
 non-technical business owners in plain, friendly English.
 
@@ -226,23 +245,32 @@ For each recommendation return:
 - effort: one of: Easy, Medium, Hard
 
 Recommendations to rewrite:
-${JSON.stringify(sanitized, null, 2)}
+${JSON.stringify(cleanedRecommendations, null, 2)}
 
 Return ONLY a valid JSON array. No markdown, no explanation, no backticks.
 `.trim();
 
-  const completion = await groqClient.chat.completions.create({
-    model: "llama3-8b-8192",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.3,
-    max_tokens: 4000
-  });
+    const completion = await groqClient.chat.completions.create({
+      model: "llama3-8b-8192",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.3,
+      max_tokens: 4000
+    });
 
-  const text = completion.choices[0]?.message?.content ?? "[]";
-  const clean = text.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean) as Array<Partial<PlainEnglishRecommendation>>;
-  const normalized = parsed.map(normalizeRecommendation);
+    const text = completion.choices[0]?.message?.content ?? "[]";
+    const clean = text.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(clean) as Array<Partial<PlainEnglishRecommendation>>;
+    const normalized = parsed.map(normalizeRecommendation);
 
-  setCached(cacheKey, normalized);
-  return normalized;
+    setCached(cacheKey, normalized);
+    return normalized;
+  } catch {
+    return cleanedRecommendations.map((rec) => ({
+      title: stripMarkdown(rec.title),
+      whatToDo: stripMarkdown(rec.description),
+      whyItMatters: "Fixing this will improve your website performance.",
+      estimatedTime: "~30 mins",
+      effort: "Medium" as const
+    }));
+  }
 }
