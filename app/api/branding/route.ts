@@ -1,4 +1,5 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
+import { isTrialActive } from "@/lib/trial";
 import { brandingSchema } from "@/lib/validation";
 
 export async function GET() {
@@ -26,7 +27,7 @@ export async function PUT(request: Request) {
     return errorResponse;
   }
 
-  if (profile.plan !== "agency") {
+  if (profile.plan !== "agency" && !isTrialActive(profile)) {
     return apiError("White-label branding is available on the Agency plan.", 403);
   }
 

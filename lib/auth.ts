@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+import { hasActivePaidPlan, isTrialExpired } from "@/lib/trial";
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
     request
@@ -34,6 +36,7 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const guestOnlyAuthPaths = ["/login", "/signup"];
+  const premiumTrialPaths = ["/dashboard/websites/add", "/dashboard/branding"];
 
   if (pathname.startsWith("/dashboard") && !user) {
     const url = request.nextUrl.clone();
@@ -47,6 +50,35 @@ export async function updateSession(request: NextRequest) {
     url.pathname = "/dashboard";
     url.searchParams.delete("next");
     return NextResponse.redirect(url);
+  }
+
+  if (
+    user &&
+    premiumTrialPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`))
+  ) {
+    const { data: profile } = await supabase
+      .from("users")
+      .select("plan, subscription_status, is_trial, trial_ends_at")
+      .eq("id", user.id)
+      .single();
+
+    if (profile && !hasActivePaidPlan(profile) && isTrialExpired(profile)) {
+      if (pathname === "/dashboard/websites/add") {
+        const { count } = await supabase
+          .from("websites")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id);
+
+        if ((count ?? 0) < 1) {
+          return response;
+        }
+      }
+
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard/billing";
+      url.searchParams.set("trial", "expired");
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;

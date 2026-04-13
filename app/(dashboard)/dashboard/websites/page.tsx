@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 import { MetricTile } from "@/components/dashboard/metric-tile";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScoreRing } from "@/components/dashboard/score-ring";
+import { AddWebsiteButton } from "@/components/trial/AddWebsiteButton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,12 +93,12 @@ export default function WebsitesPage() {
         title="Protect every client account from one operating board"
         description="See which sites are at risk, where business value is leaking, and what your team should act on next."
         actions={
-          <Button asChild>
-            <Link href="/dashboard/websites/add">
+          <AddWebsiteButton websiteCount={websites.length}>
+            <>
               <Plus className="mr-2 h-4 w-4" />
               Add website
-            </Link>
-          </Button>
+            </>
+          </AddWebsiteButton>
         }
       />
 
@@ -342,8 +343,14 @@ export default function WebsitesPage() {
         <EmptyState
           title="No websites match that search"
           description="Try another client name or add a new website to start sending white-label reports automatically."
-          actionLabel="Add website"
-          actionHref="/dashboard/websites/add"
+          action={
+            <AddWebsiteButton websiteCount={websites.length}>
+              <>
+                <Plus className="h-4 w-4" />
+                Add website
+              </>
+            </AddWebsiteButton>
+          }
         />
       )}
     </div>

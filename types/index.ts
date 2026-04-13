@@ -40,6 +40,8 @@ export interface UserProfile {
   subscription_status: SubscriptionStatus | null;
   next_billing_date: string | null;
   trial_end_date: string | null;
+  trial_ends_at: string | null;
+  is_trial: boolean;
   email_report_frequency: ScanFrequency;
   email_reports_enabled: boolean;
   email_notifications_enabled: boolean;

@@ -21,7 +21,8 @@ import { generateScanPdf } from "@/lib/pdf";
 import { buildHealthScore } from "@/lib/health-score";
 import { sendReportEmail, trySendCriticalAlertEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { PLAN_LIMITS, buildStoragePath } from "@/lib/utils";
+import { canAccessFeature } from "@/lib/trial";
+import { buildStoragePath } from "@/lib/utils";
 
 async function loadReportContext(websiteId: string, scanId: string) {
   const admin = createSupabaseAdminClient();
@@ -195,7 +196,7 @@ export async function generateAndStoreReport(input: { websiteId: string; scanId:
     input.scanId
   );
 
-  if (!PLAN_LIMITS[profile.plan].pdfReports) {
+  if (!canAccessFeature(profile, "download_report")) {
     throw new Error("Your current plan does not include PDF reports.");
   }
 

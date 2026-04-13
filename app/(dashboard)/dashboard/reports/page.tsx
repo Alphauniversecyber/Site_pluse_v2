@@ -6,12 +6,15 @@ import { toast } from "sonner";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { TrialPaywall } from "@/components/trial/TrialPaywall";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useTrialPaywall } from "@/hooks/useTrialPaywall";
+import { useUser } from "@/hooks/useUser";
 import { useWebsites } from "@/hooks/useWebsites";
 import { fetchJson } from "@/lib/api-client";
 import { cn, formatRelativeTime } from "@/lib/utils";
@@ -88,10 +91,12 @@ function MetricPill({
 
 export default function ReportsPage() {
   const { websites } = useWebsites();
+  const { user } = useUser();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [isPending, startTransition] = useTransition();
+  const { paywallFeature, isExpired, closePaywall, requireAccess } = useTrialPaywall(user);
 
   const websiteLabels = useMemo(
     () =>
@@ -299,7 +304,9 @@ export default function ReportsPage() {
                         <Button
                           variant="outline"
                           className="h-11 justify-center rounded-2xl"
-                          onClick={() => downloadReport(report.id)}
+                          onClick={() =>
+                            requireAccess("download_report", () => downloadReport(report.id))
+                          }
                           disabled={isPending}
                         >
                           <Download className="h-4 w-4" />
@@ -399,7 +406,9 @@ export default function ReportsPage() {
                                 <Button
                                   variant="outline"
                                   className="h-11 justify-between rounded-2xl px-4"
-                                  onClick={() => downloadReport(report.id)}
+                                  onClick={() =>
+                                    requireAccess("download_report", () => downloadReport(report.id))
+                                  }
                                   disabled={isPending}
                                 >
                                   <span className="flex items-center gap-2">
@@ -441,6 +450,12 @@ export default function ReportsPage() {
           )}
         </CardContent>
       </Card>
+      <TrialPaywall
+        isOpen={paywallFeature !== null}
+        onClose={closePaywall}
+        feature={paywallFeature ?? "download_report"}
+        isExpired={isExpired}
+      />
     </div>
   );
 }

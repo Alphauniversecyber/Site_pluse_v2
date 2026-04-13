@@ -23,12 +23,15 @@ import { LinkHealthPanel } from "@/components/dashboard/link-health-panel";
 import { MetricTile } from "@/components/dashboard/metric-tile";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScoreRing } from "@/components/dashboard/score-ring";
+import { TrialPaywall } from "@/components/trial/TrialPaywall";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useTrialPaywall } from "@/hooks/useTrialPaywall";
+import { useUser } from "@/hooks/useUser";
 import type {
   BrokenLinkRecord,
   CompetitorScanRecord,
@@ -822,6 +825,7 @@ function WebsiteHealthSignalsCard(input: {
 }
 
 export default function WebsiteDetailPage({ params }: { params: { id: string } }) {
+  const { user } = useUser();
   const [data, setData] = useState<WebsiteDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [plainLanguage, setPlainLanguage] = useState<WebsiteScanPlainEnglish | null>(null);
@@ -830,6 +834,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const [healthSignalRetryTick, setHealthSignalRetryTick] = useState(0);
   const [competitorInput, setCompetitorInput] = useState("");
   const [isPending, startTransition] = useTransition();
+  const { paywallFeature, isExpired, closePaywall, requireAccess } = useTrialPaywall(user);
   const healthSignalAttemptCountsRef = useRef(new Map<string, number>());
   const healthSignalRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1183,7 +1188,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
               </Button>
               <Button
                 variant="outline"
-                onClick={generateReport}
+                onClick={() => requireAccess("download_report", generateReport)}
                 disabled={isPending}
                 className="h-11 w-full justify-center rounded-xl border-slate-200/90 bg-white/75 shadow-sm dark:border-white/10 dark:bg-background/70 sm:h-12"
               >
@@ -1191,7 +1196,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                 Generate PDF
               </Button>
               <Button
-                onClick={emailReport}
+                onClick={() => requireAccess("download_report", emailReport)}
                 disabled={isPending}
                 className="h-11 w-full justify-center rounded-xl sm:h-12 sm:col-span-2 xl:col-span-1"
               >
@@ -1840,6 +1845,12 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
           />
         </>
       )}
+      <TrialPaywall
+        isOpen={paywallFeature !== null}
+        onClose={closePaywall}
+        feature={paywallFeature ?? "download_report"}
+        isExpired={isExpired}
+      />
     </div>
   );
 }

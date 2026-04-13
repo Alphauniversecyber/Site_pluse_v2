@@ -1,4 +1,5 @@
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { TrialBanner } from "@/components/trial/TrialBanner";
 import { createSupabaseServerClient, requireAuthenticatedUser } from "@/lib/supabase-server";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -11,7 +12,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .limit(8);
 
   return (
-    <DashboardShell profile={profile} notifications={notifications ?? []}>
+    <DashboardShell
+      profile={profile}
+      notifications={notifications ?? []}
+      topBanner={<TrialBanner profile={profile} />}
+    >
       {children}
     </DashboardShell>
   );

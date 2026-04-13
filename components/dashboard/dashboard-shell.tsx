@@ -27,11 +27,13 @@ const navigation = [
 export function DashboardShell({
   children,
   profile,
-  notifications
+  notifications,
+  topBanner
 }: {
   children: React.ReactNode;
   profile: UserProfile;
   notifications: NotificationItem[];
+  topBanner?: React.ReactNode;
 }) {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -125,6 +127,7 @@ export function DashboardShell({
         </aside>
 
         <main className="min-w-0 flex-1">
+          {topBanner}
           <header className="sticky top-0 z-30 border-b border-border/80 bg-background/80 backdrop-blur-xl transition-colors duration-300">
             <div className="mx-auto flex w-full max-w-[var(--dashboard-content-max)] items-center justify-between gap-4 px-4 py-4 md:px-6 lg:px-8 xl:px-10 2xl:px-14 min-[1800px]:px-16 min-[2200px]:px-20">
               <div className="flex min-w-0 items-center gap-3">

@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { isTrialActive } from "@/lib/trial";
 import { buildStoragePath } from "@/lib/utils";
 import { brandingSchema } from "@/lib/validation";
 import { fetchJson } from "@/lib/api-client";
@@ -80,7 +81,7 @@ export default function BrandingPage() {
     );
   }
 
-  if (user.plan !== "agency") {
+  if (user.plan !== "agency" && !isTrialActive(user)) {
     return (
       <EmptyState
         title="White-label branding is on the Agency plan"

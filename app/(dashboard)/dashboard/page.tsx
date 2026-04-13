@@ -14,6 +14,7 @@ import {
 
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { SnapshotStatCard } from "@/components/dashboard/snapshot-stat-card";
+import { AddWebsiteButton } from "@/components/trial/AddWebsiteButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -300,9 +301,13 @@ export default async function DashboardOverviewPage() {
                   <Button asChild variant="outline" className="min-w-[9.75rem]">
                     <Link href="/dashboard/reports">Open reports</Link>
                   </Button>
-                  <Button asChild className="min-w-[9.75rem]">
-                    <Link href="/dashboard/websites/add">Add website</Link>
-                  </Button>
+                  <AddWebsiteButton
+                    profile={profile}
+                    websiteCount={websites.length}
+                    style={{ minWidth: "9.75rem" }}
+                  >
+                    Add website
+                  </AddWebsiteButton>
                 </div>
               </div>
 
@@ -636,9 +641,13 @@ export default async function DashboardOverviewPage() {
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
                   Add a client website to begin scans, build performance history, and generate agency-ready reporting.
                 </p>
-                <Button asChild className="mt-6">
-                  <Link href="/dashboard/websites/add">Add website</Link>
-                </Button>
+                <AddWebsiteButton
+                  profile={profile}
+                  websiteCount={websites.length}
+                  style={{ marginTop: "24px" }}
+                >
+                  Add website
+                </AddWebsiteButton>
               </div>
             </div>
           )}

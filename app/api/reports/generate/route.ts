@@ -1,13 +1,18 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { generateAndStoreReport } from "@/lib/report-service";
+import { canAccessFeature } from "@/lib/trial";
 import { reportGenerationSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const { supabase, errorResponse } = await requireApiUser();
-  if (errorResponse) {
+  const { supabase, profile, errorResponse } = await requireApiUser();
+  if (errorResponse || !profile) {
     return errorResponse;
+  }
+
+  if (!canAccessFeature(profile, "download_report")) {
+    return apiError("Upgrade to keep generating PDF reports.", 403);
   }
 
   const body = await request.json().catch(() => null);

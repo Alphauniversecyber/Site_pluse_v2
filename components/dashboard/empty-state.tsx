@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 export function EmptyState({
   title,
   description,
+  action,
   actionLabel,
   actionHref
 }: {
   title: string;
   description: string;
+  action?: React.ReactNode;
   actionLabel?: string;
   actionHref?: string;
 }) {
@@ -20,7 +22,9 @@ export function EmptyState({
       </div>
       <h3 className="mt-5 font-display text-2xl font-semibold">{title}</h3>
       <p className="mx-auto mt-3 max-w-lg text-sm text-muted-foreground">{description}</p>
-      {actionLabel && actionHref ? (
+      {action ? (
+        <div className="mt-6 flex justify-center">{action}</div>
+      ) : actionLabel && actionHref ? (
         <Button asChild className="mt-6">
           <a href={actionHref}>{actionLabel}</a>
         </Button>

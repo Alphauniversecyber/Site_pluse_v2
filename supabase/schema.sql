@@ -85,6 +85,8 @@ create table if not exists public.users (
   subscription_status public.subscription_status default 'inactive',
   next_billing_date timestamptz,
   trial_end_date timestamptz,
+  trial_ends_at timestamptz,
+  is_trial boolean not null default false,
   email_report_frequency public.scan_frequency not null default 'weekly',
   email_reports_enabled boolean not null default false,
   email_notifications_enabled boolean not null default false,
@@ -315,6 +317,8 @@ alter table public.users add column if not exists subscription_price integer;
 alter table public.users add column if not exists subscription_status public.subscription_status;
 alter table public.users add column if not exists next_billing_date timestamptz;
 alter table public.users add column if not exists trial_end_date timestamptz;
+alter table public.users add column if not exists trial_ends_at timestamptz;
+alter table public.users add column if not exists is_trial boolean not null default false;
 alter table public.websites add column if not exists competitor_urls jsonb not null default '[]'::jsonb;
 alter table public.websites add column if not exists magic_token text;
 alter table public.websites add column if not exists gsc_access_token text;
@@ -379,11 +383,13 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.users (id, email, full_name)
+  insert into public.users (id, email, full_name, trial_ends_at, is_trial)
   values (
     new.id,
     new.email,
-    coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1))
+    coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1)),
+    timezone('utc', now()) + interval '14 day',
+    true
   )
   on conflict (id) do update
   set email = excluded.email;
