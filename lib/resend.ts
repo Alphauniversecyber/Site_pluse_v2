@@ -785,43 +785,6 @@ function buildQuickWins(issues: EmailIssueSummary[], scan: ScanResult) {
   return quickWins.slice(0, 3);
 }
 
-function getCtaConfig(input: { scan: ScanResult; issues: EmailIssueSummary[]; accent: string }) {
-  if (input.issues.some((issue) => issue.priority === "high")) {
-    return {
-      label: "See Your Critical Fixes",
-      background: "#DC2626",
-      border: "#B91C1C"
-    };
-  }
-
-  if (input.scan.performance_score < 60) {
-    return {
-      label: "Get Your Full Optimization Plan",
-      background: input.accent,
-      border: input.accent
-    };
-  }
-
-  if (
-    input.scan.performance_score >= 80 &&
-    input.scan.seo_score >= 80 &&
-    input.scan.accessibility_score >= 80 &&
-    input.scan.best_practices_score >= 80
-  ) {
-    return {
-      label: "View Your Full Report + What's Next",
-      background: input.accent,
-      border: input.accent
-    };
-  }
-
-  return {
-    label: "Download Your Full Audit Report",
-    background: input.accent,
-    border: input.accent
-  };
-}
-
 function renderScoreSummary(scan: ScanResult, previousScan?: ScanResult | null) {
   const metrics = [
     {
@@ -887,7 +850,6 @@ export async function sendReportEmail(input: {
   const reportMonthYear = formatReportMonthYear(input.scan.scanned_at);
   const emailBaseUrl = ensureHttpsUrl(baseUrl).replace(/\/$/, "");
   const websiteUrl = ensureHttpsUrl(input.website.url);
-  const reportUrl = `${emailBaseUrl}/dashboard/websites/${input.website.id}`;
   const manageReportsUrl = `${emailBaseUrl}/dashboard/reports`;
   const billingUrl = `${emailBaseUrl}/dashboard/billing`;
   const unsubscribeUrl = `${emailBaseUrl}/dashboard/settings`;
@@ -908,11 +870,6 @@ export async function sendReportEmail(input: {
   const topIssues = issueSummaries.slice(0, 4);
   const quickWins = buildQuickWins(issueSummaries, input.scan);
   const businessImpactLines = buildBusinessImpactLines(input.scan);
-  const cta = getCtaConfig({
-    scan: input.scan,
-    issues: issueSummaries,
-    accent
-  });
   const keyIssue = topIssues[0]?.title ?? "your site performance";
   const reportYear = new Date(input.scan.scanned_at).getFullYear();
   const heroSummaryPrimary =
@@ -1188,28 +1145,6 @@ export async function sendReportEmail(input: {
                           <tr>
                             <td style="padding:18px 18px 16px 18px;">
                               ${quickWinsMarkup}
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td style="padding:0;">
-                        ${sectionDivider()}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:0 0 28px 0;">
-                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                          <tr>
-                            <td align="center">
-                              <a href="${escapeHtml(reportUrl)}" style="display:block;width:100%;background:${cta.background};border:1px solid ${cta.border};border-radius:8px;padding:16px 24px;font-size:18px;line-height:24px;font-weight:700;color:#FFFFFF;text-decoration:none;box-sizing:border-box;">
-                                ${escapeHtml(cta.label)} &rarr;
-                              </a>
-                              <p style="margin:10px 0 0 0;font-size:12px;line-height:18px;color:#9CA3AF;">
-                                Takes 30 seconds &middot; No credit card needed to see
-                              </p>
                             </td>
                           </tr>
                         </table>
