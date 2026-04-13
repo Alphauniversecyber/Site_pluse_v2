@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/cron/process-scans",
-      "schedule": "0 6 * * *"
+      "schedule": "5 * * * *"
     },
     {
       "path": "/api/cron/process-uptime",
-      "schedule": "0 7 * * *"
+      "schedule": "15 * * * *"
     },
     {
       "path": "/api/cron/sync-uptimerobot",
@@ -14,11 +14,11 @@
     },
     {
       "path": "/api/cron/process-competitors",
-      "schedule": "0 9 * * *"
+      "schedule": "35 * * * *"
     },
     {
       "path": "/api/cron/process-reports",
-      "schedule": "0 8 * * *"
+      "schedule": "25 * * * *"
     },
     {
       "path": "/api/cron/expire-trials",

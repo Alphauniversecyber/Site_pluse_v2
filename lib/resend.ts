@@ -56,11 +56,11 @@ function isRateLimitedResponse(response: CreateEmailResponse | undefined) {
 }
 
 function getResendMinIntervalMs() {
-  return parsePositiveInt(process.env.RESEND_MIN_INTERVAL_MS, 600);
+  return parsePositiveInt(process.env.RESEND_MIN_INTERVAL_MS, 800);
 }
 
 function getResendRetryDelayMs(attempt: number) {
-  const baseDelayMs = parsePositiveInt(process.env.RESEND_RETRY_DELAY_MS, 1200);
+  const baseDelayMs = parsePositiveInt(process.env.RESEND_RETRY_DELAY_MS, 1500);
   return baseDelayMs * attempt;
 }
 

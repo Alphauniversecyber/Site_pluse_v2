@@ -7,6 +7,22 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const UPTIME_CACHE_HOURS = 24;
 const UPTIMEROBOT_ENDPOINT = "https://api.uptimerobot.com/v2/getMonitors";
+const VERCEL_UPTIME_TIMEOUT_MS = parsePositiveInt(process.env.VERCEL_UPTIME_TIMEOUT_MS, 15_000);
+const VERCEL_UPTIME_FETCH_ATTEMPTS = parsePositiveInt(process.env.VERCEL_UPTIME_FETCH_ATTEMPTS, 2);
+const VERCEL_UPTIME_RETRY_DELAY_MS = parsePositiveInt(process.env.VERCEL_UPTIME_RETRY_DELAY_MS, 1_500);
+
+function parsePositiveInt(raw: string | undefined, fallback: number) {
+  if (!raw) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function isFresh(timestamp: string, hours: number) {
   return Date.now() - new Date(timestamp).getTime() < hours * 60 * 60 * 1000;
@@ -19,6 +35,10 @@ function normalizeComparableUrl(value: string) {
     parsed.pathname = parsed.pathname.replace(/\/+$/, "");
   }
   return parsed.toString();
+}
+
+function isTransientFetchError(message: string) {
+  return /fetch failed|timeout|timed out|network|socket|econn|enotfound|eai_again|tls/i.test(message);
 }
 
 async function createUptimeAlert(input: {
@@ -122,26 +142,63 @@ export async function ensureDailyVercelUptimeCheck(input: {
   let status: UptimeCheckRecord["status"] = "down";
   let responseTimeMs: number | null = null;
   let incidentReason: string | null = null;
+  let rawPayload: Record<string, unknown> = {};
+  let shouldAlert = true;
 
-  try {
-    const response = await fetch(input.url, {
-      method: "GET",
-      cache: "no-store",
-      redirect: "follow",
-      signal: AbortSignal.timeout(15000),
-      headers: {
-        "user-agent": "SitePulse Uptime Check/1.0"
+  let lastErrorMessage: string | null = null;
+
+  for (let attempt = 1; attempt <= VERCEL_UPTIME_FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(input.url, {
+        method: "GET",
+        cache: "no-store",
+        redirect: "follow",
+        signal: AbortSignal.timeout(VERCEL_UPTIME_TIMEOUT_MS),
+        headers: {
+          "user-agent": "SitePulse Uptime Check/1.0"
+        }
+      });
+
+      responseTimeMs = Date.now() - startedAt;
+      const classification = classifyVercelHealthCheck(response);
+      status = classification.status;
+      incidentReason = classification.incidentReason;
+      rawPayload = {
+        attempt,
+        attemptsConfigured: VERCEL_UPTIME_FETCH_ATTEMPTS,
+        status: response.status
+      };
+      lastErrorMessage = null;
+      break;
+    } catch (error) {
+      lastErrorMessage = error instanceof Error ? error.message : "Health check failed.";
+      rawPayload = {
+        attempt,
+        attemptsConfigured: VERCEL_UPTIME_FETCH_ATTEMPTS,
+        fetchError: lastErrorMessage
+      };
+
+      if (attempt < VERCEL_UPTIME_FETCH_ATTEMPTS && isTransientFetchError(lastErrorMessage)) {
+        await sleep(VERCEL_UPTIME_RETRY_DELAY_MS * attempt);
+        continue;
       }
-    });
 
-    responseTimeMs = Date.now() - startedAt;
-    const classification = classifyVercelHealthCheck(response);
-    status = classification.status;
-    incidentReason = classification.incidentReason;
-  } catch (error) {
-    responseTimeMs = Date.now() - startedAt;
-    status = "down";
-    incidentReason = error instanceof Error ? error.message : "Health check failed.";
+      responseTimeMs = Date.now() - startedAt;
+      status = "down";
+      incidentReason = lastErrorMessage;
+      shouldAlert = !isTransientFetchError(lastErrorMessage);
+      break;
+    }
+  }
+
+  if (lastErrorMessage && isTransientFetchError(lastErrorMessage) && latest?.status === "up") {
+    status = "up";
+    incidentReason = null;
+    shouldAlert = false;
+    rawPayload = {
+      ...rawPayload,
+      transientFailureIgnored: true
+    };
   }
 
   const { data, error } = await admin
@@ -153,7 +210,7 @@ export async function ensureDailyVercelUptimeCheck(input: {
       response_time_ms: responseTimeMs,
       source: "vercel",
       incident_reason: incidentReason,
-      raw_payload: {}
+      raw_payload: rawPayload
     })
     .select("*")
     .single();
@@ -162,7 +219,7 @@ export async function ensureDailyVercelUptimeCheck(input: {
     throw new Error(error?.message ?? "Unable to store uptime check.");
   }
 
-  if (status === "down" && input.profile && input.website) {
+  if (status === "down" && shouldAlert && input.profile && input.website) {
     await createUptimeAlert({
       profile: input.profile,
       website: input.website,
