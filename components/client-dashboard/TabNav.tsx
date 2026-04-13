@@ -45,7 +45,13 @@ function StatusPill({
 function SyncNotice({
   service
 }: {
-  service: "gsc_connected" | "ga_connected" | "gsc_needs_property" | "ga_needs_property";
+  service:
+    | "gsc_connected"
+    | "ga_connected"
+    | "gsc_needs_property"
+    | "ga_needs_property"
+    | "gsc_pending"
+    | "ga_pending";
 }) {
   return (
     <div
@@ -59,6 +65,10 @@ function SyncNotice({
         ? "Google Search Console connected. SitePulse will use live search data as soon as Google returns it successfully."
         : service === "ga_connected"
           ? "GA4 connected. SitePulse will use live analytics data as soon as Google returns it successfully."
+          : service === "gsc_pending"
+            ? "Google returned from Search Console, but SitePulse could not verify a saved connection yet. Refresh once, and if it still shows Not connected, reconnect and check property access."
+            : service === "ga_pending"
+              ? "Google returned from GA4, but SitePulse could not verify a saved connection yet. Refresh once, and if it still shows Not connected, reconnect and check property access."
           : service === "gsc_needs_property"
             ? "Google Search Console authorization succeeded, but no matching Search Console property was found for this site."
             : "Google Analytics authorization succeeded, but no matching GA4 web data stream was found for this site."}
@@ -71,7 +81,14 @@ export function TabNav({
   connectionNotice
 }: {
   dashboard: ClientDashboardPayload;
-  connectionNotice?: "gsc_connected" | "ga_connected" | "gsc_needs_property" | "ga_needs_property" | null;
+  connectionNotice?:
+    | "gsc_connected"
+    | "ga_connected"
+    | "gsc_needs_property"
+    | "ga_needs_property"
+    | "gsc_pending"
+    | "ga_pending"
+    | null;
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [gsc, setGsc] = useState<GscDashboardData>(dashboard.gsc);

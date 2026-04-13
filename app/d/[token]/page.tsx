@@ -32,10 +32,14 @@ export default async function ClientDashboardPage({
   const gscState = Array.isArray(searchParams?.gsc) ? searchParams?.gsc[0] : searchParams?.gsc;
   const gaState = Array.isArray(searchParams?.ga) ? searchParams?.ga[0] : searchParams?.ga;
   const connectionNotice =
-    gscState === "connected"
+    gscState === "connected" && payload.connections.gsc
       ? "gsc_connected"
-      : gaState === "connected"
+      : gaState === "connected" && payload.connections.ga
         ? "ga_connected"
+        : gscState === "connected"
+          ? "gsc_pending"
+          : gaState === "connected"
+            ? "ga_pending"
         : gscState === "needs-property"
           ? "gsc_needs_property"
           : gaState === "needs-property"
