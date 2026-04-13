@@ -6,6 +6,13 @@ import { createServerClient } from "@supabase/ssr";
 
 import type { UserProfile } from "@/types";
 
+function noStoreFetch(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) {
+  return fetch(input, {
+    ...init,
+    cache: "no-store"
+  });
+}
+
 export function createSupabaseServerClient() {
   const cookieStore = cookies();
 
@@ -24,6 +31,9 @@ export function createSupabaseServerClient() {
             // Server Components cannot always mutate cookies during render.
           }
         }
+      },
+      global: {
+        fetch: noStoreFetch
       }
     }
   );
