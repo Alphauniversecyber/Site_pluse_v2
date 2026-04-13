@@ -9,6 +9,18 @@ import { ACCESSIBILITY_SCANNER_UNAVAILABLE_MESSAGE, isAccessibilityScannerUnavai
 
 const nodeRequire = createRequire(import.meta.url);
 
+function parsePositiveInt(raw: string | undefined, fallback: number) {
+  if (!raw) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const PA11Y_NAVIGATION_TIMEOUT_MS = parsePositiveInt(process.env.PA11Y_NAVIGATION_TIMEOUT_MS, 25_000);
+const PA11Y_AUDIT_TIMEOUT_MS = parsePositiveInt(process.env.PA11Y_AUDIT_TIMEOUT_MS, 20_000);
+
 type Pa11yRunner = (
   url: string,
   options: Record<string, unknown>
@@ -76,13 +88,13 @@ export async function runAccessibilityScan(url: string) {
     const page = await browser.newPage();
     await page.goto(url, {
       waitUntil: "networkidle2",
-      timeout: 45000
+      timeout: PA11Y_NAVIGATION_TIMEOUT_MS
     });
 
     const pa11yResults = await pa11y(url, {
       browser,
       standard: "WCAG2AA",
-      timeout: 30000,
+      timeout: PA11Y_AUDIT_TIMEOUT_MS,
       includeNotices: false,
       includeWarnings: true
     });

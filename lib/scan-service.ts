@@ -324,23 +324,19 @@ export async function executeWebsiteScan(
   }
 
   const currentScan = scan as ScanResult;
-  const seoAuditResult = await Promise.allSettled([
+  const [seoAuditResult, brokenLinksResult, cruxDataResult] = await Promise.allSettled([
     ensureSeoAudit({
       websiteId: website.id,
       scanId: currentScan.id,
       url: website.url,
       force: forceHealthSignals
-    })
-  ]);
-  const brokenLinksResult = await Promise.allSettled([
+    }),
     ensureBrokenLinkCheck({
       websiteId: website.id,
       url: website.url,
       scanId: currentScan.id,
       force: forceHealthSignals
-    })
-  ]);
-  const cruxDataResult = await Promise.allSettled([
+    }),
     ensureCruxData({
       websiteId: website.id,
       url: website.url
@@ -351,37 +347,37 @@ export async function executeWebsiteScan(
       ? sslCheckResult.value
       : null;
   const seoAudit =
-    seoAuditResult[0]?.status === "fulfilled"
-      ? seoAuditResult[0].value
+    seoAuditResult.status === "fulfilled"
+      ? seoAuditResult.value
       : null;
   const cruxData =
-    cruxDataResult[0]?.status === "fulfilled"
-      ? cruxDataResult[0].value
+    cruxDataResult.status === "fulfilled"
+      ? cruxDataResult.value
       : null;
   const brokenLinks =
-    brokenLinksResult[0]?.status === "fulfilled"
-      ? brokenLinksResult[0].value
+    brokenLinksResult.status === "fulfilled"
+      ? brokenLinksResult.value
       : null;
   const securityHeaders =
     securityHeadersResult.status === "fulfilled"
       ? securityHeadersResult.value
       : null;
 
-  if (seoAuditResult[0]?.status === "rejected") {
+  if (seoAuditResult.status === "rejected") {
     console.warn("[scan:seo_audit_failed]", {
       websiteId: website.id,
       scanId: currentScan.id,
-      error: seoAuditResult[0].reason instanceof Error ? seoAuditResult[0].reason.message : "Unknown SEO audit error"
+      error: seoAuditResult.reason instanceof Error ? seoAuditResult.reason.message : "Unknown SEO audit error"
     });
   }
 
-  if (brokenLinksResult[0]?.status === "rejected") {
+  if (brokenLinksResult.status === "rejected") {
     console.warn("[scan:broken_links_failed]", {
       websiteId: website.id,
       scanId: currentScan.id,
       error:
-        brokenLinksResult[0].reason instanceof Error
-          ? brokenLinksResult[0].reason.message
+        brokenLinksResult.reason instanceof Error
+          ? brokenLinksResult.reason.message
           : "Unknown broken link error"
     });
   }
@@ -513,7 +509,7 @@ export async function executeWebsiteScan(
 
 export async function processDueScans(limit = getCronBatchLimit("SCAN_CRON_LIMIT", 20)) {
   const admin = createSupabaseAdminClient();
-  const guard = createCronExecutionGuard("process-scans", 45_000);
+  const guard = createCronExecutionGuard("process-scans", 240_000);
   const { data: schedules, error } = await admin
     .from("scan_schedules")
     .select("id, website_id, next_scan_at")

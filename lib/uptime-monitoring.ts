@@ -135,8 +135,9 @@ export async function ensureDailyVercelUptimeCheck(input: {
     });
 
     responseTimeMs = Date.now() - startedAt;
-    status = response.ok ? "up" : "down";
-    incidentReason = response.ok ? null : `Health check returned HTTP ${response.status}.`;
+    const classification = classifyVercelHealthCheck(response);
+    status = classification.status;
+    incidentReason = classification.incidentReason;
   } catch (error) {
     responseTimeMs = Date.now() - startedAt;
     status = "down";
@@ -218,6 +219,20 @@ function monitorResponseTime(monitor: UptimeRobotMonitor) {
 
   const latestResponse = Number(monitor.response_times?.[0]?.value);
   return !Number.isNaN(latestResponse) && latestResponse > 0 ? Math.round(latestResponse) : null;
+}
+
+function classifyVercelHealthCheck(response: Response) {
+  if (response.status >= 500) {
+    return {
+      status: "down" as const,
+      incidentReason: `Health check returned HTTP ${response.status}.`
+    };
+  }
+
+  return {
+    status: "up" as const,
+    incidentReason: null
+  };
 }
 
 export async function syncUptimeRobotForUser(input: {
@@ -304,7 +319,7 @@ export async function syncUptimeRobotForUser(input: {
 
 export async function processDailyUptimeChecks(limit = getCronBatchLimit("UPTIME_CRON_LIMIT", 50)) {
   const admin = createSupabaseAdminClient();
-  const guard = createCronExecutionGuard("process-uptime", 45_000);
+  const guard = createCronExecutionGuard("process-uptime", 240_000);
   const { data: websites, error } = await admin
     .from("websites")
     .select("*")
@@ -344,7 +359,7 @@ export async function processDailyUptimeChecks(limit = getCronBatchLimit("UPTIME
 
 export async function processUptimeRobotSync(limit = getCronBatchLimit("UPTIMEROBOT_SYNC_LIMIT", 20)) {
   const admin = createSupabaseAdminClient();
-  const guard = createCronExecutionGuard("sync-uptimerobot", 45_000);
+  const guard = createCronExecutionGuard("sync-uptimerobot", 240_000);
   const { data: profiles, error } = await admin
     .from("users")
     .select("*")

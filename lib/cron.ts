@@ -19,7 +19,7 @@ export function getCronSoftTimeoutMs(fallback: number) {
 
 export function createCronExecutionGuard(label: string, fallbackSoftTimeoutMs: number) {
   const startedAt = Date.now();
-  const softTimeoutMs = getCronSoftTimeoutMs(fallbackSoftTimeoutMs);
+  const softTimeoutMs = Math.max(getCronSoftTimeoutMs(fallbackSoftTimeoutMs), fallbackSoftTimeoutMs);
   let logged = false;
 
   return {

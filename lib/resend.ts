@@ -33,6 +33,50 @@ function logEmailEvent(level: "info" | "error" | "warn", event: string, payload:
   console[level](`[email:${event}]`, payload);
 }
 
+function parsePositiveInt(raw: string | undefined, fallback: number) {
+  if (!raw) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitMessage(message: string) {
+  return /too many requests|rate limit/i.test(message);
+}
+
+function isRateLimitedResponse(response: CreateEmailResponse | undefined) {
+  const responseError = response?.error as { statusCode?: number; message?: string } | undefined;
+  return responseError?.statusCode === 429 || isRateLimitMessage(responseError?.message ?? "");
+}
+
+function getResendMinIntervalMs() {
+  return parsePositiveInt(process.env.RESEND_MIN_INTERVAL_MS, 600);
+}
+
+function getResendRetryDelayMs(attempt: number) {
+  const baseDelayMs = parsePositiveInt(process.env.RESEND_RETRY_DELAY_MS, 1200);
+  return baseDelayMs * attempt;
+}
+
+let nextEmailSendAt = 0;
+
+async function waitForEmailSendSlot() {
+  const now = Date.now();
+  const waitMs = Math.max(0, nextEmailSendAt - now);
+
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+
+  nextEmailSendAt = Date.now() + getResendMinIntervalMs();
+}
+
 function getConfiguredFromEmail(kind: "report" | "alert") {
   const configured =
     (kind === "alert" ? process.env.ALERTS_FROM_EMAIL : undefined) ?? process.env.FROM_EMAIL;
@@ -63,6 +107,7 @@ async function sendEmailWithConfirmation(input: {
 }) {
   const resend = getResendClient();
   const fromEmail = getConfiguredFromEmail(input.kind);
+  const maxAttempts = parsePositiveInt(process.env.RESEND_MAX_ATTEMPTS, 3);
   const payload: CreateEmailOptions = {
     from: `${input.fromName} <${fromEmail}>`,
     to: input.to,
@@ -71,68 +116,90 @@ async function sendEmailWithConfirmation(input: {
     attachments: input.attachments
   };
 
-  logEmailEvent("info", "request", {
-    kind: input.kind,
-    to: input.to,
-    from: fromEmail,
-    subject: input.subject,
-    attachments: input.attachments?.map((attachment) => attachment.filename) ?? [],
-    ...input.metadata
-  });
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    await waitForEmailSendSlot();
 
-  let response: CreateEmailResponse;
-
-  try {
-    response = await resend.emails.send(payload);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown email provider error.";
-
-    logEmailEvent("error", "exception", {
+    logEmailEvent("info", "request", {
       kind: input.kind,
       to: input.to,
       from: fromEmail,
       subject: input.subject,
-      error: message,
+      attachments: input.attachments?.map((attachment) => attachment.filename) ?? [],
+      attempt,
       ...input.metadata
     });
 
-    throw new Error(`Unable to send email: ${message}`);
-  }
+    let response: CreateEmailResponse;
 
-  logEmailEvent("info", "response", {
-    kind: input.kind,
-    to: input.to,
-    from: fromEmail,
-    subject: input.subject,
-    data: response.data,
-    error: response.error,
-    ...input.metadata
-  });
+    try {
+      response = await resend.emails.send(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown email provider error.";
+      const rateLimited = isRateLimitMessage(message);
 
-  if (response.error || !response.data?.id) {
+      logEmailEvent(rateLimited ? "warn" : "error", "exception", {
+        kind: input.kind,
+        to: input.to,
+        from: fromEmail,
+        subject: input.subject,
+        error: message,
+        attempt,
+        ...input.metadata
+      });
+
+      if (rateLimited && attempt < maxAttempts) {
+        await sleep(getResendRetryDelayMs(attempt));
+        continue;
+      }
+
+      throw new Error(`Unable to send email: ${message}`);
+    }
+
+    logEmailEvent("info", "response", {
+      kind: input.kind,
+      to: input.to,
+      from: fromEmail,
+      subject: input.subject,
+      data: response.data,
+      error: response.error,
+      attempt,
+      ...input.metadata
+    });
+
+    if (!response.error && response.data?.id) {
+      return {
+        provider: "resend" as const,
+        messageId: response.data.id,
+        to: input.to,
+        from: fromEmail,
+        subject: input.subject
+      };
+    }
+
     const message =
       response.error?.message ??
       "Email provider did not return a message ID, so delivery could not be confirmed.";
+    const rateLimited = isRateLimitedResponse(response);
 
-    logEmailEvent("error", "rejected", {
+    logEmailEvent(rateLimited ? "warn" : "error", "rejected", {
       kind: input.kind,
       to: input.to,
       from: fromEmail,
       subject: input.subject,
       error: message,
+      attempt,
       ...input.metadata
     });
+
+    if (rateLimited && attempt < maxAttempts) {
+      await sleep(getResendRetryDelayMs(attempt));
+      continue;
+    }
 
     throw new Error(`Unable to send email: ${message}`);
   }
 
-  return {
-    provider: "resend" as const,
-    messageId: response.data.id,
-    to: input.to,
-    from: fromEmail,
-    subject: input.subject
-  };
+  throw new Error("Unable to send email: Retry limit reached.");
 }
 
 type EmailIssuePriority = "high" | "medium" | "low";

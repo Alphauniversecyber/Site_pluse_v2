@@ -176,6 +176,19 @@ function getRecipients(profile: UserProfile, website: Website, explicitEmail?: s
 
 export async function generateAndStoreReport(input: { websiteId: string; scanId: string }) {
   const admin = createSupabaseAdminClient();
+  const { data: existingReport } = await admin
+    .from("reports")
+    .select("*")
+    .eq("website_id", input.websiteId)
+    .eq("scan_id", input.scanId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<Report>();
+
+  if (existingReport?.pdf_url) {
+    return existingReport;
+  }
+
   const {
     website,
     scan,
@@ -293,7 +306,11 @@ export async function getSignedReportUrl(reportId: string) {
   };
 }
 
-export async function sendStoredReportEmail(input: { reportId: string; email?: string }) {
+export async function sendStoredReportEmail(input: {
+  reportId: string;
+  email?: string;
+  skipAlreadySentRecipients?: boolean;
+}) {
   const admin = createSupabaseAdminClient();
 
   const { data: report } = await admin.from("reports").select("*").eq("id", input.reportId).single<Report>();
@@ -320,9 +337,45 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
     .order("scanned_at", { ascending: false })
     .limit(1);
 
-  const recipients = getRecipients(profile, website, input.email);
-  if (!recipients.length) {
+  const alreadyDeliveredRecipients = new Set(
+    (report.sent_to_email ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+  );
+  const configuredRecipients = getRecipients(profile, website, input.email);
+  const recipients = input.skipAlreadySentRecipients
+    ? configuredRecipients.filter((recipient) => !alreadyDeliveredRecipients.has(recipient))
+    : configuredRecipients;
+
+  if (!configuredRecipients.length) {
     throw new Error("No report recipients configured.");
+  }
+
+  if (!recipients.length) {
+    const sentAt = report.sent_at ?? new Date().toISOString();
+    const { data: alreadyComplete, error: alreadyCompleteError } = await admin
+      .from("reports")
+      .update({
+        sent_to_email: Array.from(alreadyDeliveredRecipients).join(", "),
+        sent_at: sentAt
+      })
+      .eq("id", report.id)
+      .select("*")
+      .single();
+
+    if (alreadyCompleteError || !alreadyComplete) {
+      throw new Error(alreadyCompleteError?.message ?? "Unable to update report delivery status.");
+    }
+
+    return {
+      report: alreadyComplete as Report,
+      deliveries: [] as Array<{
+        recipient: string;
+        messageId: string;
+        provider: "resend";
+      }>
+    };
   }
 
   const { data: file, error: downloadError } = await admin.storage.from("reports").download(report.pdf_url);
@@ -371,8 +424,18 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
         messageId: delivery.messageId,
         provider: delivery.provider
       });
+      alreadyDeliveredRecipients.add(recipient);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown email delivery error.";
+
+      if (alreadyDeliveredRecipients.size) {
+        await admin
+          .from("reports")
+          .update({
+            sent_to_email: Array.from(alreadyDeliveredRecipients).join(", ")
+          })
+          .eq("id", report.id);
+      }
 
       console.error("[reports:send] delivery_failed", {
         reportId: report.id,
@@ -393,7 +456,7 @@ export async function sendStoredReportEmail(input: { reportId: string; email?: s
   const { data: updated, error } = await admin
     .from("reports")
     .update({
-      sent_to_email: recipients.join(", "),
+      sent_to_email: Array.from(alreadyDeliveredRecipients).join(", "),
       sent_at: new Date().toISOString()
     })
     .eq("id", report.id)
@@ -441,7 +504,7 @@ function isDue(lastSentAt: string | null, frequency: UserProfile["email_report_f
 
 export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_CRON_USER_LIMIT", 20)) {
   const admin = createSupabaseAdminClient();
-  const guard = createCronExecutionGuard("process-reports", 50_000);
+  const guard = createCronExecutionGuard("process-reports", 240_000);
   const { data: users } = await admin
     .from("users")
     .select("*")
@@ -519,7 +582,8 @@ export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_C
 
       try {
         await sendStoredReportEmail({
-          reportId: report.id
+          reportId: report.id,
+          skipAlreadySentRecipients: true
         });
 
         sent.push(report.id);

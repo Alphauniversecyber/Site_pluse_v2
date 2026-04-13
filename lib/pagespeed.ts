@@ -3,7 +3,17 @@ import { getFriendlyScanFailureMessage, isPageSpeedRateLimitError } from "@/lib/
 
 const PAGE_SPEED_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 const AUDIT_DOCS_LINK = "https://developer.chrome.com/docs/lighthouse/overview/";
-const PAGE_SPEED_TIMEOUT_MS = 90000;
+
+function parsePositiveInt(raw: string | undefined, fallback: number) {
+  if (!raw) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const PAGE_SPEED_TIMEOUT_MS = parsePositiveInt(process.env.PAGESPEED_TIMEOUT_MS, 45_000);
 
 type PageSpeedAudit = {
   title?: string;

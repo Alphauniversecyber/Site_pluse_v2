@@ -2,6 +2,7 @@ import { apiError, apiSuccess } from "@/lib/api";
 import { processDailyUptimeChecks } from "@/lib/uptime-monitoring";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 function isAuthorized(request: Request) {
   const authHeader = request.headers.get("authorization");

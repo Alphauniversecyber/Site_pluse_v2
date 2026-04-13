@@ -222,7 +222,7 @@ export async function runCompetitorScan(input: {
 
 export async function processCompetitorScans(limit = getCronBatchLimit("COMPETITOR_CRON_LIMIT", 20)) {
   const admin = createSupabaseAdminClient();
-  const guard = createCronExecutionGuard("process-competitors", 45_000);
+  const guard = createCronExecutionGuard("process-competitors", 240_000);
   const { data: websites, error } = await admin
     .from("websites")
     .select("*")

@@ -2,6 +2,7 @@ import { apiError, apiSuccess } from "@/lib/api";
 import { processCompetitorScans } from "@/lib/competitor-monitoring";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 function isAuthorized(request: Request) {
   const authHeader = request.headers.get("authorization");
