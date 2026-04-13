@@ -5,9 +5,9 @@ import { CheckCircle2, Globe2, Link2, Signal, XCircle } from "lucide-react";
 
 import type { ClientDashboardPayload, GaDashboardData, GscDashboardData } from "@/types";
 import { GoogleSignals } from "@/components/client-dashboard/GoogleSignals";
-import { Issues } from "@/components/client-dashboard/Issues";
+import { Issues } from "@/components/client-dashboard/IssuesPlainEnglish";
 import { Overview } from "@/components/client-dashboard/Overview";
-import { Recommendations } from "@/components/client-dashboard/Recommendations";
+import { Recommendations } from "@/components/client-dashboard/RecommendationsPlainEnglish";
 import { SitePulseLogo } from "@/components/brand/sitepulse-logo";
 import { fetchJson } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/utils";
