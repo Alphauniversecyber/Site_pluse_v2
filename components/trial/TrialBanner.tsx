@@ -2,13 +2,12 @@
 
 import { useRouter } from "next/navigation";
 
-import { getTrialDaysRemaining, hasActivePaidPlan, isTrialActive, isTrialExpired } from "@/lib/trial";
+import { getTrialDaysRemaining, isTrialActive, isTrialExpired } from "@/lib/trial";
 import type { UserProfile } from "@/types";
 
 export function TrialBanner({ profile }: { profile: UserProfile }) {
   const router = useRouter();
 
-  if (hasActivePaidPlan(profile)) return null;
   if (!profile.is_trial) return null;
 
   const daysRemaining = getTrialDaysRemaining(profile);

@@ -383,11 +383,27 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.users (id, email, full_name, trial_ends_at, is_trial)
+  insert into public.users (
+    id,
+    email,
+    full_name,
+    plan,
+    billing_cycle,
+    subscription_price,
+    subscription_status,
+    trial_end_date,
+    trial_ends_at,
+    is_trial
+  )
   values (
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1)),
+    'starter',
+    'monthly',
+    49,
+    'trialing',
+    timezone('utc', now()) + interval '14 day',
     timezone('utc', now()) + interval '14 day',
     true
   )

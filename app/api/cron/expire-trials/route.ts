@@ -15,10 +15,12 @@ export async function GET(request: Request) {
     .from("users")
     .update({
       plan: "free",
+      billing_cycle: null,
+      subscription_price: null,
+      subscription_status: "inactive",
       is_trial: false
     })
     .eq("is_trial", true)
-    .eq("plan", "free")
     .lt("trial_ends_at", new Date().toISOString());
 
   if (error) {
