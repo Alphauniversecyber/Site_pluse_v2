@@ -90,7 +90,7 @@ function MetricPill({
 }
 
 export default function ReportsPage() {
-  const { websites } = useWebsites();
+  const { websites } = useWebsites({ view: "summary" });
   const { user } = useUser();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);

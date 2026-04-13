@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { buildPortfolioImpactSummary } from "@/lib/business-impact";
 import { createSupabaseServerClient, requireAuthenticatedUser } from "@/lib/supabase-server";
-import { cn, formatDateTime, formatRelativeTime, getPlanDisplayName } from "@/lib/utils";
+import { PLAN_LIMITS, cn, formatDateTime, formatRelativeTime, getPlanDisplayName } from "@/lib/utils";
 import type { ScanResult, ScanSchedule, Website } from "@/types";
 
 function compactUrl(url: string) {
@@ -167,13 +167,20 @@ export default async function DashboardOverviewPage() {
 
   const [{ data: websitesData }, { data: scansData }, { count: scanCount }, { data: schedulesData }] =
     await Promise.all([
-      supabase.from("websites").select("*").order("created_at", { ascending: false }),
-      supabase.from("scan_results").select("*").order("scanned_at", { ascending: false }).limit(50),
+      supabase
+        .from("websites")
+        .select("id,url,label,is_active,created_at,updated_at")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("scan_results")
+        .select("id,website_id,performance_score,scanned_at")
+        .order("scanned_at", { ascending: false })
+        .limit(50),
       supabase
         .from("scan_results")
         .select("*", { count: "exact", head: true })
         .gte("scanned_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
-      supabase.from("scan_schedules").select("*")
+      supabase.from("scan_schedules").select("website_id,frequency")
     ]);
 
   const websites = (websitesData ?? []) as Website[];
@@ -218,6 +225,7 @@ export default async function DashboardOverviewPage() {
     ? Math.round(scoredSites.reduce((sum, site) => sum + (site.score ?? 0), 0) / scoredSites.length)
     : averagePerformance;
   const activeSites = websites.filter((website) => website.is_active).length;
+  const websiteCapacity = PLAN_LIMITS[profile.plan]?.websiteLimit ?? Math.max(websites.length, 1);
   const urgentSites = scoredSites.filter((site) => (site.score ?? 0) < 60).length;
   const watchSites = scoredSites.filter(
     (site) => (site.score ?? 0) >= 60 && (site.score ?? 0) < 85
@@ -382,8 +390,14 @@ export default async function DashboardOverviewPage() {
             <OverviewSignalChip
               icon={Activity}
               label="Coverage"
-              value={`${activeSites}/${websites.length || 0} sites active`}
-              note={activeSites === websites.length ? "All monitored sites are live." : "Some sites are paused or still onboarding."}
+              value={`${activeSites}/${websiteCapacity} sites active`}
+              note={
+                activeSites === websites.length
+                  ? websites.length < websiteCapacity
+                    ? `${websiteCapacity - websites.length} of your ${getPlanDisplayName(profile.plan)} slots are still open.`
+                    : "All plan slots are currently in use."
+                  : "Some sites are paused or still onboarding."
+              }
               tone={activeSites === websites.length ? "success" : "warning"}
             />
             <OverviewSignalChip

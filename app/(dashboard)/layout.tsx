@@ -7,7 +7,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const supabase = createSupabaseServerClient();
   const { data: notifications } = await supabase
     .from("notifications")
-    .select("*")
+    .select("id,user_id,website_id,type,title,body,is_read,severity,metadata,created_at")
     .order("created_at", { ascending: false })
     .limit(8);
 

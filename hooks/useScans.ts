@@ -2,11 +2,21 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { ScanResult } from "@/types";
 import { fetchJson } from "@/lib/api-client";
 
+export interface ScanHistoryItem {
+  id: string;
+  website_id: string;
+  performance_score: number;
+  seo_score: number;
+  accessibility_score: number;
+  best_practices_score: number;
+  accessibility_violations?: Array<Record<string, unknown>>;
+  scanned_at: string;
+}
+
 interface ScanListResponse {
-  scans: ScanResult[];
+  scans: ScanHistoryItem[];
   total: number;
   page: number;
   pageSize: number;

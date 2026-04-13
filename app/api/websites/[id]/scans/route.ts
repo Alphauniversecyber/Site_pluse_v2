@@ -14,7 +14,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const { data: scans, error, count } = await supabase
     .from("scan_results")
-    .select("*", { count: "exact" })
+    .select(
+      "id,website_id,performance_score,seo_score,accessibility_score,best_practices_score,accessibility_violations,scanned_at",
+      { count: "exact" }
+    )
     .eq("website_id", params.id)
     .order("scanned_at", { ascending: false })
     .range(from, to);

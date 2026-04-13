@@ -3,19 +3,26 @@ import { buildHealthScore } from "@/lib/health-score";
 import { PLAN_LIMITS, normalizeUrl } from "@/lib/utils";
 import { websiteSchema } from "@/lib/validation";
 
-export async function GET() {
+export async function GET(request: Request) {
   const { supabase, errorResponse } = await requireApiUser();
   if (errorResponse) {
     return errorResponse;
   }
 
+  const { searchParams } = new URL(request.url);
+  const view = searchParams.get("view");
+
   const { data: websites, error } = await supabase
     .from("websites")
-    .select("*")
+    .select("id,user_id,url,label,is_active,created_at,updated_at")
     .order("created_at", { ascending: false });
 
   if (error) {
     return apiError(error.message, 500);
+  }
+
+  if (view === "summary") {
+    return apiSuccess(websites ?? []);
   }
 
   const websiteIds = (websites ?? []).map((website) => website.id);
@@ -30,32 +37,44 @@ export async function GET() {
     { data: brokenLinks }
   ] = await Promise.all([
     websiteIds.length
-      ? supabase.from("scan_schedules").select("*").in("website_id", websiteIds)
+      ? supabase.from("scan_schedules").select("website_id,frequency,next_scan_at,last_scan_at").in("website_id", websiteIds)
       : Promise.resolve({ data: [] }),
     websiteIds.length
       ? supabase
           .from("scan_results")
-          .select("*")
+          .select(
+            "id,website_id,performance_score,seo_score,accessibility_score,best_practices_score,lcp,issues,scan_status,error_message,scanned_at"
+          )
           .in("website_id", websiteIds)
           .order("scanned_at", { ascending: false })
       : Promise.resolve({ data: [] }),
     websiteIds.length
-      ? supabase.from("seo_audit").select("*").in("website_id", websiteIds).order("created_at", { ascending: false })
+      ? supabase
+          .from("seo_audit")
+          .select(
+            "website_id,title_tag,meta_description,headings,images_missing_alt,og_tags,twitter_tags,canonical,schema_present,created_at"
+          )
+          .in("website_id", websiteIds)
+          .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
     websiteIds.length
-      ? supabase.from("ssl_checks").select("*").in("website_id", websiteIds).order("checked_at", { ascending: false })
+      ? supabase
+          .from("ssl_checks")
+          .select("website_id,grade,checked_at")
+          .in("website_id", websiteIds)
+          .order("checked_at", { ascending: false })
       : Promise.resolve({ data: [] }),
     websiteIds.length
       ? supabase
           .from("security_headers")
-          .select("*")
+          .select("website_id,grade,checked_at")
           .in("website_id", websiteIds)
           .order("checked_at", { ascending: false })
       : Promise.resolve({ data: [] }),
     websiteIds.length
       ? supabase
           .from("uptime_checks")
-          .select("*")
+          .select("website_id,status,checked_at")
           .in("website_id", websiteIds)
           .order("checked_at", { ascending: false })
           .limit(300)
@@ -63,7 +82,7 @@ export async function GET() {
     websiteIds.length
       ? supabase
           .from("broken_links")
-          .select("*")
+          .select("website_id,broken_links,scanned_at")
           .in("website_id", websiteIds)
           .order("scanned_at", { ascending: false })
       : Promise.resolve({ data: [] })
