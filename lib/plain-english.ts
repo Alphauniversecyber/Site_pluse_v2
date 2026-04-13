@@ -139,10 +139,12 @@ function normalizeRecommendation(item: Partial<PlainEnglishRecommendation>): Pla
   };
 }
 
-function assertGroqConfigured() {
+function getGroqClient(): Groq {
   if (!groq) {
     throw new Error("Missing GROQ_API_KEY.");
   }
+
+  return groq;
 }
 
 export async function rewriteIssuesToPlainEnglish(issues: RawIssue[]): Promise<PlainEnglishIssue[]> {
@@ -154,7 +156,7 @@ export async function rewriteIssuesToPlainEnglish(issues: RawIssue[]): Promise<P
     return cached;
   }
 
-  assertGroqConfigured();
+  const groqClient = getGroqClient();
 
   const prompt = `
 You are an SEO expert who explains technical website issues
@@ -179,7 +181,7 @@ ${JSON.stringify(sanitized, null, 2)}
 Return ONLY a valid JSON array. No markdown, no explanation, no backticks.
 `.trim();
 
-  const completion = await groq.chat.completions.create({
+  const completion = await groqClient.chat.completions.create({
     model: "llama3-8b-8192",
     messages: [{ role: "user", content: prompt }],
     temperature: 0.3,
@@ -206,7 +208,7 @@ export async function rewriteRecommendationsToPlainEnglish(
     return cached;
   }
 
-  assertGroqConfigured();
+  const groqClient = getGroqClient();
 
   const prompt = `
 You are an SEO expert explaining website improvements to
@@ -229,7 +231,7 @@ ${JSON.stringify(sanitized, null, 2)}
 Return ONLY a valid JSON array. No markdown, no explanation, no backticks.
 `.trim();
 
-  const completion = await groq.chat.completions.create({
+  const completion = await groqClient.chat.completions.create({
     model: "llama3-8b-8192",
     messages: [{ role: "user", content: prompt }],
     temperature: 0.3,
