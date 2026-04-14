@@ -8,10 +8,12 @@ import {
   Clock3,
   FileDown,
   Mail,
+  Plus,
   Shield,
   ShieldCheck,
   TrendingUp,
   WandSparkles,
+  X,
   type LucideIcon
 } from "lucide-react";
 import { toast } from "sonner";
@@ -27,6 +29,8 @@ import { TrialPaywall } from "@/components/trial/TrialPaywall";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -120,6 +124,25 @@ function compactDisplayUrl(value: string, maxLength = 56) {
   } catch {
     return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
   }
+}
+
+function normalizeRecipientEmails(values: string[] | string) {
+  const source = Array.isArray(values) ? values : values.split(/[\n,]+/);
+  const deduped = new Set<string>();
+
+  for (const item of source) {
+    const normalized = item.trim().toLowerCase();
+    if (!normalized) {
+      continue;
+    }
+    deduped.add(normalized);
+  }
+
+  return Array.from(deduped);
+}
+
+function isValidRecipientEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 function normalizeSeoAuditRecord(seoAudit: Website["seo_audit"] | null): SeoAuditRecord | null {
@@ -833,6 +856,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const [healthSignalsSyncing, setHealthSignalsSyncing] = useState(false);
   const [healthSignalRetryTick, setHealthSignalRetryTick] = useState(0);
   const [competitorInput, setCompetitorInput] = useState("");
+  const [recipientDraft, setRecipientDraft] = useState("");
+  const [reportRecipients, setReportRecipients] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
   const { paywallFeature, isExpired, closePaywall, requireAccess } = useTrialPaywall(user);
   const healthSignalAttemptCountsRef = useRef(new Map<string, number>());
@@ -885,6 +910,10 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   useEffect(() => {
     setCompetitorInput((data?.competitor_urls ?? []).join("\n"));
   }, [data?.competitor_urls]);
+
+  useEffect(() => {
+    setReportRecipients(normalizeRecipientEmails(data?.report_recipients ?? []));
+  }, [data?.report_recipients]);
 
   const currentScan = data?.scans?.[0] ?? null;
   const previousScan = data?.scans?.[1] ?? null;
@@ -1143,6 +1172,63 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
       }
     });
 
+  const addRecipient = () => {
+    const nextEmail = recipientDraft.trim().toLowerCase();
+
+    if (!nextEmail) {
+      return;
+    }
+
+    if (!isValidRecipientEmail(nextEmail)) {
+      toast.error("Enter a valid email address before adding it.");
+      return;
+    }
+
+    if (reportRecipients.includes(nextEmail)) {
+      toast.error("That recipient is already added for this website.");
+      return;
+    }
+
+    setReportRecipients((current) => [...current, nextEmail]);
+    setRecipientDraft("");
+  };
+
+  const removeRecipient = (email: string) => {
+    setReportRecipients((current) => current.filter((item) => item !== email));
+  };
+
+  const saveReportRecipients = () =>
+    startTransition(async () => {
+      const draft = recipientDraft.trim().toLowerCase();
+
+      if (draft && !isValidRecipientEmail(draft)) {
+        toast.error("Enter a valid email address before saving.");
+        return;
+      }
+
+      const nextRecipients = normalizeRecipientEmails(draft ? [...reportRecipients, draft] : reportRecipients);
+
+      try {
+        await fetchJson(`/api/websites/${params.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            report_recipients: nextRecipients
+          })
+        });
+
+        setRecipientDraft("");
+        setReportRecipients(nextRecipients);
+        toast.success(
+          nextRecipients.length
+            ? "Website report recipients updated."
+            : "All extra report recipients removed for this website."
+        );
+        await refetch({ background: true });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to update report recipients.");
+      }
+    });
+
   if (loading) {
     return (
       <div className="space-y-6 sm:space-y-8">
@@ -1241,6 +1327,81 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
               </div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3 sm:pb-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle>Report recipients</CardTitle>
+              <CardDescription>
+                Manage the extra email addresses that should receive reports for this website.
+              </CardDescription>
+            </div>
+            <Badge variant={data.email_reports_enabled ? "success" : "outline"} className="self-start">
+              {data.email_reports_enabled ? "Auto email enabled" : "Manual send only"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5 pt-0">
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="website-recipient-email">Add recipient email</Label>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Input
+                    id="website-recipient-email"
+                    value={recipientDraft}
+                    onChange={(event) => setRecipientDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addRecipient();
+                      }
+                    }}
+                    placeholder="client@example.com"
+                  />
+                  <Button type="button" variant="outline" onClick={addRecipient} className="sm:w-auto">
+                    <Plus className="h-4 w-4" />
+                    Add recipient
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Your main account email still receives reports. These are extra per-website recipients for manual and automatic sends.
+                </p>
+              </div>
+              <Button type="button" onClick={saveReportRecipients} disabled={isPending} className="shrink-0">
+                Save recipients
+              </Button>
+            </div>
+          </div>
+
+          {reportRecipients.length ? (
+            <div className="flex flex-wrap gap-2">
+              {reportRecipients.map((email) => (
+                <div
+                  key={email}
+                  className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
+                >
+                  <span className="truncate">{email}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeRecipient(email)}
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    aria-label={`Remove ${email}`}
+                    title={`Remove ${email}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
+              No extra recipients yet. Reports will go to your account email until you add website-specific recipients here.
+            </div>
+          )}
         </CardContent>
       </Card>
 
