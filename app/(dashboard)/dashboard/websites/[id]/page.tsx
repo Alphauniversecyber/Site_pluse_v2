@@ -1135,18 +1135,33 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
           })
         });
 
-        const result = await fetchJson<{ deliveries: Array<{ recipient: string; messageId: string }> }>("/api/reports/send", {
+        const result = await fetchJson<{
+          deliveries: Array<{ recipient: string; messageId: string }>;
+          skippedRecipients: string[];
+        }>("/api/reports/send", {
           method: "POST",
           body: JSON.stringify({
             reportId: report.id
           })
         });
 
-        toast.success(
-          result.deliveries.length === 1
-            ? `Report emailed to ${result.deliveries[0]?.recipient}.`
-            : `Report emailed to ${result.deliveries.length} recipients.`
-        );
+        if (result.deliveries.length === 0 && result.skippedRecipients.length) {
+          toast.success(
+            result.skippedRecipients.length === 1
+              ? `Skipped duplicate send for ${result.skippedRecipients[0]}.`
+              : `Skipped duplicate sends for ${result.skippedRecipients.length} recipients.`
+          );
+        } else if (result.skippedRecipients.length) {
+          toast.success(
+            `Report emailed to ${result.deliveries.length} recipient${result.deliveries.length === 1 ? "" : "s"} and skipped ${result.skippedRecipients.length} duplicate${result.skippedRecipients.length === 1 ? "" : "s"}.`
+          );
+        } else {
+          toast.success(
+            result.deliveries.length === 1
+              ? `Report emailed to ${result.deliveries[0]?.recipient}.`
+              : `Report emailed to ${result.deliveries.length} recipients.`
+          );
+        }
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to email report.");
       }

@@ -20,6 +20,29 @@ export type NotificationType =
   | "uptime_alert"
   | "competitor_alert"
   | "broken_links_alert";
+export type EmailTemplateId =
+  | "report_weekly"
+  | "report_monthly"
+  | "report_manual"
+  | "alert_score_drop"
+  | "alert_critical_score"
+  | "alert_scan_failure"
+  | "alert_ssl_expiry"
+  | "alert_uptime"
+  | "alert_competitor"
+  | "welcome"
+  | "trial_started"
+  | "trial_reminder_7d"
+  | "trial_reminder_2d"
+  | "trial_expired"
+  | "onboarding_day_1"
+  | "onboarding_day_3"
+  | "onboarding_day_5"
+  | "onboarding_day_7"
+  | "first_scan_ready"
+  | "score_improved"
+  | "new_issue_found"
+  | "issue_fixed";
 export type PlainLanguageCategory = "Performance" | "SEO" | "Accessibility" | "Security";
 export type PlainLanguageDifficulty = "Easy" | "Medium" | "Complex";
 export type UptimeStatus = "up" | "down";

@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { AdminCronName } from "@/lib/admin/constants";
+import type { EmailTemplateId } from "@/types";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export type AdminLoggedErrorType =
@@ -105,12 +106,16 @@ export async function logEmailDelivery(input: {
   to: string;
   subject: string;
   kind: string;
+  templateId?: EmailTemplateId | null;
+  dedupeKey?: string | null;
+  campaign?: string | null;
   status: "sent" | "failed";
   websiteId?: string | null;
   userId?: string | null;
   providerMessageId?: string | null;
   errorMessage?: string | null;
   metadata?: Record<string, unknown>;
+  triggeredAt?: string | null;
 }) {
   try {
     const admin = createSupabaseAdminClient();
@@ -118,6 +123,9 @@ export async function logEmailDelivery(input: {
       to_email: input.to,
       subject: input.subject,
       email_type: input.kind,
+      template_id: input.templateId ?? null,
+      dedupe_key: input.dedupeKey ?? null,
+      campaign: input.campaign ?? null,
       status: input.status,
       website_id: input.websiteId ?? null,
       user_id: input.userId ?? null,
@@ -125,6 +133,7 @@ export async function logEmailDelivery(input: {
       provider_message_id: input.providerMessageId ?? null,
       error_message: input.errorMessage ?? null,
       metadata: input.metadata ?? {},
+      triggered_at: input.triggeredAt ?? new Date().toISOString(),
       sent_at: new Date().toISOString()
     });
   } catch (error) {
@@ -135,6 +144,34 @@ export async function logEmailDelivery(input: {
         error: error instanceof Error ? error.message : "Unknown email log failure"
       });
     }
+  }
+}
+
+export async function hasSentEmailWithDedupeKey(dedupeKey: string | null | undefined) {
+  if (!dedupeKey) {
+    return false;
+  }
+
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data } = await admin
+      .from("email_logs")
+      .select("id")
+      .eq("dedupe_key", dedupeKey)
+      .eq("status", "sent")
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+
+    return Boolean(data?.id);
+  } catch (error) {
+    if (!isMissingTableError(error)) {
+      console.warn("[admin:email_log_lookup_failed]", {
+        dedupeKey,
+        error: error instanceof Error ? error.message : "Unknown email log lookup failure"
+      });
+    }
+
+    return false;
   }
 }
 

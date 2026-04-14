@@ -4,10 +4,11 @@ import type { ScanResult, SslCheckRecord, UserProfile, Website } from "@/types";
 import { logAdminError } from "@/lib/admin/logging";
 import { ensureBrokenLinkCheck } from "@/lib/broken-links";
 import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
+import { buildEmailDedupeKey, escapeHtml, normalizeIssueKey } from "@/lib/email-utils";
 import { ensureCruxData } from "@/lib/crux";
 import { runAccessibilityScan } from "@/lib/pa11y";
 import { runPageSpeedScan } from "@/lib/pagespeed";
-import { trySendCriticalAlertEmail } from "@/lib/resend";
+import { sendProductEmail, trySendCriticalAlertEmail } from "@/lib/resend";
 import {
   FRIENDLY_SCAN_FAILURE_MESSAGE,
   getFriendlyScanFailureMessage,
@@ -18,7 +19,7 @@ import { ensureSeoAudit } from "@/lib/seo-audit";
 import { ensureSecurityHeadersCheck } from "@/lib/security-headers-checker";
 import { ensureSslCheck, getSslAlertThreshold } from "@/lib/ssl-checker";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { PLAN_LIMITS } from "@/lib/utils";
+import { PLAN_LIMITS, getBaseUrl } from "@/lib/utils";
 
 type NotificationType =
   | "score_drop"
@@ -159,10 +160,19 @@ async function maybeSendSslAlert(input: {
 
   if (input.profile.email_notifications_enabled) {
     await trySendCriticalAlertEmail({
+      templateId: "alert_ssl_expiry",
+      dedupeKey: buildEmailDedupeKey(
+        "alert",
+        "ssl_expiry",
+        input.website.id,
+        threshold,
+        input.sslCheck.expiry_date ?? "unknown"
+      ),
       to: input.profile.email,
       website: input.website,
       scan: input.scan,
-      reason
+      reason,
+      triggeredAt: input.scan.scanned_at
     });
   }
 }
@@ -179,6 +189,68 @@ function getNextScanAt(frequency: "daily" | "weekly" | "monthly") {
   }
 
   return next.toISOString();
+}
+
+function getWebsiteDashboardUrl(websiteId: string) {
+  return `${getBaseUrl().replace(/\/$/, "")}/dashboard/websites/${websiteId}`;
+}
+
+function getHighPriorityIssueKeys(scan: ScanResult | null) {
+  if (!scan) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      scan.issues
+        .filter((issue) => issue.severity === "high")
+        .map((issue) => normalizeIssueKey(`${issue.title} ${issue.metric ?? ""}`))
+        .filter(Boolean)
+    )
+  );
+}
+
+function getIssueTitlesForKeys(scan: ScanResult, keys: string[]) {
+  const wanted = new Set(keys);
+
+  return Array.from(
+    new Set(
+      scan.issues
+        .filter((issue) => issue.severity === "high")
+        .filter((issue) => wanted.has(normalizeIssueKey(`${issue.title} ${issue.metric ?? ""}`)))
+        .map((issue) => issue.title.trim())
+    )
+  );
+}
+
+function renderIssueSummaryList(titles: string[]) {
+  if (!titles.length) {
+    return "";
+  }
+
+  return `
+    <ul style="margin:0;padding-left:18px;color:#475569;font-size:15px;line-height:24px;">
+      ${titles
+        .slice(0, 3)
+        .map((title) => `<li style="margin:0 0 8px 0;">${escapeHtml(title)}</li>`)
+        .join("")}
+    </ul>
+  `;
+}
+
+async function trySendEngagementEmail(input: Parameters<typeof sendProductEmail>[0]) {
+  try {
+    await sendProductEmail(input);
+  } catch (error) {
+    console.warn("[scan:engagement_email_failed]", {
+      templateId: input.templateId,
+      dedupeKey: input.dedupeKey,
+      userId: input.metadata?.userId,
+      websiteId: input.metadata?.websiteId,
+      scanId: input.metadata?.scanId,
+      error: error instanceof Error ? error.message : "Unknown engagement email error"
+    });
+  }
 }
 
 async function pruneHistory(websiteId: string, plan: UserProfile["plan"]) {
@@ -208,9 +280,12 @@ export async function executeWebsiteScan(
     .select("*")
     .eq("website_id", website.id)
     .order("scanned_at", { ascending: false })
-    .limit(1);
+    .limit(6);
 
-  const previousScan = (priorRows?.[0] as ScanResult | undefined) ?? null;
+  const previousScans = (priorRows ?? []) as ScanResult[];
+  const previousScan = previousScans[0] ?? null;
+  const previousSuccessfulScan =
+    previousScans.find((row) => row.scan_status !== "failed") ?? null;
 
   const [pageSpeedResult, accessibilityResult, sslCheckResult, securityHeadersResult] = await Promise.allSettled([
     runPageSpeedScan(website.url),
@@ -399,6 +474,8 @@ export async function executeWebsiteScan(
     previousScan?.accessibility_violations?.length ??
     ((previousScan?.raw_data as { accessibility?: { accessibilityViolations?: unknown[] } } | undefined)
       ?.accessibility?.accessibilityViolations?.length ?? 0);
+  const currentHighPriorityIssueKeys = getHighPriorityIssueKeys(currentScan);
+  const previousHighPriorityIssueKeys = getHighPriorityIssueKeys(previousSuccessfulScan);
 
   if (currentScan.scan_status === "failed") {
     await logAdminError({
@@ -425,15 +502,64 @@ export async function executeWebsiteScan(
 
     if (profile.email_notifications_enabled) {
       await trySendCriticalAlertEmail({
+        templateId: "alert_scan_failure",
+        dedupeKey: buildEmailDedupeKey("alert", "scan_failure", website.id, currentScan.id),
         to: profile.email,
         website,
         scan: currentScan,
-        reason: currentScan.error_message ?? "The latest scan failed."
+        reason: currentScan.error_message ?? "The latest scan failed.",
+        triggeredAt: currentScan.scanned_at
       });
     }
   } else {
-    const previousScore = previousScan?.performance_score ?? null;
+    const previousScore = previousSuccessfulScan?.performance_score ?? null;
     const delta = previousScore !== null ? currentScan.performance_score - previousScore : null;
+
+    if (!previousSuccessfulScan) {
+      await trySendEngagementEmail({
+        templateId: "first_scan_ready",
+        dedupeKey: buildEmailDedupeKey("engagement", "first_scan_ready", website.id),
+        campaign: "engagement",
+        to: profile.email,
+        subject: `Your first scan is ready for ${website.label}`,
+        preheader: `The first SitePulse scan for ${website.label} is ready with scores, issues, and next steps.`,
+        eyebrow: "First scan ready",
+        title: `${website.label} is ready to review`,
+        summary: "The first scan is complete, so you now have a clean baseline for performance, SEO, accessibility, and best-practice follow-up.",
+        bodyHtml: `
+          <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
+            Open the website workspace to review the score breakdown, turn the strongest findings into action, and decide when you want to generate the first client-facing report.
+          </p>
+          <p style="margin:0;font-size:15px;line-height:24px;color:#475569;">
+            This is the best moment to sanity-check the baseline before future scans start showing trend changes.
+          </p>
+        `,
+        ctaLabel: "Review the first scan",
+        ctaUrl: getWebsiteDashboardUrl(website.id),
+        secondaryLabel: "Open reports",
+        secondaryUrl: `${getBaseUrl().replace(/\/$/, "")}/dashboard/reports`,
+        details: [
+          {
+            label: "Performance",
+            value: String(currentScan.performance_score)
+          },
+          {
+            label: "SEO",
+            value: String(currentScan.seo_score)
+          },
+          {
+            label: "Accessibility",
+            value: String(currentScan.accessibility_score)
+          }
+        ],
+        metadata: {
+          websiteId: website.id,
+          userId: profile.id,
+          scanId: currentScan.id
+        },
+        triggeredAt: currentScan.scanned_at
+      });
+    }
 
     if (delta !== null && delta <= -10) {
       const reason = `${website.label} dropped ${Math.abs(delta)} points since the previous scan.`;
@@ -453,10 +579,13 @@ export async function executeWebsiteScan(
 
       if (profile.email_notifications_enabled) {
         await trySendCriticalAlertEmail({
+          templateId: "alert_score_drop",
+          dedupeKey: buildEmailDedupeKey("alert", "score_drop", website.id, currentScan.id),
           to: profile.email,
           website,
           scan: currentScan,
-          reason
+          reason,
+          triggeredAt: currentScan.scanned_at
         });
       }
     }
@@ -479,10 +608,161 @@ export async function executeWebsiteScan(
 
       if (profile.email_notifications_enabled) {
         await trySendCriticalAlertEmail({
+          templateId: "alert_critical_score",
+          dedupeKey: buildEmailDedupeKey("alert", "critical_score", website.id, currentScan.id),
           to: profile.email,
           website,
           scan: currentScan,
-          reason
+          reason,
+          triggeredAt: currentScan.scanned_at
+        });
+      }
+    }
+
+    if (profile.email_notifications_enabled && delta !== null && delta >= 8) {
+      await trySendEngagementEmail({
+        templateId: "score_improved",
+        dedupeKey: buildEmailDedupeKey("engagement", "score_improved", website.id, currentScan.id),
+        campaign: "engagement",
+        to: profile.email,
+        subject: `Good news: ${website.label} improved by ${delta} points`,
+        preheader: `${website.label} improved by ${delta} performance points in the latest SitePulse scan.`,
+        eyebrow: "Score improved",
+        title: `${website.label} moved in the right direction`,
+        summary: "The latest scan shows meaningful score improvement, which is a useful moment to reinforce momentum and package the win clearly.",
+        bodyHtml: `
+          <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
+            Performance improved by ${escapeHtml(delta)} points compared with the previous successful scan. Review what changed, lock in the win, and decide whether it is worth highlighting in the next client update.
+          </p>
+          <p style="margin:0;font-size:15px;line-height:24px;color:#475569;">
+            When score gains are fresh, it is easier to connect the technical changes to business confidence and forward progress.
+          </p>
+        `,
+        ctaLabel: "Review the latest scan",
+        ctaUrl: getWebsiteDashboardUrl(website.id),
+        secondaryLabel: "Open reports",
+        secondaryUrl: `${getBaseUrl().replace(/\/$/, "")}/dashboard/reports`,
+        details: [
+          {
+            label: "Previous score",
+            value: String(previousScore)
+          },
+          {
+            label: "Current score",
+            value: String(currentScan.performance_score)
+          },
+          {
+            label: "Change",
+            value: `+${delta}`
+          }
+        ],
+        metadata: {
+          websiteId: website.id,
+          userId: profile.id,
+          scanId: currentScan.id,
+          delta
+        },
+        triggeredAt: currentScan.scanned_at
+      });
+    }
+
+    if (profile.email_notifications_enabled && previousSuccessfulScan) {
+      const newIssueKeys = currentHighPriorityIssueKeys.filter(
+        (key) => !previousHighPriorityIssueKeys.includes(key)
+      );
+      const fixedIssueKeys = previousHighPriorityIssueKeys.filter(
+        (key) => !currentHighPriorityIssueKeys.includes(key)
+      );
+
+      if (newIssueKeys.length) {
+        const issueTitles = getIssueTitlesForKeys(currentScan, newIssueKeys);
+
+        await trySendEngagementEmail({
+          templateId: "new_issue_found",
+          dedupeKey: buildEmailDedupeKey("engagement", "new_issue_found", website.id, currentScan.id),
+          campaign: "engagement",
+          to: profile.email,
+          subject: `Action needed: new issues found on ${website.label}`,
+          preheader: `SitePulse found ${newIssueKeys.length} new high-priority issue(s) on ${website.label}.`,
+          eyebrow: "New issue found",
+          title: `${website.label} has new high-priority issues`,
+          summary: "The latest scan surfaced new high-priority items that were not present in the previous successful baseline.",
+          bodyHtml: `
+            <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
+              Review the new high-priority findings first so you can decide what needs immediate attention and what can wait for the next planned improvement pass.
+            </p>
+            ${renderIssueSummaryList(issueTitles)}
+          `,
+          ctaLabel: "Review new issues",
+          ctaUrl: getWebsiteDashboardUrl(website.id),
+          details: [
+            {
+              label: "New issues",
+              value: String(newIssueKeys.length)
+            },
+            {
+              label: "Previous high-priority",
+              value: String(previousHighPriorityIssueKeys.length)
+            },
+            {
+              label: "Current high-priority",
+              value: String(currentHighPriorityIssueKeys.length)
+            }
+          ],
+          metadata: {
+            websiteId: website.id,
+            userId: profile.id,
+            scanId: currentScan.id,
+            issueKeys: newIssueKeys,
+            issueTitles
+          },
+          triggeredAt: currentScan.scanned_at
+        });
+      }
+
+      if (fixedIssueKeys.length) {
+        const issueTitles = getIssueTitlesForKeys(previousSuccessfulScan, fixedIssueKeys);
+
+        await trySendEngagementEmail({
+          templateId: "issue_fixed",
+          dedupeKey: buildEmailDedupeKey("engagement", "issue_fixed", website.id, currentScan.id),
+          campaign: "engagement",
+          to: profile.email,
+          subject: `Nice work: issues were resolved on ${website.label}`,
+          preheader: `${fixedIssueKeys.length} high-priority issue(s) are no longer showing on ${website.label}.`,
+          eyebrow: "Issue fixed",
+          title: `${website.label} cleared key issues`,
+          summary: "The latest scan no longer shows one or more previously high-priority problems, which is a strong checkpoint worth keeping visible.",
+          bodyHtml: `
+            <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
+              One or more high-priority issues dropped out of the latest scan results. That is usually worth confirming, documenting, and carrying into the next client-facing update.
+            </p>
+            ${renderIssueSummaryList(issueTitles)}
+          `,
+          ctaLabel: "Review resolved issues",
+          ctaUrl: getWebsiteDashboardUrl(website.id),
+          details: [
+            {
+              label: "Resolved",
+              value: String(fixedIssueKeys.length)
+            },
+            {
+              label: "Previous high-priority",
+              value: String(previousHighPriorityIssueKeys.length)
+            },
+            {
+              label: "Current high-priority",
+              value: String(currentHighPriorityIssueKeys.length)
+            }
+          ],
+          metadata: {
+            websiteId: website.id,
+            userId: profile.id,
+            scanId: currentScan.id,
+            issueKeys: fixedIssueKeys,
+            issueTitles
+          },
+          triggeredAt: currentScan.scanned_at
         });
       }
     }

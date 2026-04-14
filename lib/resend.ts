@@ -2,8 +2,17 @@ import "server-only";
 
 import { Resend, type CreateEmailOptions, type CreateEmailResponse } from "resend";
 
-import type { AgencyBranding, BrokenLinkRecord, ScanResult, SecurityHeadersRecord, Website } from "@/types";
-import { logEmailDelivery } from "@/lib/admin/logging";
+import type {
+  AgencyBranding,
+  BrokenLinkRecord,
+  EmailTemplateId,
+  ScanFrequency,
+  ScanResult,
+  SecurityHeadersRecord,
+  Website
+} from "@/types";
+import { hasSentEmailWithDedupeKey, logEmailDelivery } from "@/lib/admin/logging";
+import { getReportEmailMeta } from "@/lib/email-utils";
 import { formatDateTime, getBaseUrl } from "@/lib/utils";
 
 let resendClient: Resend | null = null;
@@ -16,6 +25,29 @@ export type ConfirmedEmailDelivery = {
   to: string;
   from: string;
   subject: string;
+};
+
+type EmailKind = "report" | "alert" | "product";
+type AlertEmailTemplateId =
+  | "alert_score_drop"
+  | "alert_critical_score"
+  | "alert_scan_failure"
+  | "alert_ssl_expiry"
+  | "alert_uptime"
+  | "alert_competitor";
+type ProductEmailTemplateId = Exclude<EmailTemplateId, AlertEmailTemplateId | "report_weekly" | "report_monthly" | "report_manual">;
+type SharedEmailSendInput = {
+  kind: EmailKind;
+  templateId: EmailTemplateId;
+  dedupeKey: string;
+  campaign: string;
+  to: string;
+  fromName: string;
+  subject: string;
+  html: string;
+  metadata?: EmailLogPayload;
+  attachments?: CreateEmailOptions["attachments"];
+  triggeredAt?: string | null;
 };
 
 function getResendClient() {
@@ -78,7 +110,7 @@ async function waitForEmailSendSlot() {
   nextEmailSendAt = Date.now() + getResendMinIntervalMs();
 }
 
-function getConfiguredFromEmail(kind: "report" | "alert") {
+function getConfiguredFromEmail(kind: EmailKind) {
   const configured =
     (kind === "alert" ? process.env.ALERTS_FROM_EMAIL : undefined) ?? process.env.FROM_EMAIL;
 
@@ -97,15 +129,21 @@ function getConfiguredFromEmail(kind: "report" | "alert") {
   return configured;
 }
 
-async function sendEmailWithConfirmation(input: {
-  kind: "report" | "alert";
-  to: string;
-  fromName: string;
-  subject: string;
-  html: string;
-  attachments?: CreateEmailOptions["attachments"];
-  metadata?: EmailLogPayload;
-}) {
+async function sendEmailWithConfirmation(input: SharedEmailSendInput) {
+  if (await hasSentEmailWithDedupeKey(input.dedupeKey)) {
+    logEmailEvent("info", "dedupe_skip", {
+      kind: input.kind,
+      templateId: input.templateId,
+      dedupeKey: input.dedupeKey,
+      campaign: input.campaign,
+      to: input.to,
+      subject: input.subject,
+      ...input.metadata
+    });
+
+    return null;
+  }
+
   const resend = getResendClient();
   const fromEmail = getConfiguredFromEmail(input.kind);
   const maxAttempts = parsePositiveInt(process.env.RESEND_MAX_ATTEMPTS, 3);
@@ -124,6 +162,9 @@ async function sendEmailWithConfirmation(input: {
 
     logEmailEvent("info", "request", {
       kind: input.kind,
+      templateId: input.templateId,
+      dedupeKey: input.dedupeKey,
+      campaign: input.campaign,
       to: input.to,
       from: fromEmail,
       subject: input.subject,
@@ -142,6 +183,9 @@ async function sendEmailWithConfirmation(input: {
 
       logEmailEvent(rateLimited ? "warn" : "error", "exception", {
         kind: input.kind,
+        templateId: input.templateId,
+        dedupeKey: input.dedupeKey,
+        campaign: input.campaign,
         to: input.to,
         from: fromEmail,
         subject: input.subject,
@@ -159,11 +203,15 @@ async function sendEmailWithConfirmation(input: {
         to: input.to,
         subject: input.subject,
         kind: input.kind,
+        templateId: input.templateId,
+        dedupeKey: input.dedupeKey,
+        campaign: input.campaign,
         status: "failed",
         websiteId,
         userId,
         errorMessage: message,
-        metadata: input.metadata
+        metadata: input.metadata,
+        triggeredAt: input.triggeredAt
       });
 
       throw new Error(`Unable to send email: ${message}`);
@@ -171,6 +219,9 @@ async function sendEmailWithConfirmation(input: {
 
     logEmailEvent("info", "response", {
       kind: input.kind,
+      templateId: input.templateId,
+      dedupeKey: input.dedupeKey,
+      campaign: input.campaign,
       to: input.to,
       from: fromEmail,
       subject: input.subject,
@@ -185,11 +236,15 @@ async function sendEmailWithConfirmation(input: {
         to: input.to,
         subject: input.subject,
         kind: input.kind,
+        templateId: input.templateId,
+        dedupeKey: input.dedupeKey,
+        campaign: input.campaign,
         status: "sent",
         websiteId,
         userId,
         providerMessageId: response.data.id,
-        metadata: input.metadata
+        metadata: input.metadata,
+        triggeredAt: input.triggeredAt
       });
 
       return {
@@ -208,6 +263,9 @@ async function sendEmailWithConfirmation(input: {
 
     logEmailEvent(rateLimited ? "warn" : "error", "rejected", {
       kind: input.kind,
+      templateId: input.templateId,
+      dedupeKey: input.dedupeKey,
+      campaign: input.campaign,
       to: input.to,
       from: fromEmail,
       subject: input.subject,
@@ -225,11 +283,15 @@ async function sendEmailWithConfirmation(input: {
       to: input.to,
       subject: input.subject,
       kind: input.kind,
+      templateId: input.templateId,
+      dedupeKey: input.dedupeKey,
+      campaign: input.campaign,
       status: "failed",
       websiteId,
       userId,
       errorMessage: message,
-      metadata: input.metadata
+      metadata: input.metadata,
+      triggeredAt: input.triggeredAt
     });
 
     throw new Error(`Unable to send email: ${message}`);
@@ -300,6 +362,155 @@ function stripProtocol(url: string) {
 
 function getClientWebsiteName(website: Website) {
   return website.label?.trim() || stripProtocol(website.url);
+}
+
+function renderPreheader(text: string) {
+  return `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(text)}</div>`;
+}
+
+function renderDetailGrid(details: Array<{ label: string; value: string }>) {
+  if (!details.length) {
+    return "";
+  }
+
+  return `
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;margin:0 0 24px 0;">
+      <tr>
+        ${details
+          .map(
+            (detail) => `
+              <td valign="top" style="padding:0 8px 8px 0;">
+                <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E2E8F0;border-radius:14px;background:#F8FAFC;">
+                  <tr>
+                    <td style="padding:14px 16px;">
+                      <p style="margin:0 0 6px 0;font-size:11px;line-height:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748B;">
+                        ${escapeHtml(detail.label)}
+                      </p>
+                      <p style="margin:0;font-size:16px;line-height:22px;font-weight:700;color:#0F172A;">
+                        ${escapeHtml(detail.value)}
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            `
+          )
+          .join("")}
+      </tr>
+    </table>
+  `;
+}
+
+function renderPrimaryButton(label: string, href: string, accent: string) {
+  return `
+    <table cellpadding="0" cellspacing="0" role="presentation">
+      <tr>
+        <td align="center" style="border-radius:999px;background:${accent};">
+          <a href="${escapeHtml(href)}" style="display:inline-block;padding:14px 22px;font-size:15px;line-height:20px;font-weight:700;color:#FFFFFF;text-decoration:none;">
+            ${escapeHtml(label)}
+          </a>
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
+function renderSecondaryLink(label: string, href: string, accent: string) {
+  return `<a href="${escapeHtml(href)}" style="font-size:14px;line-height:20px;font-weight:700;color:${accent};text-decoration:none;">${escapeHtml(label)} &rarr;</a>`;
+}
+
+function renderEmailLayout(input: {
+  preheader: string;
+  accent: string;
+  eyebrow: string;
+  title: string;
+  summary: string;
+  bodyHtml: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  secondaryLabel?: string | null;
+  secondaryUrl?: string | null;
+  details?: Array<{ label: string; value: string }>;
+  footerLinks?: Array<{ label: string; href: string }>;
+  footerNote?: string;
+  supportLabel?: string;
+}) {
+  const footerLinks =
+    input.footerLinks?.length
+      ? input.footerLinks
+          .map((link) => `<a href="${escapeHtml(link.href)}" style="color:${input.accent};text-decoration:none;">${escapeHtml(link.label)}</a>`)
+          .join(`<span style="color:#CBD5E1;"> &middot; </span>`)
+      : "";
+
+  return `
+    ${renderPreheader(input.preheader)}
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#F4F6F9;margin:0;padding:0;">
+      <tr>
+        <td align="center" style="padding:32px 12px;">
+          <table width="620" cellpadding="0" cellspacing="0" role="presentation" style="width:620px;max-width:620px;background:#FFFFFF;border-collapse:separate;border-spacing:0;border:1px solid #E2E8F0;border-radius:24px;overflow:hidden;">
+            <tr>
+              <td style="background:#0F172A;padding:0;">
+                <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                  <tr>
+                    <td style="padding:24px 28px;font-family:Arial,Helvetica,sans-serif;">
+                      <p style="margin:0;font-size:24px;line-height:28px;font-weight:700;color:#FFFFFF;letter-spacing:0.02em;">
+                        SitePulse
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="height:4px;background:${input.accent};font-size:0;line-height:0;">&nbsp;</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;font-family:Arial,Helvetica,sans-serif;color:#0F172A;">
+                <p style="margin:0 0 10px 0;font-size:12px;line-height:12px;letter-spacing:0.08em;text-transform:uppercase;color:#64748B;font-weight:700;">
+                  ${escapeHtml(input.eyebrow)}
+                </p>
+                <h1 style="margin:0 0 12px 0;font-size:31px;line-height:38px;font-weight:700;color:#0F172A;">
+                  ${escapeHtml(input.title)}
+                </h1>
+                <p style="margin:0 0 24px 0;font-size:16px;line-height:26px;color:#475569;">
+                  ${escapeHtml(input.summary)}
+                </p>
+                ${renderDetailGrid(input.details ?? [])}
+                <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E2E8F0;border-radius:20px;background:#FFFFFF;">
+                  <tr>
+                    <td style="padding:22px 22px 18px 22px;">
+                      ${input.bodyHtml}
+                    </td>
+                  </tr>
+                </table>
+                <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;margin-top:24px;">
+                  <tr>
+                    <td valign="middle" style="padding:0 16px 0 0;">
+                      ${renderPrimaryButton(input.ctaLabel, input.ctaUrl, input.accent)}
+                    </td>
+                    <td valign="middle">
+                      ${input.secondaryLabel && input.secondaryUrl ? renderSecondaryLink(input.secondaryLabel, input.secondaryUrl, input.accent) : ""}
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:22px 28px;background:#F8FAFC;border-top:1px solid #E2E8F0;text-align:center;font-family:Arial,Helvetica,sans-serif;">
+                ${footerLinks ? `<p style="margin:0 0 10px 0;font-size:13px;line-height:20px;color:#64748B;">${footerLinks}</p>` : ""}
+                <p style="margin:0 0 6px 0;font-size:12px;line-height:18px;color:#94A3B8;">
+                  ${escapeHtml(input.footerNote ?? "SitePulse keeps client reporting, alerts, and follow-up moving in one place.")}
+                </p>
+                <p style="margin:0;font-size:12px;line-height:18px;color:#94A3B8;">
+                  ${escapeHtml(input.supportLabel ?? "Made for agencies, not developers.")}
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
 }
 
 function truncateText(value: string, max = 140) {
@@ -932,8 +1143,143 @@ function renderScoreSummary(scan: ScanResult, previousScan?: ScanResult | null) 
   `;
 }
 
+function getEmailFooterLinks(baseUrl: string) {
+  return [
+    {
+      label: "Dashboard",
+      href: `${baseUrl}/dashboard`
+    },
+    {
+      label: "Reports",
+      href: `${baseUrl}/dashboard/reports`
+    },
+    {
+      label: "Billing",
+      href: `${baseUrl}/dashboard/billing`
+    },
+    {
+      label: "Settings",
+      href: `${baseUrl}/dashboard/settings`
+    }
+  ];
+}
+
+function getAlertEmailContent(input: {
+  templateId: AlertEmailTemplateId;
+  website: Website;
+  reason: string;
+}) {
+  switch (input.templateId) {
+    case "alert_score_drop":
+      return {
+        subject: `Alert: ${input.website.label} dropped in performance`,
+        eyebrow: "Performance alert",
+        title: `${input.website.label} lost ground`,
+        summary: "A recent scan showed a meaningful performance drop that could affect client confidence and conversion quality.",
+        guidance:
+          "Review the latest scan, confirm what changed, and decide whether this needs a fast fix or a short client explanation today."
+      };
+    case "alert_critical_score":
+      return {
+        subject: `Alert: ${input.website.label} is in the critical zone`,
+        eyebrow: "Critical score alert",
+        title: `${input.website.label} needs immediate attention`,
+        summary: "The latest scan moved this website into a critical score range, so it is worth reviewing before the issue compounds.",
+        guidance:
+          "Start with the highest-impact fixes in the latest scan and prepare a simple next-step update for the client or internal team."
+      };
+    case "alert_scan_failure":
+      return {
+        subject: `Alert: SitePulse could not scan ${input.website.label}`,
+        eyebrow: "Scan failure",
+        title: `A scheduled scan failed for ${input.website.label}`,
+        summary: "The monitoring workflow could not complete the latest scan, which means the next report or alert might miss fresh data.",
+        guidance:
+          "Check the website status, recent deploys, and any blockers that would prevent SitePulse from completing the scan successfully."
+      };
+    case "alert_ssl_expiry":
+      return {
+        subject: `Alert: SSL renewal needed for ${input.website.label}`,
+        eyebrow: "SSL alert",
+        title: `${input.website.label} needs certificate attention`,
+        summary: "The SSL certificate window is now close enough to create risk for visitors, trust signals, and uninterrupted availability.",
+        guidance:
+          "Review the expiry date, confirm ownership of the certificate, and schedule the renewal before browsers start showing warnings."
+      };
+    case "alert_uptime":
+      return {
+        subject: `Alert: ${input.website.label} appears offline`,
+        eyebrow: "Uptime alert",
+        title: `${input.website.label} may be down`,
+        summary: "An uptime check detected downtime or a failed response, so this website needs a quick review before the incident grows.",
+        guidance:
+          "Confirm the outage, check hosting and monitoring data, and decide whether the client needs an immediate heads-up."
+      };
+    case "alert_competitor":
+      return {
+        subject: `Alert: competitor movement detected for ${input.website.label}`,
+        eyebrow: "Competitor alert",
+        title: `A competitor moved on ${input.website.label}`,
+        summary: "A tracked competitor changed enough to matter, which is a useful moment to review your positioning and next actions.",
+        guidance:
+          "Compare the latest competitor movement against your own site scores and use it to prioritize the fixes or wins worth sharing."
+      };
+  }
+}
+
+export async function sendProductEmail(input: {
+  templateId: ProductEmailTemplateId;
+  dedupeKey: string;
+  campaign: string;
+  to: string;
+  subject: string;
+  preheader: string;
+  eyebrow: string;
+  title: string;
+  summary: string;
+  bodyHtml: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  secondaryLabel?: string | null;
+  secondaryUrl?: string | null;
+  details?: Array<{ label: string; value: string }>;
+  accent?: string;
+  fromName?: string;
+  metadata?: EmailLogPayload;
+  triggeredAt?: string | null;
+}) {
+  const baseUrl = ensureHttpsUrl(getBaseUrl()).replace(/\/$/, "");
+
+  return sendEmailWithConfirmation({
+    kind: "product",
+    templateId: input.templateId,
+    dedupeKey: input.dedupeKey,
+    campaign: input.campaign,
+    to: input.to,
+    fromName: input.fromName ?? "SitePulse",
+    subject: input.subject,
+    metadata: input.metadata,
+    triggeredAt: input.triggeredAt,
+    html: renderEmailLayout({
+      preheader: input.preheader,
+      accent: input.accent ?? "#2563EB",
+      eyebrow: input.eyebrow,
+      title: input.title,
+      summary: input.summary,
+      bodyHtml: input.bodyHtml,
+      ctaLabel: input.ctaLabel,
+      ctaUrl: input.ctaUrl,
+      secondaryLabel: input.secondaryLabel,
+      secondaryUrl: input.secondaryUrl,
+      details: input.details,
+      footerLinks: getEmailFooterLinks(baseUrl)
+    })
+  });
+}
+
 export async function sendReportEmail(input: {
   to: string;
+  reportId: string;
   website: Website;
   branding?: AgencyBranding | null;
   scan: ScanResult;
@@ -943,10 +1289,18 @@ export async function sendReportEmail(input: {
   brokenLinks?: BrokenLinkRecord | null;
   pdfBuffer: Buffer;
   dashboardUrl: string;
+  deliveryMode: "manual" | "scheduled";
+  frequency: ScanFrequency;
+  dedupeKey: string;
+  triggeredAt?: string | null;
 }) {
   const baseUrl = getBaseUrl();
   const fromName = input.branding?.email_from_name || input.branding?.agency_name || "SitePulse";
   const accent = input.branding?.brand_color || "#3B82F6";
+  const reportMeta = getReportEmailMeta({
+    deliveryMode: input.deliveryMode,
+    frequency: input.frequency
+  });
   const clientWebsiteName = getClientWebsiteName(input.website);
   const websiteHost = stripProtocol(input.website.url);
   const reportDate = formatReportDate(input.scan.scanned_at);
@@ -977,9 +1331,9 @@ export async function sendReportEmail(input: {
   const reportYear = new Date(input.scan.scanned_at).getFullYear();
   const heroSummaryPrimary =
     performanceDelta !== null && performanceDelta < 0
-      ? `Performance fell by ${Math.abs(performanceDelta)} points since last week, which puts more pressure on conversions and client confidence.`
-      : "This week's scan shows where the site is helping or hurting visibility, speed, and trust.";
-  const heroSummarySecondary = `The biggest talking point this week is ${keyIssue.toLowerCase()}. Review the highest-priority fixes below, then open the full report for the complete action plan.`;
+      ? `Performance fell by ${Math.abs(performanceDelta)} points since the previous scan, which puts more pressure on conversions and client confidence.`
+      : "This report shows where the site is helping or hurting visibility, speed, and trust.";
+  const heroSummarySecondary = `The biggest talking point in this report is ${keyIssue.toLowerCase()}. Review the highest-priority fixes below, then open the full report for the complete action plan.`;
   const businessImpactMarkup = businessImpactLines
     .map(
       (line) => `
@@ -1102,25 +1456,39 @@ export async function sendReportEmail(input: {
       `;
     })
     .join("");
+  const reportLabelLower = reportMeta.label.toLowerCase();
   const subject =
     performanceDelta !== null && performanceDelta < 0
-      ? `Weekly Report: Performance dropped by ${Math.abs(performanceDelta)} points`
+      ? `${reportMeta.label} Report: Performance dropped by ${Math.abs(performanceDelta)} points`
       : performanceDelta !== null && performanceDelta > 0
-        ? `Weekly Report: Performance improved by ${performanceDelta} points`
-        : `Weekly Website Report for ${clientWebsiteName}`;
+        ? `${reportMeta.label} Report: Performance improved by ${performanceDelta} points`
+        : `${reportMeta.label} Website Report for ${clientWebsiteName}`;
+  const reportPreheader =
+    input.deliveryMode === "manual"
+      ? `A fresh client-ready report for ${clientWebsiteName} is attached with a live dashboard link.`
+      : `${reportMeta.label} score changes, quick wins, and the attached report for ${clientWebsiteName}.`;
 
   return sendEmailWithConfirmation({
     kind: "report",
+    templateId: reportMeta.templateId,
+    dedupeKey: input.dedupeKey,
+    campaign: reportMeta.campaign,
     to: input.to,
     fromName,
     subject,
+    triggeredAt: input.triggeredAt ?? input.scan.scanned_at,
     metadata: {
+      reportId: input.reportId,
       websiteId: input.website.id,
       userId: input.website.user_id,
       scanId: input.scan.id,
-      recipient: input.to
+      recipient: input.to,
+      reportMode: reportLabelLower,
+      reportFrequency: input.frequency,
+      dedupeKey: input.dedupeKey
     },
     html: `
+      ${renderPreheader(reportPreheader)}
       <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#F4F6F9;margin:0;padding:0;">
         <tr>
           <td align="center" style="padding:32px 12px;">
@@ -1136,7 +1504,7 @@ export async function sendReportEmail(input: {
                               SitePulse
                             </td>
                             <td align="right" valign="middle" style="font-size:13px;line-height:20px;color:#94A3AF;">
-                              Weekly Performance Report &middot; ${escapeHtml(reportMonthYear)}
+                              ${escapeHtml(reportMeta.label)} Performance Report &middot; ${escapeHtml(reportMonthYear)}
                             </td>
                           </tr>
                         </table>
@@ -1157,10 +1525,10 @@ export async function sendReportEmail(input: {
                           <tr>
                             <td style="padding:28px 24px 24px 24px;">
                               <p style="margin:0 0 8px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#94A3AF;font-weight:700;">
-                                Weekly website report
+                                ${escapeHtml(reportMeta.label)} website report
                               </p>
                               <h1 style="margin:0 0 10px 0;font-size:30px;line-height:38px;font-weight:700;color:#111827;">
-                                Weekly Website Report for ${escapeHtml(clientWebsiteName)}
+                                ${escapeHtml(reportMeta.label)} Website Report for ${escapeHtml(clientWebsiteName)}
                               </h1>
                               <p style="margin:0 0 8px 0;font-size:16px;line-height:24px;font-weight:700;">
                                 <a href="${escapeHtml(websiteUrl)}" style="color:#2563EB;text-decoration:none;">${escapeHtml(websiteHost)}</a>
@@ -1237,11 +1605,11 @@ export async function sendReportEmail(input: {
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding:0 0 16px 0;">
-                        <h2 style="margin:0 0 6px 0;font-size:24px;line-height:30px;font-weight:700;color:#111827;">
-                          3 quick wins to improve this week
-                        </h2>
-                      </td>
+                <td style="padding:0 0 16px 0;">
+                  <h2 style="margin:0 0 6px 0;font-size:24px;line-height:30px;font-weight:700;color:#111827;">
+                    3 quick wins to tackle next
+                  </h2>
+                </td>
                     </tr>
                     <tr>
                       <td style="padding:0 0 28px 0;">
@@ -1295,7 +1663,7 @@ export async function sendReportEmail(input: {
               <tr>
                 <td style="padding:24px;background:#F9FAFB;border-top:1px solid #E5E7EB;text-align:center;font-family:Arial,Helvetica,sans-serif;">
                   <p style="margin:0 0 12px 0;font-size:13px;line-height:20px;color:#6B7280;">
-                    This automated report was generated by SitePulse for ${escapeHtml(input.to)}
+                    ${input.deliveryMode === "manual" ? "This report was sent from SitePulse" : "This automated report was generated by SitePulse"} for ${escapeHtml(input.to)}
                   </p>
                   <p style="margin:0 0 12px 0;font-size:13px;line-height:20px;color:#6B7280;">
                     <a href="${escapeHtml(manageReportsUrl)}" style="color:${accent};text-decoration:none;">Manage Reports</a>
@@ -1329,50 +1697,88 @@ export async function sendReportEmail(input: {
 }
 
 export async function sendCriticalAlertEmail(input: {
+  templateId: AlertEmailTemplateId;
+  dedupeKey: string;
   to: string;
   website: Website;
   scan: ScanResult;
   reason: string;
   branding?: AgencyBranding | null;
+  triggeredAt?: string | null;
 }) {
   const fromName = input.branding?.email_from_name || input.branding?.agency_name || "SitePulse Alerts";
-  const subject = `Alert: ${input.website.label} needs attention`;
+  const baseUrl = ensureHttpsUrl(getBaseUrl()).replace(/\/$/, "");
+  const content = getAlertEmailContent({
+    templateId: input.templateId,
+    website: input.website,
+    reason: input.reason
+  });
+  const reviewUrl = `${baseUrl}/dashboard/websites/${input.website.id}`;
+  const details = [
+    {
+      label: "Website",
+      value: input.website.label
+    },
+    {
+      label: "Performance",
+      value: String(input.scan.performance_score)
+    },
+    {
+      label: "Triggered",
+      value: formatDateTime(input.triggeredAt ?? input.scan.scanned_at)
+    }
+  ];
 
   return sendEmailWithConfirmation({
     kind: "alert",
+    templateId: input.templateId,
+    dedupeKey: input.dedupeKey,
+    campaign: "alerts",
     to: input.to,
     fromName,
-    subject,
+    subject: content.subject,
+    triggeredAt: input.triggeredAt ?? input.scan.scanned_at,
     metadata: {
       websiteId: input.website.id,
       userId: input.website.user_id,
       scanId: input.scan.id,
-      reason: input.reason
+      reason: input.reason,
+      dedupeKey: input.dedupeKey
     },
-    html: `
-      <div style="font-family: Arial, sans-serif; background: #FFF7ED; padding: 32px;">
-        <div style="max-width: 680px; margin: 0 auto; background: white; border-radius: 24px; padding: 32px; border: 1px solid #FED7AA;">
-          <p style="font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: #C2410C; font-weight: 700;">Urgent client alert</p>
-          <h1 style="font-size: 30px; color: #7C2D12; margin-bottom: 12px;">${input.website.label}</h1>
-          <p style="font-size: 16px; color: #9A3412; margin-bottom: 20px;">${input.reason}</p>
-          <p style="font-size: 16px; color: #334155; margin-bottom: 16px;">Review this quickly so you can explain the issue and next action before the client escalates it.</p>
-          <p style="font-size: 16px; color: #334155;">Current performance score: <strong>${input.scan.performance_score}</strong></p>
-          <p style="font-size: 16px; color: #334155;">Scan time: ${formatDateTime(input.scan.scanned_at)}</p>
-          <a href="${getBaseUrl()}/dashboard/websites/${input.website.id}" style="display: inline-block; margin-top: 20px; background: #C2410C; color: white; text-decoration: none; padding: 14px 20px; border-radius: 999px; font-weight: 700;">
-            Review the scan
-          </a>
-        </div>
-      </div>
-    `
+    html: renderEmailLayout({
+      preheader: input.reason,
+      accent: "#C2410C",
+      eyebrow: content.eyebrow,
+      title: content.title,
+      summary: content.summary,
+      details,
+      bodyHtml: `
+        <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
+          ${escapeHtml(input.reason)}
+        </p>
+        <p style="margin:0;font-size:15px;line-height:24px;color:#475569;">
+          ${escapeHtml(content.guidance)}
+        </p>
+      `,
+      ctaLabel: "Review the scan",
+      ctaUrl: reviewUrl,
+      secondaryLabel: "Open dashboard",
+      secondaryUrl: `${baseUrl}/dashboard`,
+      footerLinks: getEmailFooterLinks(baseUrl),
+      footerNote: "Alerts help you stay ahead of client-facing issues before they become reactive conversations."
+    })
   });
 }
 
 export async function trySendCriticalAlertEmail(input: {
+  templateId: AlertEmailTemplateId;
+  dedupeKey: string;
   to: string;
   website: Website;
   scan: ScanResult;
   reason: string;
   branding?: AgencyBranding | null;
+  triggeredAt?: string | null;
 }) {
   try {
     return await sendCriticalAlertEmail(input);
@@ -1380,6 +1786,8 @@ export async function trySendCriticalAlertEmail(input: {
     const message = error instanceof Error ? error.message : "Unknown alert delivery error.";
 
     logEmailEvent("warn", "alert_skipped", {
+      templateId: input.templateId,
+      dedupeKey: input.dedupeKey,
       to: input.to,
       websiteId: input.website.id,
       scanId: input.scan.id,

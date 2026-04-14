@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { BillingCycle, PlanKey, SubscriptionStatus } from "@/types";
+import type { BillingCycle, EmailTemplateId, PlanKey, SubscriptionStatus } from "@/types";
 
 import {
   ADMIN_CRON_DEFINITIONS,
@@ -95,6 +95,9 @@ type AdminEmailLogRecord = {
   to_email: string;
   subject: string;
   email_type: string;
+  template_id: EmailTemplateId | null;
+  dedupe_key: string | null;
+  campaign: string | null;
   status: "sent" | "failed";
   website_id: string | null;
   user_id: string | null;
@@ -102,6 +105,7 @@ type AdminEmailLogRecord = {
   provider_message_id: string | null;
   error_message: string | null;
   metadata: Record<string, unknown>;
+  triggered_at: string;
   sent_at: string;
   created_at: string;
 };
@@ -197,7 +201,7 @@ export type AdminReportsPageData = {
     sentTo: string;
     sentAt: string | null;
     hasPdf: boolean;
-    reportType: "weekly" | "manual";
+    reportType: "daily" | "weekly" | "monthly" | "manual";
     status: "sent" | "failed";
     createdAt: string;
   }>;
@@ -924,20 +928,47 @@ export async function getAdminReportsData(input: {
   const last30Iso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   try {
-    const { data, error } = await admin
-      .from("reports")
-      .select("id,website_id,scan_id,pdf_url,sent_to_email,sent_at,created_at")
-      .order("created_at", { ascending: false });
+    const [{ data, error }, { data: reportLogData, error: reportLogError }] = await Promise.all([
+      admin
+        .from("reports")
+        .select("id,website_id,scan_id,pdf_url,sent_to_email,sent_at,created_at")
+        .order("created_at", { ascending: false }),
+      admin
+        .from("email_logs")
+        .select(
+          "id,to_email,subject,email_type,template_id,dedupe_key,campaign,status,website_id,user_id,provider,provider_message_id,error_message,metadata,triggered_at,sent_at,created_at"
+        )
+        .eq("email_type", "report")
+        .order("sent_at", { ascending: false })
+        .limit(1000)
+    ]);
 
     if (error) {
       throw new Error(error.message);
     }
 
+    if (reportLogError) {
+      throw new Error(reportLogError.message);
+    }
+
     const reports = (data ?? []) as AdminReportRecord[];
+    const reportLogs = (reportLogData ?? []) as AdminEmailLogRecord[];
     const websitesById = await loadWebsitesByIds(Array.from(new Set(reports.map((row) => row.website_id))));
     const usersById = await loadUsersByIds(
       Array.from(new Set(Array.from(websitesById.values()).map((row) => row.user_id)))
     );
+    const latestReportLogByReportId = new Map<string, AdminEmailLogRecord>();
+
+    for (const row of reportLogs) {
+      const reportId = typeof row.metadata.reportId === "string" ? row.metadata.reportId : null;
+      if (!reportId) {
+        continue;
+      }
+
+      if (!latestReportLogByReportId.has(reportId)) {
+        latestReportLogByReportId.set(reportId, row);
+      }
+    }
 
     const filter = input.filter ?? "all";
     const filtered = reports.filter((report) => {
@@ -963,6 +994,17 @@ export async function getAdminReportsData(input: {
       rows: items.map((report) => {
         const website = websitesById.get(report.website_id);
         const owner = website ? usersById.get(website.user_id) : null;
+        const reportLog = latestReportLogByReportId.get(report.id);
+        const reportType =
+          reportLog?.campaign === "report_daily"
+            ? "daily"
+            : reportLog?.template_id === "report_monthly" || reportLog?.campaign === "report_monthly"
+              ? "monthly"
+              : reportLog?.template_id === "report_manual" || reportLog?.campaign === "report_manual"
+                ? "manual"
+                : website?.email_reports_enabled
+                  ? "weekly"
+                  : "manual";
         return {
           id: report.id,
           websiteUrl: website?.url ?? "Unknown website",
@@ -970,7 +1012,7 @@ export async function getAdminReportsData(input: {
           sentTo: report.sent_to_email ?? "No recipient saved",
           sentAt: report.sent_at,
           hasPdf: Boolean(report.pdf_url),
-          reportType: website?.email_reports_enabled ? "weekly" : "manual",
+          reportType,
           status: report.sent_at ? "sent" : "failed",
           createdAt: report.created_at
         };
@@ -1084,7 +1126,7 @@ export async function getAdminEmailsData(input: {
     const { data, error } = await admin
       .from("email_logs")
       .select(
-        "id,to_email,subject,email_type,status,website_id,user_id,provider,provider_message_id,error_message,metadata,sent_at,created_at"
+        "id,to_email,subject,email_type,template_id,dedupe_key,campaign,status,website_id,user_id,provider,provider_message_id,error_message,metadata,triggered_at,sent_at,created_at"
       )
       .order("sent_at", { ascending: false })
       .limit(500);
@@ -1111,7 +1153,7 @@ export async function getAdminEmailsData(input: {
         id: row.id,
         to: row.to_email,
         subject: row.subject,
-        type: row.email_type,
+        type: row.template_id ?? row.email_type,
         sentAt: row.sent_at,
         status: row.status,
         websiteLabel:

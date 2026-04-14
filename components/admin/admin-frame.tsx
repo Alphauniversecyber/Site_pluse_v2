@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { Route } from "next";
 
 import { ADMIN_SIDEBAR_LINKS } from "@/lib/admin/constants";
 
@@ -33,7 +34,7 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={item.href as Route}
                   className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition ${
                     active
                       ? "border-[#14532D] bg-[#0F1D14] text-white"

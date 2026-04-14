@@ -18,6 +18,7 @@ import type {
 import { logAdminError } from "@/lib/admin/logging";
 import { ensureMagicTokenForWebsite } from "@/lib/client-token";
 import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
+import { buildEmailDedupeKey } from "@/lib/email-utils";
 import { generateScanPdf } from "@/lib/pdf";
 import { buildHealthScore } from "@/lib/health-score";
 import { sendReportEmail, trySendCriticalAlertEmail } from "@/lib/resend";
@@ -326,6 +327,7 @@ export async function sendStoredReportEmail(input: {
   reportId: string;
   email?: string;
   skipAlreadySentRecipients?: boolean;
+  deliveryMode?: "manual" | "scheduled";
 }) {
   const admin = createSupabaseAdminClient();
   let report: Report | null = null;
@@ -352,6 +354,8 @@ export async function sendStoredReportEmail(input: {
     } = await loadReportContext(report.website_id, report.scan_id);
     website = loadedWebsite;
     profile = loadedProfile;
+    const deliveryMode = input.deliveryMode ?? "manual";
+    const reportFrequency = profile.email_report_frequency;
 
     const { data: previousRows } = await admin
       .from("scan_results")
@@ -394,6 +398,7 @@ export async function sendStoredReportEmail(input: {
 
       return {
         report: alreadyComplete as Report,
+        skippedRecipients: Array.from(alreadyDeliveredRecipients),
         deliveries: [] as Array<{
           recipient: string;
           messageId: string;
@@ -427,11 +432,13 @@ export async function sendStoredReportEmail(input: {
       messageId: string;
       provider: "resend";
     }> = [];
+    const skippedRecipients: string[] = [];
 
     for (const recipient of recipients) {
       try {
         const delivery = await sendReportEmail({
           to: recipient,
+          reportId: report.id,
           website,
           branding,
           scan,
@@ -440,14 +447,22 @@ export async function sendStoredReportEmail(input: {
           securityHeaders,
           brokenLinks,
           pdfBuffer,
-          dashboardUrl
+          dashboardUrl,
+          deliveryMode,
+          frequency: reportFrequency,
+          dedupeKey: buildEmailDedupeKey("report", report.id, recipient),
+          triggeredAt: scan.scanned_at
         });
 
-        deliveries.push({
-          recipient,
-          messageId: delivery.messageId,
-          provider: delivery.provider
-        });
+        if (delivery) {
+          deliveries.push({
+            recipient,
+            messageId: delivery.messageId,
+            provider: delivery.provider
+          });
+        } else {
+          skippedRecipients.push(recipient);
+        }
         alreadyDeliveredRecipients.add(recipient);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown email delivery error.";
@@ -491,21 +506,26 @@ export async function sendStoredReportEmail(input: {
       throw new Error(error?.message ?? "Unable to update report delivery status.");
     }
 
-    await admin.from("notifications").insert({
-      user_id: website.user_id,
-      website_id: website.id,
-      type: "report_ready",
-      title: `Report sent for ${website.label}`,
-      body: `Weekly report sent to ${recipients.join(", ")}.`,
-      severity: "low",
-      metadata: {
-        reportId: report.id,
-        messageIds: deliveries.map((delivery) => delivery.messageId)
-      }
-    });
+    if (deliveries.length) {
+      await admin.from("notifications").insert({
+        user_id: website.user_id,
+        website_id: website.id,
+        type: "report_ready",
+        title: `Report sent for ${website.label}`,
+        body: `${deliveryMode === "manual" ? "Manual" : "Scheduled"} report sent to ${deliveries.map((delivery) => delivery.recipient).join(", ")}.`,
+        severity: "low",
+        metadata: {
+          reportId: report.id,
+          messageIds: deliveries.map((delivery) => delivery.messageId),
+          deliveryMode,
+          reportFrequency
+        }
+      });
+    }
 
     return {
       report: updated as Report,
+      skippedRecipients,
       deliveries
     };
   } catch (error) {
@@ -581,6 +601,8 @@ export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_C
       if (!latestScan || latestScan.scan_status === "failed") {
         if (profile.email_notifications_enabled) {
           await trySendCriticalAlertEmail({
+            templateId: "alert_scan_failure",
+            dedupeKey: buildEmailDedupeKey("alert", "scan_failure", website.id, latestScan?.id ?? "missing"),
             to: profile.email,
             website,
             scan:
@@ -595,7 +617,8 @@ export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_C
                 raw_data: {},
                 scanned_at: new Date().toISOString()
               } as unknown as ScanResult),
-            reason: "A scheduled report could not be sent because the latest scan failed."
+            reason: "A scheduled report could not be sent because the latest scan failed.",
+            triggeredAt: latestScan?.scanned_at ?? new Date().toISOString()
           });
         }
 
@@ -622,7 +645,8 @@ export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_C
       try {
         await sendStoredReportEmail({
           reportId: report.id,
-          skipAlreadySentRecipients: true
+          skipAlreadySentRecipients: true,
+          deliveryMode: "scheduled"
         });
 
         sent.push(report.id);

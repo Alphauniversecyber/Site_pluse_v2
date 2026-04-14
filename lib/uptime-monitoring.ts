@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ScanResult, UptimeCheckRecord, UserProfile, Website } from "@/types";
 import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
+import { buildEmailDedupeKey } from "@/lib/email-utils";
 import { trySendCriticalAlertEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -109,10 +110,19 @@ async function createUptimeAlert(input: {
     } as ScanResult;
 
     await trySendCriticalAlertEmail({
+      templateId: "alert_uptime",
+      dedupeKey: buildEmailDedupeKey(
+        "alert",
+        "uptime",
+        input.website.id,
+        input.source,
+        new Date().toISOString().slice(0, 10)
+      ),
       to: input.profile.email,
       website: input.website,
       scan: syntheticScan,
-      reason: input.reason
+      reason: input.reason,
+      triggeredAt: syntheticScan.scanned_at
     });
   }
 }

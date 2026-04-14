@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ScanResult, UserProfile, Website } from "@/types";
 import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
+import { buildEmailDedupeKey } from "@/lib/email-utils";
 import { runPageSpeedScan } from "@/lib/pagespeed";
 import { trySendCriticalAlertEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -79,10 +80,20 @@ async function createCompetitorAlert(input: {
     } as ScanResult;
 
     await trySendCriticalAlertEmail({
+      templateId: "alert_competitor",
+      dedupeKey: buildEmailDedupeKey(
+        "alert",
+        "competitor",
+        input.website.id,
+        String(input.metadata.type ?? "movement"),
+        String(input.metadata.competitorUrl ?? ""),
+        String(input.metadata.delta ?? input.metadata.competitorScore ?? "")
+      ),
       to: input.profile.email,
       website: input.website,
       scan: syntheticScan,
-      reason: input.reason
+      reason: input.reason,
+      triggeredAt: syntheticScan.scanned_at
     });
   }
 }

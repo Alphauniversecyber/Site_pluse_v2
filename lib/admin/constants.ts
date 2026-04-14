@@ -8,7 +8,8 @@ export type AdminCronName =
   | "process-uptime"
   | "sync-uptimerobot"
   | "process-competitors"
-  | "expire-trials";
+  | "expire-trials"
+  | "process-lifecycle-emails";
 
 export const ADMIN_SIDEBAR_LINKS = [
   { href: "/admin", label: "Overview", icon: "📊" },
@@ -65,6 +66,12 @@ export const ADMIN_CRON_DEFINITIONS: Record<
     path: "/api/cron/expire-trials",
     schedule: "0 2 * * *",
     description: "Moves expired trials back to the free plan."
+  },
+  "process-lifecycle-emails": {
+    label: "process-lifecycle-emails",
+    path: "/api/cron/process-lifecycle-emails",
+    schedule: "0 12 * * *",
+    description: "Sends welcome, trial, onboarding, and lifecycle emails."
   }
 };
 
