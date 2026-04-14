@@ -202,12 +202,12 @@ export function formatDurationMs(startedAt: string | null | undefined, finishedA
   return `${seconds}s`;
 }
 
-export function parsePageParam(raw: string | string[] | undefined, fallback: number) {
+export function parsePageParam(raw: string | string[] | null | undefined, fallback: number) {
   const value = Array.isArray(raw) ? raw[0] : raw;
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export function parseTextParam(raw: string | string[] | undefined) {
+export function parseTextParam(raw: string | string[] | null | undefined) {
   return (Array.isArray(raw) ? raw[0] : raw)?.trim() ?? "";
 }
