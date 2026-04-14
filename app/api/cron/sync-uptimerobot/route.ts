@@ -1,4 +1,5 @@
 import { apiError, apiSuccess } from "@/lib/api";
+import { runLoggedCron } from "@/lib/admin/logging";
 import { processUptimeRobotSync } from "@/lib/uptime-monitoring";
 
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const synced = await processUptimeRobotSync();
+    const synced = await runLoggedCron("sync-uptimerobot", () => processUptimeRobotSync());
     return apiSuccess({ synced });
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "Unable to sync UptimeRobot data.", 500);

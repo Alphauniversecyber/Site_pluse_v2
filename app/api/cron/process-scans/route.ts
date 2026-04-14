@@ -1,4 +1,5 @@
 import { apiError, apiSuccess } from "@/lib/api";
+import { runLoggedCron } from "@/lib/admin/logging";
 import { processDueScans } from "@/lib/scan-service";
 
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const executed = await processDueScans();
+    const executed = await runLoggedCron("process-scans", () => processDueScans());
     return apiSuccess({ executed });
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "Unable to process scheduled scans.", 500);

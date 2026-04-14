@@ -3,6 +3,7 @@ import "server-only";
 import { load } from "cheerio";
 
 import type { SeoAuditRecord, Severity } from "@/types";
+import { logAdminError } from "@/lib/admin/logging";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const SEO_AUDIT_CACHE_HOURS = 24;
@@ -70,7 +71,8 @@ export async function ensureSeoAudit(input: {
   force?: boolean;
 }) {
   const admin = createSupabaseAdminClient();
-  const { data: latest } = await admin
+  try {
+    const { data: latest } = await admin
     .from("seo_audit")
     .select("*")
     .eq("website_id", input.websiteId)
@@ -245,5 +247,18 @@ export async function ensureSeoAudit(input: {
 
   const { data, error } = await admin.from("seo_audit").insert(payload).select("*").single();
   if (error || !data) throw new Error(error?.message ?? "Unable to store SEO audit.");
-  return data as SeoAuditRecord;
+    return data as SeoAuditRecord;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to run SEO audit.";
+    await logAdminError({
+      errorType: "seo_audit_failed",
+      errorMessage: message,
+      websiteId: input.websiteId,
+      context: {
+        scanId: input.scanId,
+        url: input.url
+      }
+    });
+    throw error;
+  }
 }

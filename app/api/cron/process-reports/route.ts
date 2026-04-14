@@ -1,4 +1,5 @@
 import { apiError, apiSuccess } from "@/lib/api";
+import { runLoggedCron } from "@/lib/admin/logging";
 import { processDueEmailReports } from "@/lib/report-service";
 
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const sent = await processDueEmailReports();
+    const sent = await runLoggedCron("process-reports", () => processDueEmailReports());
     return apiSuccess({ sent });
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "Unable to process scheduled reports.", 500);

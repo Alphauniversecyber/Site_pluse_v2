@@ -1,4 +1,5 @@
 import { apiError, apiSuccess } from "@/lib/api";
+import { runLoggedCron } from "@/lib/admin/logging";
 import { processDailyUptimeChecks } from "@/lib/uptime-monitoring";
 
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const processed = await processDailyUptimeChecks();
+    const processed = await runLoggedCron("process-uptime", () => processDailyUptimeChecks());
     return apiSuccess({ processed });
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "Unable to process uptime checks.", 500);

@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ScanResult, SslCheckRecord, UserProfile, Website } from "@/types";
+import { logAdminError } from "@/lib/admin/logging";
 import { ensureBrokenLinkCheck } from "@/lib/broken-links";
 import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
 import { ensureCruxData } from "@/lib/crux";
@@ -400,6 +401,16 @@ export async function executeWebsiteScan(
       ?.accessibility?.accessibilityViolations?.length ?? 0);
 
   if (currentScan.scan_status === "failed") {
+    await logAdminError({
+      errorType: "scan_failed",
+      errorMessage: currentScan.error_message ?? "The site was unreachable during the latest scan.",
+      websiteId: website.id,
+      userId: profile.id,
+      context: {
+        scanId: currentScan.id
+      }
+    });
+
     await createNotification({
       userId: profile.id,
       websiteId: website.id,

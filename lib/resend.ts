@@ -3,6 +3,7 @@ import "server-only";
 import { Resend, type CreateEmailOptions, type CreateEmailResponse } from "resend";
 
 import type { AgencyBranding, BrokenLinkRecord, ScanResult, SecurityHeadersRecord, Website } from "@/types";
+import { logEmailDelivery } from "@/lib/admin/logging";
 import { formatDateTime, getBaseUrl } from "@/lib/utils";
 
 let resendClient: Resend | null = null;
@@ -108,6 +109,8 @@ async function sendEmailWithConfirmation(input: {
   const resend = getResendClient();
   const fromEmail = getConfiguredFromEmail(input.kind);
   const maxAttempts = parsePositiveInt(process.env.RESEND_MAX_ATTEMPTS, 3);
+  const websiteId = typeof input.metadata?.websiteId === "string" ? input.metadata.websiteId : null;
+  const userId = typeof input.metadata?.userId === "string" ? input.metadata.userId : null;
   const payload: CreateEmailOptions = {
     from: `${input.fromName} <${fromEmail}>`,
     to: input.to,
@@ -152,6 +155,17 @@ async function sendEmailWithConfirmation(input: {
         continue;
       }
 
+      await logEmailDelivery({
+        to: input.to,
+        subject: input.subject,
+        kind: input.kind,
+        status: "failed",
+        websiteId,
+        userId,
+        errorMessage: message,
+        metadata: input.metadata
+      });
+
       throw new Error(`Unable to send email: ${message}`);
     }
 
@@ -167,6 +181,17 @@ async function sendEmailWithConfirmation(input: {
     });
 
     if (!response.error && response.data?.id) {
+      await logEmailDelivery({
+        to: input.to,
+        subject: input.subject,
+        kind: input.kind,
+        status: "sent",
+        websiteId,
+        userId,
+        providerMessageId: response.data.id,
+        metadata: input.metadata
+      });
+
       return {
         provider: "resend" as const,
         messageId: response.data.id,
@@ -195,6 +220,17 @@ async function sendEmailWithConfirmation(input: {
       await sleep(getResendRetryDelayMs(attempt));
       continue;
     }
+
+    await logEmailDelivery({
+      to: input.to,
+      subject: input.subject,
+      kind: input.kind,
+      status: "failed",
+      websiteId,
+      userId,
+      errorMessage: message,
+      metadata: input.metadata
+    });
 
     throw new Error(`Unable to send email: ${message}`);
   }
@@ -1080,6 +1116,7 @@ export async function sendReportEmail(input: {
     subject,
     metadata: {
       websiteId: input.website.id,
+      userId: input.website.user_id,
       scanId: input.scan.id,
       recipient: input.to
     },
@@ -1308,6 +1345,7 @@ export async function sendCriticalAlertEmail(input: {
     subject,
     metadata: {
       websiteId: input.website.id,
+      userId: input.website.user_id,
       scanId: input.scan.id,
       reason: input.reason
     },

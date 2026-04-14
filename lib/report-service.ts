@@ -15,6 +15,7 @@ import type {
   UserProfile,
   Website
 } from "@/types";
+import { logAdminError } from "@/lib/admin/logging";
 import { ensureMagicTokenForWebsite } from "@/lib/client-token";
 import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
 import { generateScanPdf } from "@/lib/pdf";
@@ -176,115 +177,130 @@ function getRecipients(profile: UserProfile, website: Website, explicitEmail?: s
 
 export async function generateAndStoreReport(input: { websiteId: string; scanId: string }) {
   const admin = createSupabaseAdminClient();
-  const { data: existingReport } = await admin
-    .from("reports")
-    .select("*")
-    .eq("website_id", input.websiteId)
-    .eq("scan_id", input.scanId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<Report>();
+  let website: Website | null = null;
 
-  if (existingReport?.pdf_url) {
-    return existingReport;
-  }
-
-  const {
-    website,
-    scan,
-    profile,
-    branding,
-    history,
-    previousScan,
-    schedule,
-    seoAudit,
-    sslCheck,
-    securityHeaders,
-    cruxData,
-    brokenLinks,
-    uptimeChecks,
-    competitorScans
-  } = await loadReportContext(
-    input.websiteId,
-    input.scanId
-  );
-
-  if (!canAccessFeature(profile, "download_report")) {
-    throw new Error("Your current plan does not include PDF reports.");
-  }
-
-  const pdfBuffer = await generateScanPdf({
-    website,
-    scan,
-    branding,
-    history,
-    previousScan,
-    profile,
-    schedule,
-    seoAudit,
-    sslCheck,
-    securityHeaders,
-    cruxData,
-    brokenLinks,
-    uptimeChecks,
-    competitorScans
-  });
-
-  const storagePath = buildStoragePath(
-    website.user_id,
-    `${website.label.replace(/\s+/g, "-").toLowerCase()}-${scan.id}.pdf`
-  );
-
-  const { error: uploadError } = await admin.storage.from("reports").upload(storagePath, pdfBuffer, {
-    contentType: "application/pdf",
-    upsert: true
-  });
-
-  if (uploadError) {
-    throw new Error(uploadError.message);
-  }
-
-  const { data: existing } = await admin
-    .from("reports")
-    .select("*")
-    .eq("website_id", website.id)
-    .eq("scan_id", scan.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (existing) {
-    const { data: updated, error } = await admin
+  try {
+    const { data: existingReport } = await admin
       .from("reports")
-      .update({
+      .select("*")
+      .eq("website_id", input.websiteId)
+      .eq("scan_id", input.scanId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<Report>();
+
+    if (existingReport?.pdf_url) {
+      return existingReport;
+    }
+
+    const {
+      website: loadedWebsite,
+      scan,
+      profile,
+      branding,
+      history,
+      previousScan,
+      schedule,
+      seoAudit,
+      sslCheck,
+      securityHeaders,
+      cruxData,
+      brokenLinks,
+      uptimeChecks,
+      competitorScans
+    } = await loadReportContext(input.websiteId, input.scanId);
+    website = loadedWebsite;
+
+    if (!canAccessFeature(profile, "download_report")) {
+      throw new Error("Your current plan does not include PDF reports.");
+    }
+
+    const pdfBuffer = await generateScanPdf({
+      website,
+      scan,
+      branding,
+      history,
+      previousScan,
+      profile,
+      schedule,
+      seoAudit,
+      sslCheck,
+      securityHeaders,
+      cruxData,
+      brokenLinks,
+      uptimeChecks,
+      competitorScans
+    });
+
+    const storagePath = buildStoragePath(
+      website.user_id,
+      `${website.label.replace(/\s+/g, "-").toLowerCase()}-${scan.id}.pdf`
+    );
+
+    const { error: uploadError } = await admin.storage.from("reports").upload(storagePath, pdfBuffer, {
+      contentType: "application/pdf",
+      upsert: true
+    });
+
+    if (uploadError) {
+      throw new Error(uploadError.message);
+    }
+
+    const { data: existing } = await admin
+      .from("reports")
+      .select("*")
+      .eq("website_id", website.id)
+      .eq("scan_id", scan.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      const { data: updated, error } = await admin
+        .from("reports")
+        .update({
+          pdf_url: storagePath
+        })
+        .eq("id", existing.id)
+        .select("*")
+        .single();
+
+      if (error || !updated) {
+        throw new Error(error?.message ?? "Unable to update report record.");
+      }
+
+      return updated as Report;
+    }
+
+    const { data: report, error } = await admin
+      .from("reports")
+      .insert({
+        website_id: website.id,
+        scan_id: scan.id,
         pdf_url: storagePath
       })
-      .eq("id", existing.id)
       .select("*")
       .single();
 
-    if (error || !updated) {
-      throw new Error(error?.message ?? "Unable to update report record.");
+    if (error || !report) {
+      throw new Error(error?.message ?? "Unable to create report.");
     }
 
-    return updated as Report;
+    return report as Report;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to generate report PDF.";
+    await logAdminError({
+      errorType: "pdf_failed",
+      errorMessage: message,
+      websiteId: website?.id ?? input.websiteId,
+      userId: website?.user_id,
+      context: {
+        websiteId: input.websiteId,
+        scanId: input.scanId
+      }
+    });
+    throw error;
   }
-
-  const { data: report, error } = await admin
-    .from("reports")
-    .insert({
-      website_id: website.id,
-      scan_id: scan.id,
-      pdf_url: storagePath
-    })
-    .select("*")
-    .single();
-
-  if (error || !report) {
-    throw new Error(error?.message ?? "Unable to create report.");
-  }
-
-  return report as Report;
 }
 
 export async function getSignedReportUrl(reportId: string) {
@@ -312,178 +328,201 @@ export async function sendStoredReportEmail(input: {
   skipAlreadySentRecipients?: boolean;
 }) {
   const admin = createSupabaseAdminClient();
+  let report: Report | null = null;
+  let website: Website | null = null;
+  let profile: UserProfile | null = null;
 
-  const { data: report } = await admin.from("reports").select("*").eq("id", input.reportId).single<Report>();
-  if (!report) {
-    throw new Error("Report not found.");
-  }
+  try {
+    const { data: reportData } = await admin.from("reports").select("*").eq("id", input.reportId).single<Report>();
+    if (!reportData) {
+      throw new Error("Report not found.");
+    }
+    report = reportData;
 
-  const {
-    website,
-    scan,
-    profile,
-    branding,
-    seoAudit,
-    sslCheck,
-    securityHeaders,
-    brokenLinks,
-    uptimeChecks
-  } = await loadReportContext(report.website_id, report.scan_id);
-  const { data: previousRows } = await admin
-    .from("scan_results")
-    .select("*")
-    .eq("website_id", website.id)
-    .lt("scanned_at", scan.scanned_at)
-    .order("scanned_at", { ascending: false })
-    .limit(1);
+    const {
+      website: loadedWebsite,
+      scan,
+      profile: loadedProfile,
+      branding,
+      seoAudit,
+      sslCheck,
+      securityHeaders,
+      brokenLinks,
+      uptimeChecks
+    } = await loadReportContext(report.website_id, report.scan_id);
+    website = loadedWebsite;
+    profile = loadedProfile;
 
-  const alreadyDeliveredRecipients = new Set(
-    (report.sent_to_email ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean)
-  );
-  const configuredRecipients = getRecipients(profile, website, input.email);
-  const recipients = input.skipAlreadySentRecipients
-    ? configuredRecipients.filter((recipient) => !alreadyDeliveredRecipients.has(recipient))
-    : configuredRecipients;
+    const { data: previousRows } = await admin
+      .from("scan_results")
+      .select("*")
+      .eq("website_id", website.id)
+      .lt("scanned_at", scan.scanned_at)
+      .order("scanned_at", { ascending: false })
+      .limit(1);
 
-  if (!configuredRecipients.length) {
-    throw new Error("No report recipients configured.");
-  }
+    const alreadyDeliveredRecipients = new Set(
+      (report.sent_to_email ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    );
+    const configuredRecipients = getRecipients(profile, website, input.email);
+    const recipients = input.skipAlreadySentRecipients
+      ? configuredRecipients.filter((recipient) => !alreadyDeliveredRecipients.has(recipient))
+      : configuredRecipients;
 
-  if (!recipients.length) {
-    const sentAt = report.sent_at ?? new Date().toISOString();
-    const { data: alreadyComplete, error: alreadyCompleteError } = await admin
+    if (!configuredRecipients.length) {
+      throw new Error("No report recipients configured.");
+    }
+
+    if (!recipients.length) {
+      const sentAt = report.sent_at ?? new Date().toISOString();
+      const { data: alreadyComplete, error: alreadyCompleteError } = await admin
+        .from("reports")
+        .update({
+          sent_to_email: Array.from(alreadyDeliveredRecipients).join(", "),
+          sent_at: sentAt
+        })
+        .eq("id", report.id)
+        .select("*")
+        .single();
+
+      if (alreadyCompleteError || !alreadyComplete) {
+        throw new Error(alreadyCompleteError?.message ?? "Unable to update report delivery status.");
+      }
+
+      return {
+        report: alreadyComplete as Report,
+        deliveries: [] as Array<{
+          recipient: string;
+          messageId: string;
+          provider: "resend";
+        }>
+      };
+    }
+
+    const { data: file, error: downloadError } = await admin.storage.from("reports").download(report.pdf_url);
+    if (downloadError || !file) {
+      throw new Error(downloadError?.message ?? "Unable to download report.");
+    }
+
+    const pdfBuffer = Buffer.from(await file.arrayBuffer());
+    const healthScore = buildHealthScore({
+      scan,
+      seoAudit,
+      sslCheck,
+      securityHeaders,
+      uptimeChecks
+    }).overall;
+    const dashboardToken = await ensureMagicTokenForWebsite(website.id);
+    const dashboardBaseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL ??
+      process.env.APP_URL ??
+      process.env.NEXT_PUBLIC_APP_URL ??
+      "http://localhost:3000";
+    const dashboardUrl = `${dashboardBaseUrl.replace(/\/$/, "")}/d/${dashboardToken}`;
+    const deliveries: Array<{
+      recipient: string;
+      messageId: string;
+      provider: "resend";
+    }> = [];
+
+    for (const recipient of recipients) {
+      try {
+        const delivery = await sendReportEmail({
+          to: recipient,
+          website,
+          branding,
+          scan,
+          previousScan: (previousRows?.[0] as ScanResult | undefined) ?? null,
+          healthScore,
+          securityHeaders,
+          brokenLinks,
+          pdfBuffer,
+          dashboardUrl
+        });
+
+        deliveries.push({
+          recipient,
+          messageId: delivery.messageId,
+          provider: delivery.provider
+        });
+        alreadyDeliveredRecipients.add(recipient);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown email delivery error.";
+
+        if (alreadyDeliveredRecipients.size) {
+          await admin
+            .from("reports")
+            .update({
+              sent_to_email: Array.from(alreadyDeliveredRecipients).join(", ")
+            })
+            .eq("id", report.id);
+        }
+
+        console.error("[reports:send] delivery_failed", {
+          reportId: report.id,
+          websiteId: website.id,
+          recipient,
+          deliveredRecipients: deliveries.map((item) => item.recipient),
+          error: message
+        });
+
+        throw new Error(
+          deliveries.length
+            ? `Report delivery failed for ${recipient} after ${deliveries.length} successful email(s). ${message}`
+            : `Report delivery failed for ${recipient}. ${message}`
+        );
+      }
+    }
+
+    const { data: updated, error } = await admin
       .from("reports")
       .update({
         sent_to_email: Array.from(alreadyDeliveredRecipients).join(", "),
-        sent_at: sentAt
+        sent_at: new Date().toISOString()
       })
       .eq("id", report.id)
       .select("*")
       .single();
 
-    if (alreadyCompleteError || !alreadyComplete) {
-      throw new Error(alreadyCompleteError?.message ?? "Unable to update report delivery status.");
+    if (error || !updated) {
+      throw new Error(error?.message ?? "Unable to update report delivery status.");
     }
+
+    await admin.from("notifications").insert({
+      user_id: website.user_id,
+      website_id: website.id,
+      type: "report_ready",
+      title: `Report sent for ${website.label}`,
+      body: `Weekly report sent to ${recipients.join(", ")}.`,
+      severity: "low",
+      metadata: {
+        reportId: report.id,
+        messageIds: deliveries.map((delivery) => delivery.messageId)
+      }
+    });
 
     return {
-      report: alreadyComplete as Report,
-      deliveries: [] as Array<{
-        recipient: string;
-        messageId: string;
-        provider: "resend";
-      }>
+      report: updated as Report,
+      deliveries
     };
-  }
-
-  const { data: file, error: downloadError } = await admin.storage.from("reports").download(report.pdf_url);
-  if (downloadError || !file) {
-    throw new Error(downloadError?.message ?? "Unable to download report.");
-  }
-
-  const pdfBuffer = Buffer.from(await file.arrayBuffer());
-  const healthScore = buildHealthScore({
-    scan,
-    seoAudit,
-    sslCheck,
-    securityHeaders,
-    uptimeChecks
-  }).overall;
-  const dashboardToken = await ensureMagicTokenForWebsite(website.id);
-  const dashboardBaseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    process.env.APP_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "http://localhost:3000";
-  const dashboardUrl = `${dashboardBaseUrl.replace(/\/$/, "")}/d/${dashboardToken}`;
-  const deliveries: Array<{
-    recipient: string;
-    messageId: string;
-    provider: "resend";
-  }> = [];
-
-  for (const recipient of recipients) {
-    try {
-      const delivery = await sendReportEmail({
-        to: recipient,
-        website,
-        branding,
-        scan,
-        previousScan: (previousRows?.[0] as ScanResult | undefined) ?? null,
-        healthScore,
-        securityHeaders,
-        brokenLinks,
-        pdfBuffer,
-        dashboardUrl
-      });
-
-      deliveries.push({
-        recipient,
-        messageId: delivery.messageId,
-        provider: delivery.provider
-      });
-      alreadyDeliveredRecipients.add(recipient);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown email delivery error.";
-
-      if (alreadyDeliveredRecipients.size) {
-        await admin
-          .from("reports")
-          .update({
-            sent_to_email: Array.from(alreadyDeliveredRecipients).join(", ")
-          })
-          .eq("id", report.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to send report email.";
+    await logAdminError({
+      errorType: "email_failed",
+      errorMessage: message,
+      websiteId: website?.id ?? report?.website_id,
+      userId: profile?.id ?? website?.user_id,
+      context: {
+        reportId: report?.id ?? input.reportId,
+        explicitEmail: input.email ?? null,
+        skipAlreadySentRecipients: Boolean(input.skipAlreadySentRecipients)
       }
-
-      console.error("[reports:send] delivery_failed", {
-        reportId: report.id,
-        websiteId: website.id,
-        recipient,
-        deliveredRecipients: deliveries.map((item) => item.recipient),
-        error: message
-      });
-
-      throw new Error(
-        deliveries.length
-          ? `Report delivery failed for ${recipient} after ${deliveries.length} successful email(s). ${message}`
-          : `Report delivery failed for ${recipient}. ${message}`
-      );
-    }
+    });
+    throw error;
   }
-
-  const { data: updated, error } = await admin
-    .from("reports")
-    .update({
-      sent_to_email: Array.from(alreadyDeliveredRecipients).join(", "),
-      sent_at: new Date().toISOString()
-    })
-    .eq("id", report.id)
-    .select("*")
-    .single();
-
-  if (error || !updated) {
-    throw new Error(error?.message ?? "Unable to update report delivery status.");
-  }
-
-  await admin.from("notifications").insert({
-    user_id: website.user_id,
-    website_id: website.id,
-    type: "report_ready",
-    title: `Report sent for ${website.label}`,
-    body: `Weekly report sent to ${recipients.join(", ")}.`,
-    severity: "low",
-    metadata: {
-      reportId: report.id,
-      messageIds: deliveries.map((delivery) => delivery.messageId)
-    }
-  });
-
-  return {
-    report: updated as Report,
-    deliveries
-  };
 }
 
 function isDue(lastSentAt: string | null, frequency: UserProfile["email_report_frequency"]) {

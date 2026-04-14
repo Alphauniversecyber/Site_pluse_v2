@@ -1,4 +1,5 @@
 import { apiError, apiSuccess } from "@/lib/api";
+import { runLoggedCron } from "@/lib/admin/logging";
 import { processCompetitorScans } from "@/lib/competitor-monitoring";
 
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const processed = await processCompetitorScans();
+    const processed = await runLoggedCron("process-competitors", () => processCompetitorScans());
     return apiSuccess({ processed });
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "Unable to process competitor scans.", 500);
