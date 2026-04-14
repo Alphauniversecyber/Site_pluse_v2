@@ -166,10 +166,10 @@ export default function WebsitesPage() {
             return (
               <Card key={website.id} className="website-monitor-card h-full">
                 <CardContent className="relative flex h-full flex-col p-6">
-                  <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-start">
+                  <div className="relative flex flex-col gap-5">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-3">
-                        <h2 className="min-w-0 break-words font-display text-2xl font-semibold">{website.label}</h2>
+                        <h2 className="min-w-0 font-display text-xl font-semibold sm:text-2xl">{website.label}</h2>
                         <Badge variant={website.is_active ? "success" : "outline"}>
                           {website.is_active ? "Active" : "Paused"}
                         </Badge>
@@ -198,7 +198,7 @@ export default function WebsitesPage() {
                       </div>
                     </div>
 
-                    <div className="grid w-full shrink-0 gap-2.5 sm:grid-cols-2 xl:grid-cols-2">
+                    <div className="grid w-full gap-2.5 sm:grid-cols-2">
                       <Button
                         asChild
                         variant="outline"
@@ -264,7 +264,7 @@ export default function WebsitesPage() {
                     </div>
                   </div>
 
-                  <div className="relative mt-6 grid flex-1 gap-4 min-[1700px]:grid-cols-[minmax(0,216px)_minmax(0,1fr)] min-[2200px]:grid-cols-[minmax(0,228px)_minmax(0,1fr)]">
+                  <div className="relative mt-6 grid flex-1 gap-4 min-[2200px]:grid-cols-[minmax(0,228px)_minmax(0,1fr)]">
                     {hasValidScan ? (
                       <ScoreRing
                         label="Health Score"
