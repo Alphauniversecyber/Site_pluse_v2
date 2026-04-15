@@ -34,37 +34,37 @@ export const ADMIN_CRON_DEFINITIONS: Record<
   "process-scans": {
     label: "process-scans",
     path: "/api/cron/process-scans",
-    schedule: "5 * * * *",
+    schedule: "0 6 * * *",
     description: "Runs due website scans."
   },
   "process-reports": {
     label: "process-reports",
     path: "/api/cron/process-reports",
-    schedule: "25 * * * *",
+    schedule: "0 10 * * *",
     description: "Sends scheduled weekly reports."
   },
   "process-uptime": {
     label: "process-uptime",
     path: "/api/cron/process-uptime",
-    schedule: "15 * * * *",
+    schedule: "0 7 * * *",
     description: "Checks website uptime and alerts."
   },
   "sync-uptimerobot": {
     label: "sync-uptimerobot",
     path: "/api/cron/sync-uptimerobot",
-    schedule: "0 10 * * *",
+    schedule: "0 8 * * *",
     description: "Syncs UptimeRobot monitor results."
   },
   "process-competitors": {
     label: "process-competitors",
     path: "/api/cron/process-competitors",
-    schedule: "35 * * * *",
+    schedule: "0 9 * * *",
     description: "Checks competitor score movement."
   },
   "expire-trials": {
     label: "expire-trials",
     path: "/api/cron/expire-trials",
-    schedule: "0 2 * * *",
+    schedule: "0 11 * * *",
     description: "Moves expired trials back to the free plan."
   },
   "process-lifecycle-emails": {

@@ -22,8 +22,8 @@ import {
   startOfPreviousMonthIso,
   toMonthlyRevenue
 } from "@/lib/admin/format";
+import { executeAdminCron } from "@/lib/admin/cron-executor";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { getBaseUrl } from "@/lib/utils";
 
 type AdminUserRecord = {
   id: string;
@@ -1368,33 +1368,29 @@ export async function getAdminErrorsData(input: {
 }
 
 export async function triggerAdminCron(cronName: AdminCronName) {
-  const definition = ADMIN_CRON_DEFINITIONS[cronName];
-  const baseUrl = getBaseUrl().replace(/\/$/, "");
-  const cronSecret = process.env.CRON_SECRET;
+  try {
+    const data = await executeAdminCron(cronName);
 
-  if (!cronSecret) {
-    throw new Error("Missing CRON_SECRET. Add it before manually triggering crons.");
+    return {
+      ok: true,
+      status: 200,
+      cronName,
+      payload: {
+        data
+      },
+      message: `${cronName} triggered successfully.`
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to trigger cron.";
+
+    return {
+      ok: false,
+      status: 500,
+      cronName,
+      payload: {
+        error: message
+      },
+      message
+    };
   }
-
-  const response = await fetch(`${baseUrl}${definition.path}`, {
-    method: "GET",
-    cache: "no-store",
-    headers: {
-      authorization: `Bearer ${cronSecret}`
-    }
-  });
-
-  const payload = (await response.json().catch(() => null)) as
-    | { data?: Record<string, unknown>; error?: string }
-    | null;
-
-  return {
-    ok: response.ok,
-    status: response.status,
-    cronName,
-    payload,
-    message:
-      payload?.error ??
-      (response.ok ? `${cronName} triggered successfully.` : `${cronName} failed with status ${response.status}.`)
-  };
 }
