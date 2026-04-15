@@ -62,7 +62,7 @@
 
       "path": "/api/cron/process-paddle-webhooks",
 
-      "schedule": "013 * * * *"
+      "schedule": "0 13 * * * *"
 
     }
 
