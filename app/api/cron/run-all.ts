@@ -1,15 +1,15 @@
-import { processScans } from "./process-scans";
-import { processUptime } from "./process-uptime";
-import { syncUptimeRobot } from "./sync-uptimerobot";
-import { processCompetitors } from "./process-competitors";
-import { processReports } from "./process-reports";
-import { expireTrials } from "./expire-trials";
-import { processLifecycleEmails } from "./process-lifecycle-emails";
-import { processPaddleWebhooks } from "./process-paddle-webhooks";
+import { processScans } from "./process-scans/route";
+import { processUptime } from "./process-uptime/route";
+import { syncUptimeRobot } from "./sync-uptimerobot/route";
+import { processCompetitors } from "./process-competitors/route";
+import { processReports } from "./process-reports/route";
+import { expireTrials } from "./expire-trials/route";
+import { processLifecycleEmails } from "./process-lifecycle-emails/route";
+import { processPaddleWebhooks } from "./process-paddle-webhooks/route";
 
-export default async function handler(req: any, res: any) {
+export async function GET() {
 
-  console.log("=== DAILY CRON STARTED ===");
+  console.log("=== CRON STARTED ===");
 
   const results = [];
 
@@ -18,8 +18,6 @@ export default async function handler(req: any, res: any) {
       console.log(`Starting: ${name}`);
 
       await job();
-
-      console.log(`Finished: ${name}`);
 
       results.push({
         job: name,
@@ -47,9 +45,9 @@ export default async function handler(req: any, res: any) {
   await runJob("processLifecycleEmails", processLifecycleEmails);
   await runJob("processPaddleWebhooks", processPaddleWebhooks);
 
-  console.log("=== DAILY CRON COMPLETED ===");
+  console.log("=== CRON COMPLETED ===");
 
-  res.status(200).json({
+  return Response.json({
     success: true,
     results
   });
