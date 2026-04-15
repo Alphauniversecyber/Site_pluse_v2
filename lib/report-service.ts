@@ -7,6 +7,7 @@ import type {
   CruxDataRecord,
   Report,
   ScanResult,
+  ScanFrequency,
   ScanSchedule,
   SecurityHeadersRecord,
   SeoAuditRecord,
@@ -355,7 +356,7 @@ export async function sendStoredReportEmail(input: {
     website = loadedWebsite;
     profile = loadedProfile;
     const deliveryMode = input.deliveryMode ?? "manual";
-    const reportFrequency = profile.email_report_frequency;
+    const reportFrequency = website.email_report_frequency ?? profile.email_report_frequency;
 
     const { data: previousRows } = await admin
       .from("scan_results")
@@ -545,7 +546,7 @@ export async function sendStoredReportEmail(input: {
   }
 }
 
-function isDue(lastSentAt: string | null, frequency: UserProfile["email_report_frequency"]) {
+function isDue(lastSentAt: string | null, frequency: ScanFrequency) {
   if (!lastSentAt) {
     return true;
   }
@@ -633,7 +634,7 @@ export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_C
         .limit(1)
         .maybeSingle();
 
-      if (!isDue(lastReport?.sent_at ?? null, profile.email_report_frequency)) {
+      if (!isDue(lastReport?.sent_at ?? null, website.email_report_frequency ?? profile.email_report_frequency)) {
         continue;
       }
 

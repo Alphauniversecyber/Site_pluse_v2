@@ -182,6 +182,7 @@ export async function POST(request: Request) {
 
   const normalizedUrl = normalizeUrl(parsed.data.url);
   const defaultFrequency = PLAN_LIMITS[profile.plan].scanFrequencies[0];
+  const reportFrequency = parsed.data.email_report_frequency ?? profile.email_report_frequency ?? "weekly";
 
   const { data: website, error } = await supabase
     .from("websites")
@@ -190,6 +191,7 @@ export async function POST(request: Request) {
       url: normalizedUrl,
       label: parsed.data.label,
       email_reports_enabled: profile.plan !== "free" ? parsed.data.email_reports_enabled : false,
+      email_report_frequency: reportFrequency,
       report_recipients: profile.plan !== "free" ? parsed.data.report_recipients : [],
       competitor_urls: parsed.data.competitor_urls ?? []
     })

@@ -126,6 +126,7 @@ create table if not exists public.websites (
   label text not null,
   is_active boolean not null default true,
   email_reports_enabled boolean not null default false,
+  email_report_frequency public.scan_frequency not null default 'weekly',
   report_recipients text[] not null default '{}'::text[],
   competitor_urls jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
@@ -320,6 +321,7 @@ alter table public.users add column if not exists trial_end_date timestamptz;
 alter table public.users add column if not exists trial_ends_at timestamptz;
 alter table public.users add column if not exists is_trial boolean not null default false;
 alter table public.websites add column if not exists competitor_urls jsonb not null default '[]'::jsonb;
+alter table public.websites add column if not exists email_report_frequency public.scan_frequency not null default 'weekly';
 alter table public.websites add column if not exists magic_token text;
 alter table public.websites add column if not exists gsc_access_token text;
 alter table public.websites add column if not exists gsc_refresh_token text;

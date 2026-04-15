@@ -123,6 +123,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     websiteUpdates.email_reports_enabled =
       profile.plan === "free" ? false : parsed.data.email_reports_enabled;
   }
+  if (parsed.data.email_report_frequency !== undefined) {
+    websiteUpdates.email_report_frequency = parsed.data.email_report_frequency;
+  }
   if (parsed.data.report_recipients !== undefined) {
     websiteUpdates.report_recipients =
       profile.plan === "free" ? [] : parsed.data.report_recipients;

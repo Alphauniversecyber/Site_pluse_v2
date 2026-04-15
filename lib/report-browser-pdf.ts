@@ -57,8 +57,13 @@ function addDays(value: string, days: number) {
   return date;
 }
 
-function nextReportDate(scan: ScanResult, schedule: ScanSchedule | null | undefined, profile: UserProfile) {
-  const frequency = schedule?.frequency ?? profile.email_report_frequency ?? "weekly";
+function nextReportDate(
+  scan: ScanResult,
+  website: Website,
+  _schedule: ScanSchedule | null | undefined,
+  profile: UserProfile
+) {
+  const frequency = website.email_report_frequency ?? profile.email_report_frequency ?? "weekly";
   const days = frequency === "daily" ? 1 : frequency === "monthly" ? 30 : 7;
   return formatDateTime(addDays(scan.scanned_at, days));
 }
@@ -323,7 +328,7 @@ function buildReportContext(
     client_name: clientName,
     website_url: input.website.url,
     report_date: formatDateTime(input.scan.scanned_at),
-    next_report_date: nextReportDate(input.scan, input.schedule, input.profile),
+    next_report_date: nextReportDate(input.scan, input.website, input.schedule, input.profile),
     health_score: score,
     scores: {
       performance: clampScore(input.scan.performance_score),

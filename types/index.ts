@@ -81,6 +81,7 @@ export interface Website {
   label: string;
   is_active: boolean;
   email_reports_enabled?: boolean;
+  email_report_frequency?: ScanFrequency;
   report_recipients?: string[];
   competitor_urls?: string[];
   created_at: string;

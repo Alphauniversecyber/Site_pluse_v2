@@ -45,6 +45,7 @@ export const websiteSchema = z.object({
     }, "Enter a valid website URL."),
   label: z.string().trim().min(2, "A website label is required."),
   email_reports_enabled: z.boolean().optional().default(false),
+  email_report_frequency: z.enum(["daily", "weekly", "monthly"]).optional(),
   report_recipients: z.array(z.string().email("Use valid email addresses.")).optional().default([]),
   competitor_urls: z.array(z.string().url("Use valid competitor URLs.")).max(3, "Add up to 3 competitor URLs only.").optional().default([])
 });
@@ -54,6 +55,7 @@ export const websiteUpdateSchema = z.object({
   is_active: z.boolean().optional(),
   frequency: z.enum(["daily", "weekly", "monthly"]).optional(),
   email_reports_enabled: z.boolean().optional(),
+  email_report_frequency: z.enum(["daily", "weekly", "monthly"]).optional(),
   report_recipients: z.array(z.string().email()).optional(),
   competitor_urls: z.array(z.string().url()).max(3).optional()
 });

@@ -412,7 +412,9 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
           </div>
         ) : (
           <div className="flex min-h-[320px] flex-col items-center justify-center px-5 py-10 text-center">
-            <div className="text-[48px] leading-none">🔔</div>
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#1E3A5F] bg-[#111E33] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <Bell className="h-7 w-7 text-[#7DD3FC]" strokeWidth={1.8} />
+            </div>
             <p className="mt-4 text-base font-semibold text-slate-100">All caught up!</p>
             <p className="mt-2 text-[13px] text-[#64748B]">No new notifications right now.</p>
           </div>
