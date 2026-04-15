@@ -1,8 +1,71 @@
 {
+
   "crons": [
+
     {
-      "path": "/api/cron/run-all",
+
+      "path": "/api/cron/process-scans",
+
       "schedule": "0 6 * * *"
+
+    },
+
+    {
+
+      "path": "/api/cron/process-uptime",
+
+      "schedule": "0 7 * * *"
+
+    },
+
+    {
+
+      "path": "/api/cron/sync-uptimerobot",
+
+      "schedule": "0 8 * * *"
+
+    },
+
+    {
+
+      "path": "/api/cron/process-competitors",
+
+      "schedule": "0 9 * * *"
+
+    },
+
+    {
+
+      "path": "/api/cron/process-reports",
+
+      "schedule": "0 10 * * *"
+
+    },
+
+    {
+
+      "path": "/api/cron/expire-trials",
+
+      "schedule": "0 11 * * *"
+
+    },
+
+    {
+
+      "path": "/api/cron/process-lifecycle-emails",
+
+      "schedule": "0 12 * * *"
+
+    },
+
+    {
+
+      "path": "/api/cron/process-paddle-webhooks",
+
+      "schedule": "013 * * * *"
+
     }
+
   ]
+
 }
