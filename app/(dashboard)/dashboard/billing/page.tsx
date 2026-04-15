@@ -72,6 +72,19 @@ const planMarketingCopy: Record<
   }
 };
 
+type RefundState = {
+  eligible: boolean;
+  message: string;
+  transactionId: string | null;
+  paddleSubscriptionId: string | null;
+  lastPaymentDate: string | null;
+  refundableUntil: string | null;
+  refundStatus: "none" | "pending" | "approved" | "rejected";
+  refundAdjustmentId: string | null;
+  planName: string | null;
+  salePrice: number | null;
+};
+
 function getPlanRank(plan: PlanKey) {
   if (plan === "agency") {
     return 2;
@@ -90,6 +103,10 @@ export default function BillingPage() {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [submittingPlan, setSubmittingPlan] = useState<string | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
+  const [cancelingSubscription, setCancelingSubscription] = useState(false);
+  const [refundingPayment, setRefundingPayment] = useState(false);
+  const [scheduledCancellationAt, setScheduledCancellationAt] = useState<string | null>(null);
+  const [refundState, setRefundState] = useState<RefundState | null>(null);
   const paddleInitializedRef = useRef(false);
   const handledToastStateRef = useRef<string | null>(null);
   const confirmingTransactionsRef = useRef<Set<string>>(new Set());
@@ -122,6 +139,32 @@ export default function BillingPage() {
       toast.success("Paddle checkout finished. We are syncing your subscription.");
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!user?.last_payment_date && !user?.paddle_customer_id) {
+      setRefundState(null);
+      return;
+    }
+
+    let isActive = true;
+
+    void (async () => {
+      try {
+        const refundData = await fetchJson<RefundState>("/api/paddle/refund");
+        if (isActive) {
+          setRefundState(refundData);
+        }
+      } catch {
+        if (isActive) {
+          setRefundState(null);
+        }
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [user?.id, user?.last_payment_date, user?.paddle_customer_id, user?.paddle_subscription_id]);
 
   eventHandlerRef.current = (event) => {
     if (event.name === "checkout.closed") {
@@ -246,6 +289,81 @@ export default function BillingPage() {
     }
   }
 
+  async function cancelSubscription() {
+    if (
+      !window.confirm(
+        "Cancel this subscription at the end of the current billing period? Refunds are handled separately."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setCancelingSubscription(true);
+      const data = await fetchJson<{
+        scheduledCancellationAt: string | null;
+      }>("/api/paddle/cancel", {
+        method: "POST"
+      });
+
+      setScheduledCancellationAt(data.scheduledCancellationAt);
+      await refetchRef.current();
+      toast.success(
+        data.scheduledCancellationAt
+          ? "Cancellation scheduled. Access stays active until the end of this billing period."
+          : "Subscription cancellation was sent to Paddle."
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to cancel the Paddle subscription.");
+    } finally {
+      setCancelingSubscription(false);
+    }
+  }
+
+  async function requestRefund() {
+    if (!refundState?.eligible) {
+      toast.error(refundState?.message ?? "This payment is no longer eligible for a refund.");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        "Request a full refund for the most recent payment and cancel access immediately? This can only be done within 14 days of payment."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setRefundingPayment(true);
+      const data = await fetchJson<{
+        refundStatus: string;
+        cancellationWarning: string | null;
+      }>("/api/paddle/refund", {
+        method: "POST"
+      });
+
+      await refetchRef.current();
+
+      const refreshedRefundState = await fetchJson<RefundState>("/api/paddle/refund").catch(() => null);
+      setRefundState(refreshedRefundState);
+
+      toast.success(
+        data.refundStatus === "approved"
+          ? "Refund approved and the subscription was canceled."
+          : "Refund requested. Paddle will update the final status shortly."
+      );
+
+      if (data.cancellationWarning) {
+        toast.message(data.cancellationWarning);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to request a refund.");
+    } finally {
+      setRefundingPayment(false);
+    }
+  }
+
   if (loading || !user) {
     return <p className="text-muted-foreground">Loading billing...</p>;
   }
@@ -253,6 +371,8 @@ export default function BillingPage() {
   const currentPlanLabel = user.plan === "free" ? "Starter" : getPlanDisplayName(user.plan);
   const currentPaidSelection =
     user.plan !== "free" && user.billing_cycle ? getPlanPricing(user.plan, user.billing_cycle) : null;
+  const showRefundButton = Boolean(refundState?.eligible);
+  const showRefundPanel = Boolean(refundState && (refundState.lastPaymentDate || refundState.refundStatus !== "none"));
 
   return (
     <div className="space-y-10">
@@ -321,9 +441,35 @@ export default function BillingPage() {
 
               <div className="flex flex-wrap gap-3">
                 {hasPaidPaddleSubscription ? (
-                  <Button onClick={openBillingPortal} disabled={openingPortal}>
-                    {openingPortal ? "Opening Paddle..." : "Manage in Paddle"}
-                  </Button>
+                  <>
+                    <Button onClick={openBillingPortal} disabled={openingPortal}>
+                      {openingPortal ? "Opening Paddle..." : "Manage in Paddle"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        void cancelSubscription();
+                      }}
+                      disabled={cancelingSubscription || Boolean(scheduledCancellationAt)}
+                    >
+                      {scheduledCancellationAt
+                        ? "Cancellation scheduled"
+                        : cancelingSubscription
+                          ? "Canceling..."
+                          : "Cancel subscription"}
+                    </Button>
+                    {showRefundButton ? (
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          void requestRefund();
+                        }}
+                        disabled={refundingPayment}
+                      >
+                        {refundingPayment ? "Requesting refund..." : "Refund within 14 days"}
+                      </Button>
+                    ) : null}
+                  </>
                 ) : user.plan === "free" ? (
                   <Button asChild>
                     <Link href="/pricing">View pricing page</Link>
@@ -334,7 +480,34 @@ export default function BillingPage() {
 
             {hasPaidPaddleSubscription ? (
               <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-                Plan changes, payment method updates, and cancellations are handled through the Paddle customer portal to avoid duplicate subscriptions.
+                Manage billing details in Paddle. Use cancel to stop the next renewal, or use refund while the latest payment is still inside the 14-day window.
+              </div>
+            ) : null}
+
+            {showRefundPanel ? (
+              <div
+                className={
+                  refundState?.refundStatus === "approved"
+                    ? "rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
+                    : refundState?.refundStatus === "pending"
+                      ? "rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+                      : refundState?.eligible
+                        ? "rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900"
+                        : "rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"
+                }
+              >
+                <p>{refundState?.message}</p>
+                {refundState?.lastPaymentDate ? (
+                  <p className="mt-2">Last paid charge: {formatDateTime(refundState.lastPaymentDate)}</p>
+                ) : null}
+                {refundState?.refundableUntil ? (
+                  <p className="mt-1">Refund window closes: {formatDateTime(refundState.refundableUntil)}</p>
+                ) : null}
+                {scheduledCancellationAt ? (
+                  <p className="mt-1">
+                    Cancellation is scheduled for: {formatDateTime(scheduledCancellationAt)}
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </CardContent>

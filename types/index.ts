@@ -103,6 +103,7 @@ export interface PaymentLogEntry {
   amount: number | null;
   paddle_event_id: string | null;
   paddle_subscription_id: string | null;
+  metadata?: Record<string, unknown>;
   created_at: string;
   timestamp: string;
 }

@@ -8,11 +8,16 @@ import {
 } from "@/lib/admin/logging";
 import { getCronBatchLimit, createCronExecutionGuard } from "@/lib/cron";
 import {
+  cancelPaddleSubscription,
+  createPaddleRefundAdjustment,
   getPaddleSubscription,
   getPaddleTransaction,
+  listPaddleAdjustments,
+  listPaddleTransactions,
   mapPaddleStatus,
   parsePaddleSelection,
   resolveSelectionFromPriceId,
+  type PaddleAdjustment,
   type PaddleSubscription,
   type PaddleTransaction
 } from "@/lib/paddle";
@@ -59,13 +64,28 @@ type ResolvedSelection = {
 };
 
 const SUCCESS_STATUSES = new Set<SubscriptionStatus>(["active", "trialing", "past_due", "paused"]);
+const REFUND_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const HANDLED_WEBHOOKS = new Set([
   "subscription.created",
   "subscription.updated",
   "subscription.canceled",
+  "adjustment.updated",
   "transaction.completed",
   "transaction.payment_failed"
 ]);
+
+export type PaddleRefundEligibility = {
+  eligible: boolean;
+  message: string;
+  transactionId: string | null;
+  paddleSubscriptionId: string | null;
+  lastPaymentDate: string | null;
+  refundableUntil: string | null;
+  refundStatus: "none" | "pending" | "approved" | "rejected";
+  refundAdjustmentId: string | null;
+  planName: string | null;
+  salePrice: number | null;
+};
 
 function isHandledWebhookEvent(eventType: string) {
   return HANDLED_WEBHOOKS.has(eventType);
@@ -97,6 +117,60 @@ function isPaidStatus(status: SubscriptionStatus) {
 
 function getRetryDelayMinutes(retryCount: number) {
   return Math.min(60, Math.max(5, 2 ** retryCount * 5));
+}
+
+function toIsoOrNull(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function getLatestTimestamp(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const normalized = toIsoOrNull(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function addRefundWindow(paymentDate: string | null) {
+  const normalized = toIsoOrNull(paymentDate);
+
+  if (!normalized) {
+    return null;
+  }
+
+  return new Date(Date.parse(normalized) + REFUND_WINDOW_MS).toISOString();
+}
+
+function fromMinorUnits(amount: string | null | undefined) {
+  if (!amount) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(amount, 10);
+  return Number.isFinite(parsed) ? parsed / 100 : null;
+}
+
+function sortTransactionsNewestFirst(left: PaddleTransaction, right: PaddleTransaction) {
+  const leftTime = Date.parse(getLatestTimestamp(left.billed_at, left.updated_at, left.created_at) ?? "") || 0;
+  const rightTime =
+    Date.parse(getLatestTimestamp(right.billed_at, right.updated_at, right.created_at) ?? "") || 0;
+
+  return rightTime - leftTime;
+}
+
+function sortAdjustmentsNewestFirst(left: PaddleAdjustment, right: PaddleAdjustment) {
+  const leftTime = Date.parse(getLatestTimestamp(left.updated_at, left.created_at) ?? "") || 0;
+  const rightTime = Date.parse(getLatestTimestamp(right.updated_at, right.created_at) ?? "") || 0;
+
+  return rightTime - leftTime;
 }
 
 async function sleep(ms: number) {
@@ -170,6 +244,49 @@ function getSubscriptionPriceId(subscription: PaddleSubscription) {
 
 function getTransactionPriceId(transaction: PaddleTransaction) {
   return transaction.items?.[0]?.price?.id ?? null;
+}
+
+async function syncKnownPaddleSubscription(input: {
+  subscription: PaddleSubscription;
+  userHint?: UserProfile | null;
+  lastPaymentDate?: string | null;
+  statusOverride?: SubscriptionStatus;
+}) {
+  const selection = await resolveSelection({
+    customData: input.subscription.custom_data,
+    priceId: getSubscriptionPriceId(input.subscription)
+  });
+
+  if (!selection) {
+    throw new Error(`Unable to resolve the plan for Paddle subscription ${input.subscription.id}.`);
+  }
+
+  const user =
+    input.userHint ??
+    (await resolveUser({
+      customData: input.subscription.custom_data,
+      customerId: input.subscription.customer_id,
+      paddleSubscriptionId: input.subscription.id
+    }));
+
+  if (!user) {
+    throw new Error(`Unable to resolve the user for Paddle subscription ${input.subscription.id}.`);
+  }
+
+  const subscriptionRow = await upsertSubscriptionAndUser({
+    subscription: input.subscription,
+    selection,
+    user,
+    lastPaymentDate: input.lastPaymentDate ?? user.last_payment_date ?? null,
+    statusOverride: input.statusOverride
+  });
+
+  return {
+    subscription: input.subscription,
+    selection,
+    user,
+    subscriptionRow
+  };
 }
 
 async function resolveUser(input: {
@@ -346,6 +463,9 @@ async function updateSubscriptionStatusFromTransaction(input: {
     amount: input.selection.salePrice,
     paddleEventId: null,
     paddleSubscriptionId: paddleSubscriptionId ?? null,
+    metadata: {
+      paddleTransactionId: input.transaction.id
+    },
     occurredAt: input.transaction.updated_at
   });
 }
@@ -373,6 +493,137 @@ async function loadTransactionWithSubscription(
   return {
     transaction,
     subscription: transaction.subscription_id ? await getPaddleSubscription(transaction.subscription_id) : null
+  };
+}
+
+async function getLatestCompletedTransactionForUser(profile: UserProfile) {
+  const transactions = await listPaddleTransactions({
+    subscriptionId: profile.paddle_subscription_id,
+    customerId: profile.paddle_subscription_id ? null : profile.paddle_customer_id,
+    status: "completed",
+    perPage: 15
+  });
+
+  const sorted = [...transactions].sort(sortTransactionsNewestFirst);
+  return sorted[0] ?? null;
+}
+
+async function getLatestRefundAdjustmentForTransaction(transaction: PaddleTransaction) {
+  const adjustments = await listPaddleAdjustments({
+    transactionId: transaction.id,
+    action: "refund",
+    perPage: 15
+  });
+
+  const sorted = adjustments
+    .filter((adjustment) => adjustment.action === "refund")
+    .sort(sortAdjustmentsNewestFirst);
+
+  return sorted[0] ?? null;
+}
+
+export async function getPaddleRefundEligibility(profile: UserProfile): Promise<PaddleRefundEligibility> {
+  if (!profile.paddle_subscription_id && !profile.paddle_customer_id) {
+    return {
+      eligible: false,
+      message: "No Paddle subscription is linked to this account yet.",
+      transactionId: null,
+      paddleSubscriptionId: null,
+      lastPaymentDate: null,
+      refundableUntil: null,
+      refundStatus: "none",
+      refundAdjustmentId: null,
+      planName: null,
+      salePrice: null
+    };
+  }
+
+  const transaction = await getLatestCompletedTransactionForUser(profile);
+
+  if (!transaction) {
+    return {
+      eligible: false,
+      message: "No completed Paddle payment was found for this account yet.",
+      transactionId: null,
+      paddleSubscriptionId: profile.paddle_subscription_id ?? null,
+      lastPaymentDate: null,
+      refundableUntil: null,
+      refundStatus: "none",
+      refundAdjustmentId: null,
+      planName: null,
+      salePrice: null
+    };
+  }
+
+  const lastPaymentDate = getLatestTimestamp(transaction.billed_at, transaction.updated_at, transaction.created_at);
+  const refundableUntil = addRefundWindow(lastPaymentDate);
+  const selection = await resolveSelection({
+    customData: transaction.custom_data,
+    priceId: getTransactionPriceId(transaction)
+  });
+  const latestAdjustment = await getLatestRefundAdjustmentForTransaction(transaction);
+
+  if (latestAdjustment?.status === "approved") {
+    return {
+      eligible: false,
+      message: "This payment was already refunded.",
+      transactionId: transaction.id,
+      paddleSubscriptionId: transaction.subscription_id,
+      lastPaymentDate,
+      refundableUntil,
+      refundStatus: "approved",
+      refundAdjustmentId: latestAdjustment.id,
+      planName: selection?.planName ?? null,
+      salePrice: selection?.salePrice ?? null
+    };
+  }
+
+  if (latestAdjustment?.status === "pending_approval") {
+    return {
+      eligible: false,
+      message: "A refund request is already pending approval for this payment.",
+      transactionId: transaction.id,
+      paddleSubscriptionId: transaction.subscription_id,
+      lastPaymentDate,
+      refundableUntil,
+      refundStatus: "pending",
+      refundAdjustmentId: latestAdjustment.id,
+      planName: selection?.planName ?? null,
+      salePrice: selection?.salePrice ?? null
+    };
+  }
+
+  if (latestAdjustment?.status === "rejected") {
+    return {
+      eligible: false,
+      message: "A previous refund request for this payment was rejected. Contact support for manual review.",
+      transactionId: transaction.id,
+      paddleSubscriptionId: transaction.subscription_id,
+      lastPaymentDate,
+      refundableUntil,
+      refundStatus: "rejected",
+      refundAdjustmentId: latestAdjustment.id,
+      planName: selection?.planName ?? null,
+      salePrice: selection?.salePrice ?? null
+    };
+  }
+
+  const refundWindowOpen =
+    Boolean(refundableUntil) && Date.parse(refundableUntil as string) >= Date.now();
+
+  return {
+    eligible: refundWindowOpen,
+    message: refundWindowOpen
+      ? "You can request a full refund for your most recent payment while you are still inside the 14-day window."
+      : "The 14-day refund window for your most recent payment has expired.",
+    transactionId: transaction.id,
+    paddleSubscriptionId: transaction.subscription_id,
+    lastPaymentDate,
+    refundableUntil,
+    refundStatus: "none",
+    refundAdjustmentId: null,
+    planName: selection?.planName ?? null,
+    salePrice: selection?.salePrice ?? null
   };
 }
 
@@ -406,18 +657,136 @@ export async function confirmPaddleTransaction(transactionId: string, expectedUs
     throw new Error("Paddle checkout completed but no subscription is attached yet.");
   }
 
-  const subscriptionRow = await upsertSubscriptionAndUser({
+  const synced = await syncKnownPaddleSubscription({
     subscription,
-    selection,
-    user,
+    userHint: user,
     lastPaymentDate: transaction.billed_at ?? transaction.updated_at
   });
 
   return {
     transaction,
     subscription,
-    subscriptionRow,
+    subscriptionRow: synced.subscriptionRow,
     userId: user.id
+  };
+}
+
+export async function cancelUserPaddleSubscription(profile: UserProfile) {
+  if (!profile.paddle_subscription_id) {
+    throw new Error("No active Paddle subscription is linked to this account.");
+  }
+
+  const cancelledSubscription = await cancelPaddleSubscription(
+    profile.paddle_subscription_id,
+    "next_billing_period"
+  );
+
+  const synced = await syncKnownPaddleSubscription({
+    subscription: cancelledSubscription,
+    userHint: profile,
+    lastPaymentDate: profile.last_payment_date ?? null
+  });
+
+  await logBillingEvent({
+    subscriptionId: synced.subscriptionRow.id,
+    userId: profile.id,
+    email: profile.email,
+    planName: synced.selection.planName,
+    eventType: "subscription_cancel_requested",
+    status: synced.subscription.status,
+    amount: synced.selection.salePrice,
+    paddleSubscriptionId: synced.subscription.id,
+    metadata: {
+      scheduledChange: synced.subscription.scheduled_change ?? null,
+      effectiveFrom: "next_billing_period"
+    },
+    occurredAt: synced.subscription.updated_at
+  });
+
+  return {
+    subscription: synced.subscription,
+    subscriptionRow: synced.subscriptionRow,
+    selection: synced.selection,
+    scheduledCancellationAt: synced.subscription.scheduled_change?.effective_at ?? null
+  };
+}
+
+export async function refundUserPaddlePayment(profile: UserProfile) {
+  const eligibility = await getPaddleRefundEligibility(profile);
+
+  if (!eligibility.transactionId) {
+    throw new Error(eligibility.message);
+  }
+
+  if (!eligibility.eligible) {
+    throw new Error(eligibility.message);
+  }
+
+  const transaction = await getPaddleTransaction(eligibility.transactionId);
+  const adjustment = await createPaddleRefundAdjustment({
+    transactionId: transaction.id,
+    reason: "customer_requested_refund_within_14_days"
+  });
+
+  let cancellationWarning: string | null = null;
+  let cancelledSubscription: PaddleSubscription | null = null;
+  let syncedCancellation:
+    | Awaited<ReturnType<typeof syncKnownPaddleSubscription>>
+    | null = null;
+
+  if (transaction.subscription_id) {
+    try {
+      cancelledSubscription = await cancelPaddleSubscription(transaction.subscription_id, "immediately");
+      syncedCancellation = await syncKnownPaddleSubscription({
+        subscription: cancelledSubscription,
+        userHint: profile,
+        lastPaymentDate: eligibility.lastPaymentDate
+      });
+    } catch (error) {
+      cancellationWarning =
+        error instanceof Error
+          ? error.message
+          : "Refund was requested, but the subscription could not be canceled automatically.";
+
+      await logAdminError({
+        errorType: "webhook_failed",
+        errorMessage: cancellationWarning,
+        userId: profile.id,
+        context: {
+          reason: "refund_cancellation_sync_failed",
+          transactionId: transaction.id,
+          adjustmentId: adjustment.id,
+          paddleSubscriptionId: transaction.subscription_id
+        }
+      });
+    }
+  }
+
+  await logBillingEvent({
+    subscriptionId: syncedCancellation?.subscriptionRow.id ?? null,
+    userId: profile.id,
+    email: profile.email,
+    planName: eligibility.planName,
+    eventType: adjustment.status === "approved" ? "refund_approved" : "refund_requested",
+    status: adjustment.status === "approved" ? "success" : "pending",
+    errorMessage: cancellationWarning,
+    amount: fromMinorUnits(adjustment.totals?.total) ?? eligibility.salePrice,
+    paddleSubscriptionId: transaction.subscription_id ?? eligibility.paddleSubscriptionId,
+    metadata: {
+      paddleTransactionId: transaction.id,
+      paddleAdjustmentId: adjustment.id,
+      refundReason: adjustment.reason,
+      refundableUntil: eligibility.refundableUntil,
+      canceledImmediately: Boolean(cancelledSubscription)
+    },
+    occurredAt: adjustment.updated_at
+  });
+
+  return {
+    adjustment,
+    eligibility,
+    cancelledSubscription,
+    cancellationWarning
   };
 }
 
@@ -428,31 +797,8 @@ async function processSubscriptionEvent(eventType: string, payload: Record<strin
     throw new Error("Missing subscription id on Paddle webhook payload.");
   }
 
-  const subscription = await getPaddleSubscription(subscriptionId);
-  const selection = await resolveSelection({
-    customData: subscription.custom_data,
-    priceId: getSubscriptionPriceId(subscription)
-  });
-
-  if (!selection) {
-    throw new Error(`Unable to resolve the plan for Paddle subscription ${subscription.id}.`);
-  }
-
-  const user = await resolveUser({
-    customData: subscription.custom_data,
-    customerId: subscription.customer_id,
-    paddleSubscriptionId: subscription.id
-  });
-
-  if (!user) {
-    throw new Error(`Unable to resolve the user for Paddle subscription ${subscription.id}.`);
-  }
-
-  const subscriptionRow = await upsertSubscriptionAndUser({
-    subscription,
-    selection,
-    user,
-    lastPaymentDate: user.last_payment_date ?? null
+  const synced = await syncKnownPaddleSubscription({
+    subscription: await getPaddleSubscription(subscriptionId)
   });
 
   const logEventType =
@@ -463,18 +809,21 @@ async function processSubscriptionEvent(eventType: string, payload: Record<strin
         : "subscription_updated";
 
   await logBillingEvent({
-    subscriptionId: subscriptionRow.id,
-    userId: user.id,
-    email: user.email,
-    planName: selection.planName,
+    subscriptionId: synced.subscriptionRow.id,
+    userId: synced.user.id,
+    email: synced.user.email,
+    planName: synced.selection.planName,
     eventType: logEventType,
-    status: subscriptionRow.status,
+    status: synced.subscriptionRow.status,
     paddleEventId: getWebhookIdentifier(payload),
-    paddleSubscriptionId: subscription.id,
+    paddleSubscriptionId: synced.subscription.id,
+    metadata: {
+      scheduledChange: synced.subscription.scheduled_change ?? null
+    },
     occurredAt: getWebhookOccurredAt(payload)
   });
 
-  return subscriptionRow;
+  return synced.subscriptionRow;
 }
 
 async function processCompletedTransaction(payload: Record<string, unknown>) {
@@ -578,6 +927,58 @@ async function processFailedTransaction(payload: Record<string, unknown>) {
   });
 }
 
+async function processAdjustmentUpdated(payload: Record<string, unknown>) {
+  const adjustment =
+    typeof payload.data === "object" && payload.data !== null
+      ? (payload.data as PaddleAdjustment)
+      : null;
+
+  if (!adjustment || adjustment.action !== "refund" || typeof adjustment.transaction_id !== "string") {
+    return null;
+  }
+
+  const transaction = await getPaddleTransaction(adjustment.transaction_id);
+  const subscription =
+    transaction.subscription_id ? await getPaddleSubscription(transaction.subscription_id) : null;
+  const selection = await resolveSelection({
+    customData: transaction.custom_data ?? subscription?.custom_data,
+    priceId: getTransactionPriceId(transaction) ?? (subscription ? getSubscriptionPriceId(subscription) : null)
+  });
+  const user = await resolveUser({
+    customData: transaction.custom_data ?? subscription?.custom_data,
+    customerId: transaction.customer_id ?? adjustment.customer_id,
+    paddleSubscriptionId: transaction.subscription_id ?? adjustment.subscription_id
+  });
+
+  if (!user) {
+    throw new Error(`Unable to resolve the user for Paddle refund adjustment ${adjustment.id}.`);
+  }
+
+  if (adjustment.status === "pending_approval") {
+    return null;
+  }
+
+  await logBillingEvent({
+    userId: user.id,
+    email: user.email,
+    planName: selection?.planName ?? null,
+    eventType: adjustment.status === "approved" ? "refund_approved" : "refund_rejected",
+    status: adjustment.status === "approved" ? "success" : "failed",
+    errorMessage: adjustment.status === "rejected" ? "Paddle rejected the refund request." : null,
+    amount: fromMinorUnits(adjustment.totals?.total) ?? selection?.salePrice ?? null,
+    paddleEventId: getWebhookIdentifier(payload),
+    paddleSubscriptionId: transaction.subscription_id ?? adjustment.subscription_id,
+    metadata: {
+      paddleTransactionId: transaction.id,
+      paddleAdjustmentId: adjustment.id,
+      refundReason: adjustment.reason
+    },
+    occurredAt: getWebhookOccurredAt(payload)
+  });
+
+  return adjustment.id;
+}
+
 export async function handlePaddleWebhookPayload(payload: Record<string, unknown>) {
   const eventType = typeof payload.event_type === "string" ? payload.event_type : "";
 
@@ -586,6 +987,8 @@ export async function handlePaddleWebhookPayload(payload: Record<string, unknown
     case "subscription.updated":
     case "subscription.canceled":
       return processSubscriptionEvent(eventType, payload);
+    case "adjustment.updated":
+      return processAdjustmentUpdated(payload);
     case "transaction.completed":
       return processCompletedTransaction(payload);
     case "transaction.payment_failed":

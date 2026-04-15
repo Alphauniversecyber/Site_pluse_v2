@@ -105,6 +105,25 @@ export type PaddlePortalSession = {
   };
 };
 
+export type PaddleAdjustment = {
+  id: string;
+  action: string;
+  type: string | null;
+  transaction_id: string;
+  subscription_id: string | null;
+  customer_id: string;
+  reason: string;
+  status: string;
+  currency_code: string;
+  totals?: {
+    total?: string;
+    subtotal?: string;
+    tax?: string;
+  } | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PaddleSubscription = {
   id: string;
   status: string;
@@ -359,6 +378,18 @@ async function paddleRequest<T>(
       };
       const detail = parsed.error?.detail ?? parsed.error?.type;
       if (detail && /aren't permitted to perform this request/i.test(detail)) {
+        if (path.includes("/adjustments")) {
+          throw new Error(
+            "Paddle API permission error. Check that your API key has Adjustments: Read/Write and Transactions: Read, and that your API key environment matches PADDLE_ENVIRONMENT."
+          );
+        }
+
+        if (path.includes("/subscriptions/") && path.endsWith("/cancel")) {
+          throw new Error(
+            "Paddle API permission error. Check that your API key has Subscriptions: Write and that your API key environment matches PADDLE_ENVIRONMENT."
+          );
+        }
+
         throw new Error(
           "Paddle API permission error. Check that your API key has Transactions: Read and Subscriptions: Read, and that your API key environment matches PADDLE_ENVIRONMENT."
         );
@@ -396,6 +427,72 @@ async function listPrices(productId: string) {
 async function listClientTokens() {
   const response = await paddleRequest<PaddleListResponse<PaddleClientToken>>(
     "/client-tokens?status=active&per_page=100"
+  );
+
+  return response.data;
+}
+
+export async function listPaddleTransactions(input: {
+  customerId?: string | null;
+  subscriptionId?: string | null;
+  status?: string | null;
+  perPage?: number;
+}) {
+  const params = new URLSearchParams();
+  params.set("per_page", String(Math.min(30, Math.max(1, input.perPage ?? 10))));
+
+  if (input.customerId) {
+    params.set("customer_id", input.customerId);
+  }
+
+  if (input.subscriptionId) {
+    params.set("subscription_id", input.subscriptionId);
+  }
+
+  if (input.status) {
+    params.set("status", input.status);
+  }
+
+  const response = await paddleRequest<PaddleListResponse<PaddleTransaction>>(
+    `/transactions?${params.toString()}`
+  );
+
+  return response.data;
+}
+
+export async function listPaddleAdjustments(input: {
+  transactionId?: string | null;
+  subscriptionId?: string | null;
+  customerId?: string | null;
+  action?: string | null;
+  status?: string | null;
+  perPage?: number;
+}) {
+  const params = new URLSearchParams();
+  params.set("per_page", String(Math.min(50, Math.max(1, input.perPage ?? 10))));
+
+  if (input.transactionId) {
+    params.set("transaction_id", input.transactionId);
+  }
+
+  if (input.subscriptionId) {
+    params.set("subscription_id", input.subscriptionId);
+  }
+
+  if (input.customerId) {
+    params.set("customer_id", input.customerId);
+  }
+
+  if (input.action) {
+    params.set("action", input.action);
+  }
+
+  if (input.status) {
+    params.set("status", input.status);
+  }
+
+  const response = await paddleRequest<PaddleListResponse<PaddleAdjustment>>(
+    `/adjustments?${params.toString()}`
   );
 
   return response.data;
@@ -605,6 +702,23 @@ export async function getPaddleTransaction(transactionId: string) {
   return response.data;
 }
 
+export async function createPaddleRefundAdjustment(input: {
+  transactionId: string;
+  reason: string;
+}) {
+  const response = await paddleRequest<PaddleApiResponse<PaddleAdjustment>>("/adjustments", {
+    method: "POST",
+    body: {
+      action: "refund",
+      type: "full",
+      reason: input.reason,
+      transaction_id: input.transactionId
+    }
+  });
+
+  return response.data;
+}
+
 export async function createPaddlePortalSession(input: {
   customerId: string;
   subscriptionId?: string | null;
@@ -619,6 +733,23 @@ export async function createPaddlePortalSession(input: {
               subscription_ids: [input.subscriptionId]
             }
           : {}
+    }
+  );
+
+  return response.data;
+}
+
+export async function cancelPaddleSubscription(
+  subscriptionId: string,
+  effectiveFrom: "next_billing_period" | "immediately" = "next_billing_period"
+) {
+  const response = await paddleRequest<PaddleApiResponse<PaddleSubscription>>(
+    `/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`,
+    {
+      method: "POST",
+      body: {
+        effective_from: effectiveFrom
+      }
     }
   );
 
