@@ -79,7 +79,6 @@ export type PaddleCheckoutCustomData = {
 
 export type PaddleCheckoutSessionConfig = {
   environment: PaddleEnvironment;
-  vendorId: string;
   clientToken: string;
   priceId: string;
   successUrl: string;
@@ -219,14 +218,10 @@ export function getPaddleEnvironment() {
   return normalizePaddleEnvironment(process.env.PADDLE_ENVIRONMENT);
 }
 
-export function getPaddleVendorId() {
-  const vendorId = process.env.PADDLE_VENDOR_ID?.trim();
-
-  if (!vendorId) {
-    throw new Error("Missing PADDLE_VENDOR_ID.");
-  }
-
-  return vendorId;
+function getPaddleApiBaseUrl() {
+  return getPaddleEnvironment() === "production"
+    ? "https://api.paddle.com"
+    : "https://sandbox-api.paddle.com";
 }
 
 function getPaddleApiKey() {
@@ -288,7 +283,7 @@ async function paddleRequest<T>(
     body?: Record<string, unknown>;
   } = {}
 ) {
-  const response = await fetch(path.startsWith("http") ? path : `https://api.paddle.com${path}`, {
+  const response = await fetch(path.startsWith("http") ? path : `${getPaddleApiBaseUrl()}${path}`, {
     method: input.method ?? "GET",
     headers: {
       Accept: "application/json",
@@ -514,7 +509,6 @@ export async function getPaddleCheckoutConfig(input: {
 
   return {
     environment: getPaddleEnvironment(),
-    vendorId: getPaddleVendorId(),
     clientToken: await getPaddleClientToken(),
     priceId,
     successUrl: `${getBaseUrl()}/dashboard/billing?paddle=success`,
