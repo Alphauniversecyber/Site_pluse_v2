@@ -202,6 +202,17 @@ const PRODUCT_DEFINITIONS: Record<PaidPlanKey, PaddleCatalogProductDefinition> =
   }
 };
 
+const DEFAULT_SANDBOX_PRICE_IDS: Record<PaidPlanKey, Record<BillingCycle, string>> = {
+  starter: {
+    monthly: "pri_01kp98dctzfcsv31cgybydbjq3",
+    yearly: "pri_01kp98e8em4qb9xre03nvgt9a7"
+  },
+  agency: {
+    monthly: "pri_01kp98amesewxddqhcmej50fyh",
+    yearly: "pri_01kp98byw1ptw8dy8f505pevh8"
+  }
+};
+
 let cachedClientToken: string | null = null;
 const productIdCache = new Map<PaidPlanKey, string>();
 const priceIdCache = new Map<string, string>();
@@ -250,6 +261,42 @@ function getPaddleTaxCategory() {
 
 function toMinorUnits(amount: number) {
   return String(Math.round(amount * 100));
+}
+
+function readFirstEnvValue(...names: string[]) {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getConfiguredPriceId(plan: PaidPlanKey, billingCycle: BillingCycle) {
+  const configuredByEnv: Record<PaidPlanKey, Record<BillingCycle, string | null>> = {
+    starter: {
+      monthly: readFirstEnvValue("PADDLE_PRICE_GROWTH_MONTHLY_ID", "PADDLE_PRICE_STARTER_MONTHLY_ID"),
+      yearly: readFirstEnvValue("PADDLE_PRICE_GROWTH_YEARLY_ID", "PADDLE_PRICE_STARTER_YEARLY_ID")
+    },
+    agency: {
+      monthly: readFirstEnvValue("PADDLE_PRICE_PRO_MONTHLY_ID", "PADDLE_PRICE_AGENCY_MONTHLY_ID"),
+      yearly: readFirstEnvValue("PADDLE_PRICE_PRO_YEARLY_ID", "PADDLE_PRICE_AGENCY_YEARLY_ID")
+    }
+  };
+
+  const explicit = configuredByEnv[plan][billingCycle];
+  if (explicit) {
+    return explicit;
+  }
+
+  if (getPaddleEnvironment() === "sandbox") {
+    return DEFAULT_SANDBOX_PRICE_IDS[plan][billingCycle];
+  }
+
+  return null;
 }
 
 function isMatchingCatalogMetadata(
@@ -455,6 +502,12 @@ async function getOrCreatePriceId(plan: PaidPlanKey, billingCycle: BillingCycle)
 
   if (cached) {
     return cached;
+  }
+
+  const configuredPriceId = getConfiguredPriceId(plan, billingCycle);
+  if (configuredPriceId) {
+    priceIdCache.set(cacheKey, configuredPriceId);
+    return configuredPriceId;
   }
 
   const productId = await getOrCreateProductId(plan);
