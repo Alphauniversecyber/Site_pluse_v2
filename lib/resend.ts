@@ -98,16 +98,31 @@ function getResendRetryDelayMs(attempt: number) {
 }
 
 let nextEmailSendAt = 0;
+let emailSendQueue: Promise<void> = Promise.resolve();
 
-async function waitForEmailSendSlot() {
-  const now = Date.now();
-  const waitMs = Math.max(0, nextEmailSendAt - now);
+async function withEmailSendSlot<T>(operation: () => Promise<T>) {
+  const previousSend = emailSendQueue.catch(() => undefined);
+  let releaseSlot!: () => void;
 
-  if (waitMs > 0) {
-    await sleep(waitMs);
+  emailSendQueue = new Promise<void>((resolve) => {
+    releaseSlot = resolve;
+  });
+
+  await previousSend;
+
+  try {
+    const now = Date.now();
+    const waitMs = Math.max(0, nextEmailSendAt - now);
+
+    if (waitMs > 0) {
+      await sleep(waitMs);
+    }
+
+    nextEmailSendAt = Date.now() + getResendMinIntervalMs();
+    return await operation();
+  } finally {
+    releaseSlot();
   }
-
-  nextEmailSendAt = Date.now() + getResendMinIntervalMs();
 }
 
 function getConfiguredFromEmail(kind: EmailKind) {
@@ -158,25 +173,25 @@ async function sendEmailWithConfirmation(input: SharedEmailSendInput) {
   };
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    await waitForEmailSendSlot();
-
-    logEmailEvent("info", "request", {
-      kind: input.kind,
-      templateId: input.templateId,
-      dedupeKey: input.dedupeKey,
-      campaign: input.campaign,
-      to: input.to,
-      from: fromEmail,
-      subject: input.subject,
-      attachments: input.attachments?.map((attachment) => attachment.filename) ?? [],
-      attempt,
-      ...input.metadata
-    });
-
     let response: CreateEmailResponse;
 
     try {
-      response = await resend.emails.send(payload);
+      response = await withEmailSendSlot(async () => {
+        logEmailEvent("info", "request", {
+          kind: input.kind,
+          templateId: input.templateId,
+          dedupeKey: input.dedupeKey,
+          campaign: input.campaign,
+          to: input.to,
+          from: fromEmail,
+          subject: input.subject,
+          attachments: input.attachments?.map((attachment) => attachment.filename) ?? [],
+          attempt,
+          ...input.metadata
+        });
+
+        return resend.emails.send(payload);
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown email provider error.";
       const rateLimited = isRateLimitMessage(message);

@@ -238,6 +238,10 @@ function renderIssueSummaryList(titles: string[]) {
   `;
 }
 
+function isExpectedSeoAuditFailure(message: string) {
+  return /status 401|status 403|status 429|blocking automated requests/i.test(message);
+}
+
 async function trySendEngagementEmail(input: Parameters<typeof sendProductEmail>[0]) {
   try {
     await sendProductEmail(input);
@@ -449,10 +453,14 @@ export async function executeWebsiteScan(
       : null;
 
   if (seoAuditResult.status === "rejected") {
-    console.warn("[scan:seo_audit_failed]", {
+    const message =
+      seoAuditResult.reason instanceof Error ? seoAuditResult.reason.message : "Unknown SEO audit error";
+    const log = isExpectedSeoAuditFailure(message) ? console.info : console.warn;
+
+    log("[scan:seo_audit_failed]", {
       websiteId: website.id,
       scanId: currentScan.id,
-      error: seoAuditResult.reason instanceof Error ? seoAuditResult.reason.message : "Unknown SEO audit error"
+      error: message
     });
   }
 
