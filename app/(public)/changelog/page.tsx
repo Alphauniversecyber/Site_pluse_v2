@@ -15,10 +15,10 @@ const updates = [
       "Monthly reports now use a stricter fixed-page template with clearer executive summaries, security coverage, and more stable PDF rendering."
   },
   {
-    title: "PayPal billing rollout",
+    title: "Paddle billing rollout",
     date: "April 2026",
     details:
-      "Growth and Pro subscriptions now support monthly and yearly billing with free trials and clearer billing-cycle controls."
+      "Growth and Pro subscriptions now run exclusively through Paddle, with sale pricing, subscription lifecycle webhooks, and admin payment monitoring."
   }
 ] as const;
 

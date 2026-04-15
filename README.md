@@ -1,6 +1,6 @@
 # SitePulse
 
-Production-ready SaaS platform for website performance, SEO, accessibility, and compliance monitoring built with Next.js 14, Supabase, Stripe, Resend, and PageSpeed Insights.
+Production-ready SaaS platform for website performance, SEO, accessibility, and compliance monitoring built with Next.js 14, Supabase, Paddle, Resend, and PageSpeed Insights.
 
 ## Quick start
 
@@ -16,7 +16,7 @@ Production-ready SaaS platform for website performance, SEO, accessibility, and 
 - Google PageSpeed Insights scans for mobile and desktop
 - PDF report generation and Supabase Storage upload
 - Resend-powered email reports and alert emails
-- Stripe checkout, webhook handling, and billing portal access
+- Paddle checkout, webhook handling, sale pricing, and customer portal access
 - Responsive landing pages and dashboard analytics
 
 ## Deployment

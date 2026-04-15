@@ -59,6 +59,9 @@ alter type public.notification_type add value if not exists 'ssl_expiry';
 alter type public.notification_type add value if not exists 'uptime_alert';
 alter type public.notification_type add value if not exists 'competitor_alert';
 alter type public.notification_type add value if not exists 'broken_links_alert';
+alter type public.subscription_status add value if not exists 'paused';
+alter type public.subscription_status add value if not exists 'past_due';
+alter type public.subscription_status add value if not exists 'payment_failed';
 
 create or replace function public.handle_updated_at()
 returns trigger
@@ -75,15 +78,13 @@ create table if not exists public.users (
   email text not null unique,
   full_name text,
   plan public.plan_tier not null default 'free',
-  stripe_customer_id text,
-  stripe_subscription_id text,
-  paypal_subscription_id text,
-  paypal_plan_id text,
-  paypal_payer_id text,
+  paddle_customer_id text,
+  paddle_subscription_id text,
   billing_cycle public.billing_cycle,
   subscription_price integer,
   subscription_status public.subscription_status default 'inactive',
   next_billing_date timestamptz,
+  last_payment_date timestamptz,
   trial_end_date timestamptz,
   trial_ends_at timestamptz,
   is_trial boolean not null default false,
@@ -93,6 +94,55 @@ create table if not exists public.users (
   profile_photo_url text,
   uptimerobot_api_key text,
   extra_report_recipients text[] not null default '{}'::text[],
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users (id) on delete cascade,
+  email text not null,
+  plan_name text not null,
+  plan_tier public.plan_tier not null,
+  billing_interval public.billing_cycle not null,
+  original_price numeric(10,2) not null,
+  sale_price numeric(10,2) not null,
+  paddle_customer_id text,
+  paddle_subscription_id text not null unique,
+  status public.subscription_status not null default 'inactive',
+  next_billing_date timestamptz,
+  last_payment_date timestamptz,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.payment_logs (
+  id uuid primary key default gen_random_uuid(),
+  subscription_id uuid references public.subscriptions (id) on delete set null,
+  user_id uuid references public.users (id) on delete set null,
+  user_email text not null,
+  plan_name text,
+  event_type text not null,
+  status text not null,
+  error_message text,
+  amount numeric(10,2),
+  paddle_event_id text,
+  paddle_subscription_id text,
+  metadata jsonb not null default '{}'::jsonb,
+  timestamp timestamptz not null default timezone('utc', now()),
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.paddle_webhook_events (
+  id uuid primary key default gen_random_uuid(),
+  paddle_event_id text not null unique,
+  event_type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  status text not null default 'pending',
+  retry_count integer not null default 0,
+  next_retry_at timestamptz not null default timezone('utc', now()),
+  processed_at timestamptz,
+  last_error text,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -310,13 +360,13 @@ create table if not exists public.competitor_scans (
 );
 
 alter table public.users add column if not exists uptimerobot_api_key text;
-alter table public.users add column if not exists paypal_subscription_id text;
-alter table public.users add column if not exists paypal_plan_id text;
-alter table public.users add column if not exists paypal_payer_id text;
+alter table public.users add column if not exists paddle_customer_id text;
+alter table public.users add column if not exists paddle_subscription_id text;
 alter table public.users add column if not exists billing_cycle public.billing_cycle;
 alter table public.users add column if not exists subscription_price integer;
 alter table public.users add column if not exists subscription_status public.subscription_status;
 alter table public.users add column if not exists next_billing_date timestamptz;
+alter table public.users add column if not exists last_payment_date timestamptz;
 alter table public.users add column if not exists trial_end_date timestamptz;
 alter table public.users add column if not exists trial_ends_at timestamptz;
 alter table public.users add column if not exists is_trial boolean not null default false;
@@ -332,6 +382,11 @@ alter table public.websites add column if not exists ga_refresh_token text;
 alter table public.websites add column if not exists ga_property_id text;
 alter table public.websites add column if not exists ga_connected_at timestamptz;
 alter table public.users alter column subscription_status set default 'inactive';
+alter table public.users drop column if exists stripe_customer_id;
+alter table public.users drop column if exists stripe_subscription_id;
+alter table public.users drop column if exists paypal_subscription_id;
+alter table public.users drop column if exists paypal_plan_id;
+alter table public.users drop column if exists paypal_payer_id;
 
 alter table public.websites
   drop constraint if exists websites_competitor_urls_is_array;
@@ -356,6 +411,9 @@ create table if not exists public.notifications (
 );
 
 create index if not exists idx_websites_user_id on public.websites (user_id);
+create index if not exists idx_subscriptions_user_id on public.subscriptions (user_id);
+create index if not exists idx_subscriptions_status on public.subscriptions (status, updated_at desc);
+create index if not exists idx_subscriptions_email on public.subscriptions (lower(email));
 create unique index if not exists idx_websites_magic_token
   on public.websites (magic_token)
   where magic_token is not null;
@@ -377,6 +435,11 @@ create index if not exists idx_crux_data_website_fetched_at on public.crux_data 
 create index if not exists idx_broken_links_website_scanned_at on public.broken_links (website_id, scanned_at desc);
 create index if not exists idx_uptime_checks_website_checked_at on public.uptime_checks (website_id, checked_at desc);
 create index if not exists idx_competitor_scans_website_scanned_at on public.competitor_scans (website_id, scanned_at desc);
+create index if not exists idx_payment_logs_timestamp on public.payment_logs (timestamp desc);
+create index if not exists idx_payment_logs_email on public.payment_logs (lower(user_email), timestamp desc);
+create index if not exists idx_payment_logs_subscription on public.payment_logs (paddle_subscription_id, timestamp desc);
+create index if not exists idx_paddle_webhook_events_status_retry
+  on public.paddle_webhook_events (status, next_retry_at asc, created_at asc);
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -462,6 +525,16 @@ create trigger report_ai_cache_updated_at
   before update on public.report_ai_cache
   for each row execute procedure public.handle_updated_at();
 
+drop trigger if exists subscriptions_updated_at on public.subscriptions;
+create trigger subscriptions_updated_at
+  before update on public.subscriptions
+  for each row execute procedure public.handle_updated_at();
+
+drop trigger if exists paddle_webhook_events_updated_at on public.paddle_webhook_events;
+create trigger paddle_webhook_events_updated_at
+  before update on public.paddle_webhook_events
+  for each row execute procedure public.handle_updated_at();
+
 create or replace function public.user_can_access_owner(target_owner uuid)
 returns boolean
 language sql
@@ -524,6 +597,9 @@ end;
 $$;
 
 alter table public.users enable row level security;
+alter table public.subscriptions enable row level security;
+alter table public.payment_logs enable row level security;
+alter table public.paddle_webhook_events enable row level security;
 alter table public.agency_branding enable row level security;
 alter table public.team_members enable row level security;
 alter table public.websites enable row level security;
@@ -545,6 +621,16 @@ drop policy if exists "Users can view own profile" on public.users;
 create policy "Users can view own profile"
   on public.users for select
   using (auth.uid() = id);
+
+drop policy if exists "Users can view own subscriptions" on public.subscriptions;
+create policy "Users can view own subscriptions"
+  on public.subscriptions for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can view own payment logs" on public.payment_logs;
+create policy "Users can view own payment logs"
+  on public.payment_logs for select
+  using (auth.uid() = user_id);
 
 drop policy if exists "Users can update own profile" on public.users;
 create policy "Users can update own profile"

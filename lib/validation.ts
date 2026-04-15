@@ -101,21 +101,13 @@ export const reportSendSchema = z.object({
   email: z.string().email().optional()
 });
 
-export const checkoutSchema = z.object({
-  plan: z.enum(["starter", "agency"])
-});
-
-export const paypalSubscribeSchema = z.object({
+export const paddleCheckoutSchema = z.object({
   plan: z.enum(["starter", "agency"]),
   billingCycle: z.enum(["monthly", "yearly"])
 });
 
-export const paypalConfirmSchema = z.object({
-  subscriptionId: z.string().trim().min(3, "Subscription id is required.")
-});
-
-export const paypalCancelSchema = z.object({
-  reason: z.string().trim().max(120).optional()
+export const paddleConfirmSchema = z.object({
+  transactionId: z.string().trim().min(3, "Transaction id is required.")
 });
 
 export const settingsSchema = z.object({

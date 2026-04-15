@@ -8,7 +8,7 @@ import { marketingCopy } from "@/lib/marketing-copy";
 
 const pricingProof = [
   "Close 1 client = $500+ in monthly revenue for many agencies.",
-  "SitePulse Growth = $49/month.",
+  "SitePulse Growth sale = $19/month.",
   "Retention proof can save a shaky account before it churns."
 ] as const;
 

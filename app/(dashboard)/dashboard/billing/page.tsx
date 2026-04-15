@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import Script from "next/script";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,6 +20,8 @@ import {
   BILLING_PLANS,
   formatUsdPrice,
   getDisplayedMonthlyEquivalent,
+  getPlanOriginalAmount,
+  getPlanPricing,
   getYearlyBillingCopy,
   isPaidPlan,
   type PaidPlanKey
@@ -33,7 +36,7 @@ const paidPlanFeatures: Record<PaidPlanKey, string[]> = {
     "90-day history",
     "PDF reports",
     "Weekly email reports",
-    "14-day free trial"
+    "Sale pricing through Paddle"
   ],
   agency: [
     "30 websites",
@@ -41,7 +44,7 @@ const paidPlanFeatures: Record<PaidPlanKey, string[]> = {
     "1-year history",
     "White-label reports",
     "Priority alerts and team access",
-    "14-day free trial"
+    "Sale pricing through Paddle"
   ]
 };
 
@@ -59,12 +62,12 @@ const planMarketingCopy: Record<
   },
   starter: {
     subtitle: "For agencies turning website reviews into a repeatable sales and retention system.",
-    annualCopy: "Save $120/year — close 1 extra client and it pays for itself",
+    annualCopy: "Yearly sale pricing is billed annually at $180.",
     badgeVariant: "default"
   },
   agency: {
     subtitle: "For agencies that want a premium client-delivery system inside their own service stack.",
-    annualCopy: "Save $360/year — one retained client covers this many times over",
+    annualCopy: "Yearly sale pricing is billed annually at $588.",
     badgeVariant: "outline"
   }
 };
@@ -83,145 +86,183 @@ function getPlanRank(plan: PlanKey) {
 
 export default function BillingPage() {
   const { user, loading, refetch } = useUser();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [submittingPlan, setSubmittingPlan] = useState<string | null>(null);
-  const [canceling, setCanceling] = useState(false);
-  const handledPaypalReturnRef = useRef(false);
+  const [openingPortal, setOpeningPortal] = useState(false);
+  const paddleInitializedRef = useRef(false);
+  const handledToastStateRef = useRef<string | null>(null);
+  const confirmingTransactionsRef = useRef<Set<string>>(new Set());
+  const eventHandlerRef = useRef<(event: PaddleCheckoutEvent) => void>(() => {});
+  const refetchRef = useRef(refetch);
 
-  const hasLegacyStripeSubscription = Boolean(
-    user?.plan !== "free" &&
-      user?.stripe_customer_id &&
-      user?.stripe_subscription_id &&
-      !user?.paypal_subscription_id
-  );
-  const hasCancelablePayPalSubscription = Boolean(
-    user?.paypal_subscription_id &&
+  const hasPaidPaddleSubscription = Boolean(
+    user?.paddle_subscription_id &&
       user?.subscription_status &&
-      !["cancelled", "inactive"].includes(user.subscription_status)
+      ["active", "trialing", "past_due", "paused"].includes(user.subscription_status)
   );
+
+  refetchRef.current = refetch;
 
   useEffect(() => {
-    const state = searchParams.get("paypal");
-    const subscriptionId =
-      searchParams.get("subscription_id") ??
-      searchParams.get("ba_token") ??
-      searchParams.get("token");
+    const state = searchParams.get("paddle");
 
-    if (!state || handledPaypalReturnRef.current) {
+    if (!state || handledToastStateRef.current === state) {
       return;
     }
 
-    handledPaypalReturnRef.current = true;
+    handledToastStateRef.current = state;
 
     if (state === "canceled") {
-      toast.message("PayPal checkout was canceled.");
-      router.replace("/dashboard/billing");
+      toast.message("Paddle checkout was canceled.");
       return;
     }
 
-    if (state !== "success" || !subscriptionId) {
-      router.replace("/dashboard/billing");
+    if (state === "success") {
+      toast.success("Paddle checkout finished. We are syncing your subscription.");
+    }
+  }, [searchParams]);
+
+  eventHandlerRef.current = (event) => {
+    if (event.name === "checkout.closed") {
+      setSubmittingPlan(null);
       return;
     }
+
+    if (event.name !== "checkout.completed") {
+      return;
+    }
+
+    const transactionId = typeof event.data.transaction_id === "string" ? event.data.transaction_id : null;
+    setSubmittingPlan(null);
+
+    if (!transactionId || confirmingTransactionsRef.current.has(transactionId)) {
+      return;
+    }
+
+    confirmingTransactionsRef.current.add(transactionId);
 
     void (async () => {
       try {
-        await fetchJson("/api/paypal/confirm", {
+        await fetchJson("/api/paddle/confirm", {
           method: "POST",
-          body: JSON.stringify({ subscriptionId })
+          body: JSON.stringify({ transactionId })
         });
-        await refetch();
-        toast.success("Your PayPal subscription is active.");
+        await refetchRef.current();
+        toast.success("Your Paddle subscription is active.");
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Unable to confirm the PayPal subscription."
+          error instanceof Error ? error.message : "Unable to confirm the Paddle checkout."
         );
       } finally {
-        router.replace("/dashboard/billing");
+        confirmingTransactionsRef.current.delete(transactionId);
       }
     })();
-  }, [refetch, router, searchParams]);
+  };
 
-  async function startPayPal(plan: PaidPlanKey, cycle: BillingCycle) {
-    if (hasLegacyStripeSubscription) {
-      toast.error("Cancel the legacy Stripe subscription first before moving this account to PayPal.");
+  function initializePaddle(clientToken: string, environment: "sandbox" | "production") {
+    if (!window.Paddle) {
+      throw new Error("Paddle.js is still loading. Please try again in a moment.");
+    }
+
+    if (environment === "sandbox") {
+      window.Paddle.Environment?.set("sandbox");
+    }
+
+    if (paddleInitializedRef.current) {
+      return;
+    }
+
+    window.Paddle.Initialize({
+      token: clientToken,
+      eventCallback: (event) => eventHandlerRef.current(event)
+    });
+
+    paddleInitializedRef.current = true;
+  }
+
+  async function startPaddle(plan: PaidPlanKey, cycle: BillingCycle) {
+    if (hasPaidPaddleSubscription) {
+      await openBillingPortal();
       return;
     }
 
     try {
       setSubmittingPlan(`${plan}:${cycle}`);
       const data = await fetchJson<{
-        approvalUrl: string;
-      }>("/api/paypal/subscribe", {
+        clientToken: string;
+        environment: "sandbox" | "production";
+        priceId: string;
+        successUrl: string;
+        customerEmail: string;
+        customData: Record<string, unknown>;
+      }>("/api/paddle/config", {
         method: "POST",
         body: JSON.stringify({ plan, billingCycle: cycle })
       });
-      window.location.href = data.approvalUrl;
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Unable to start the PayPal checkout flow."
-      );
-    } finally {
-      setSubmittingPlan(null);
-    }
-  }
 
-  async function cancelPayPal() {
-    try {
-      setCanceling(true);
-      await fetchJson("/api/paypal/cancel", {
-        method: "POST",
-        body: JSON.stringify({
-          reason: "Customer requested cancellation from the billing dashboard."
-        })
+      initializePaddle(data.clientToken, data.environment);
+
+      window.Paddle?.Checkout.open({
+        items: [
+          {
+            priceId: data.priceId,
+            quantity: 1
+          }
+        ],
+        customer: {
+          email: data.customerEmail
+        },
+        customData: data.customData,
+        settings: {
+          displayMode: "overlay",
+          theme: "light",
+          locale: "en",
+          variant: "multi-page"
+        }
       });
-      await refetch();
-      toast.success("Your PayPal subscription has been cancelled.");
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Unable to cancel the PayPal subscription."
+        error instanceof Error ? error.message : "Unable to start the Paddle checkout flow."
       );
-    } finally {
-      setCanceling(false);
+      setSubmittingPlan(null);
     }
   }
 
   async function openBillingPortal() {
     try {
-      const data = await fetchJson<{ url: string }>("/api/stripe/portal", {
+      setOpeningPortal(true);
+      const data = await fetchJson<{
+        url: string;
+      }>("/api/paddle/portal", {
         method: "POST"
       });
+
       window.location.href = data.url;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to open billing portal.");
+      toast.error(error instanceof Error ? error.message : "Unable to open the Paddle portal.");
+    } finally {
+      setOpeningPortal(false);
     }
   }
-
-  const currentPlanLabel = useMemo(() => {
-    if (!user) {
-      return "";
-    }
-
-    if (user.plan === "free") {
-      return "Starter";
-    }
-
-    return getPlanDisplayName(user.plan);
-  }, [user]);
 
   if (loading || !user) {
     return <p className="text-muted-foreground">Loading billing...</p>;
   }
 
+  const currentPlanLabel = user.plan === "free" ? "Starter" : getPlanDisplayName(user.plan);
+  const currentPaidSelection =
+    user.plan !== "free" && user.billing_cycle ? getPlanPricing(user.plan, user.billing_cycle) : null;
+
   return (
     <div className="space-y-10">
+      <Script src="https://cdn.paddle.com/paddle/v2/paddle.js" strategy="afterInteractive" />
+
       <div className="space-y-8">
         <PageHeader
           eyebrow="Billing"
-          title="Pricing built around agency ROI"
-          description="Choose monthly or yearly billing, anchor pricing around the monthly equivalent, and start Growth or Pro free for 14 days without a credit card."
+          title="Paddle checkout with live sale pricing"
+          description="Choose monthly or yearly billing, see the original price next to the current sale price, and manage any active subscription through Paddle."
         />
 
         <Card>
@@ -252,17 +293,26 @@ export default function BillingPage() {
                 </div>
                 <div className="space-y-2 text-sm text-muted-foreground">
                   <p>
-                    {user.plan === "free"
+                    {user.plan === "free" && !user.is_trial
                       ? "You are currently on the free Starter plan."
-                      : `You are on the ${currentPlanLabel} plan.`}
+                      : user.is_trial && !user.paddle_subscription_id
+                        ? `You currently have trial access to the ${currentPlanLabel} plan.`
+                        : `You are on the ${currentPlanLabel} plan.`}
                   </p>
-                  {user.subscription_price !== null ? (
+                  {currentPaidSelection ? (
                     <p>
-                      Price: {formatUsdPrice(user.subscription_price)} /{" "}
+                      Sale price: {formatUsdPrice(currentPaidSelection.salePrice)} /{" "}
+                      {user.billing_cycle === "yearly" ? "year" : "month"}
+                    </p>
+                  ) : null}
+                  {currentPaidSelection ? (
+                    <p className="line-through">
+                      Original price: {formatUsdPrice(currentPaidSelection.originalPrice)} /{" "}
                       {user.billing_cycle === "yearly" ? "year" : "month"}
                     </p>
                   ) : null}
                   {user.trial_end_date ? <p>Trial ends: {formatDateTime(user.trial_end_date)}</p> : null}
+                  {user.last_payment_date ? <p>Last payment: {formatDateTime(user.last_payment_date)}</p> : null}
                   {user.next_billing_date ? (
                     <p>Next billing date: {formatDateTime(user.next_billing_date)}</p>
                   ) : null}
@@ -270,13 +320,10 @@ export default function BillingPage() {
               </div>
 
               <div className="flex flex-wrap gap-3">
-                {hasCancelablePayPalSubscription ? (
-                  <Button variant="outline" onClick={cancelPayPal} disabled={canceling}>
-                    {canceling ? "Cancelling..." : "Cancel PayPal subscription"}
+                {hasPaidPaddleSubscription ? (
+                  <Button onClick={openBillingPortal} disabled={openingPortal}>
+                    {openingPortal ? "Opening Paddle..." : "Manage in Paddle"}
                   </Button>
-                ) : null}
-                {hasLegacyStripeSubscription ? (
-                  <Button onClick={openBillingPortal}>Open Stripe billing portal</Button>
                 ) : user.plan === "free" ? (
                   <Button asChild>
                     <Link href="/pricing">View pricing page</Link>
@@ -285,10 +332,9 @@ export default function BillingPage() {
               </div>
             </div>
 
-            {hasLegacyStripeSubscription ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                This account still has a legacy Stripe subscription. Manage or cancel it in Stripe
-                first, then start the PayPal version to avoid duplicate billing.
+            {hasPaidPaddleSubscription ? (
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                Plan changes, payment method updates, and cancellations are handled through the Paddle customer portal to avoid duplicate subscriptions.
               </div>
             ) : null}
           </CardContent>
@@ -299,8 +345,7 @@ export default function BillingPage() {
             <div className="space-y-2">
               <CardTitle>Choose your billing cycle</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Monthly stays flexible. Yearly uses the lower monthly equivalent so the real savings
-                are obvious before checkout.
+                Monthly stays flexible. Yearly shows the sale price divided by 12 so the monthly equivalent is obvious before checkout.
               </p>
             </div>
             <BillingCycleToggle value={billingCycle} onChange={setBillingCycle} />
@@ -312,25 +357,36 @@ export default function BillingPage() {
             const plan = BILLING_PLANS[planKey];
             const yearlySelected = billingCycle === "yearly";
             const displayedAmount = getDisplayedMonthlyEquivalent(planKey, billingCycle);
+            const originalAmount =
+              yearlySelected && planKey !== "free"
+                ? Math.round(getPlanOriginalAmount(planKey, billingCycle) / 12)
+                : getPlanOriginalAmount(planKey, billingCycle);
             const isCurrentPlan =
-              user.plan === planKey &&
-              (planKey === "free" ||
-                (user.billing_cycle === billingCycle &&
-                  (user.subscription_status === "active" || user.subscription_status === "trialing")));
+              planKey === "free"
+                ? user.plan === "free" && !hasPaidPaddleSubscription
+                : hasPaidPaddleSubscription &&
+                  user.plan === planKey &&
+                  user.billing_cycle === billingCycle &&
+                  Boolean(
+                    user.subscription_status &&
+                      ["active", "trialing", "past_due", "paused"].includes(user.subscription_status)
+                  );
             const planRank = getPlanRank(planKey);
             const currentRank = getPlanRank(user.plan);
             const actionLabel =
               planKey === "free"
                 ? user.plan === "free"
                   ? "Current free plan"
-                  : "Downgrade to Starter"
+                  : "Manage in Paddle"
                 : isCurrentPlan
                   ? "Current plan"
-                  : planRank > currentRank
-                    ? `Upgrade to ${plan.displayName}`
-                    : user.plan === planKey
-                      ? `Switch to ${billingCycle}`
-                      : `Choose ${plan.displayName}`;
+                  : hasPaidPaddleSubscription
+                    ? "Manage in Paddle"
+                    : planRank > currentRank
+                      ? `Upgrade to ${plan.displayName}`
+                      : user.plan === planKey
+                        ? `Switch to ${billingCycle}`
+                        : `Choose ${plan.displayName}`;
 
             return (
               <Card
@@ -357,9 +413,17 @@ export default function BillingPage() {
                       {formatUsdPrice(displayedAmount)}
                       <span className="ml-2 text-base font-normal text-muted-foreground">/ month</span>
                     </p>
+                    {planKey !== "free" ? (
+                      <p className="text-sm text-muted-foreground line-through">
+                        Regularly {formatUsdPrice(originalAmount)} / month
+                      </p>
+                    ) : null}
                     {yearlySelected && planKey !== "free" ? (
                       <>
                         <p className="text-sm text-muted-foreground">{getYearlyBillingCopy(planKey)}</p>
+                        <p className="text-sm text-muted-foreground line-through">
+                          Regularly {formatUsdPrice(getPlanOriginalAmount(planKey, billingCycle))}/year
+                        </p>
                         <p className="text-sm leading-6 text-emerald-600 dark:text-emerald-300">
                           {planMarketingCopy[planKey].annualCopy}
                         </p>
@@ -369,7 +433,9 @@ export default function BillingPage() {
 
                   <p className="mt-4 text-sm text-muted-foreground">
                     {isPaidPlan(planKey)
-                      ? "Start free for 14 days — no credit card required"
+                      ? hasPaidPaddleSubscription
+                        ? "Use the Paddle portal to change an active subscription without creating duplicates."
+                        : "All paid subscriptions are charged at the sale price shown here."
                       : "Stay on Starter for $0/month or $0/year while you validate demand."}
                   </p>
 
@@ -389,8 +455,10 @@ export default function BillingPage() {
                     <Button
                       className="mt-8 w-full"
                       variant={user.plan === "free" ? "outline" : "default"}
-                      disabled={user.plan === "free" || !hasCancelablePayPalSubscription}
-                      onClick={cancelPayPal}
+                      disabled={user.plan === "free" && !hasPaidPaddleSubscription}
+                      onClick={() => {
+                        void openBillingPortal();
+                      }}
                     >
                       {actionLabel}
                     </Button>
@@ -398,12 +466,17 @@ export default function BillingPage() {
                     <Button
                       className="mt-8 w-full"
                       variant={isCurrentPlan ? "outline" : "default"}
-                      disabled={isCurrentPlan || submittingPlan === `${planKey}:${billingCycle}`}
-                      onClick={() => startPayPal(planKey, billingCycle)}
+                      disabled={isCurrentPlan || openingPortal || submittingPlan === `${planKey}:${billingCycle}`}
+                      onClick={() => {
+                        if (hasPaidPaddleSubscription) {
+                          void openBillingPortal();
+                          return;
+                        }
+
+                        void startPaddle(planKey, billingCycle);
+                      }}
                     >
-                      {submittingPlan === `${planKey}:${billingCycle}`
-                        ? "Redirecting to PayPal..."
-                        : actionLabel}
+                      {submittingPlan === `${planKey}:${billingCycle}` ? "Opening Paddle..." : actionLabel}
                     </Button>
                   )}
                 </CardContent>

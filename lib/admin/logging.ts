@@ -10,7 +10,8 @@ export type AdminLoggedErrorType =
   | "pdf_failed"
   | "report_failed"
   | "email_failed"
-  | "cron_failed";
+  | "cron_failed"
+  | "webhook_failed";
 
 type CronLogStatus = "running" | "success" | "failed" | "timeout";
 
@@ -169,6 +170,47 @@ export async function logEmailDelivery(input: {
         to: input.to,
         subject: input.subject,
         error: error instanceof Error ? error.message : "Unknown email log failure"
+      });
+    }
+  }
+}
+
+export async function logBillingEvent(input: {
+  subscriptionId?: string | null;
+  userId?: string | null;
+  email: string;
+  planName?: string | null;
+  eventType: string;
+  status: string;
+  errorMessage?: string | null;
+  amount?: number | null;
+  paddleEventId?: string | null;
+  paddleSubscriptionId?: string | null;
+  metadata?: Record<string, unknown>;
+  occurredAt?: string | null;
+}) {
+  try {
+    const admin = createSupabaseAdminClient();
+    await admin.from("payment_logs").insert({
+      subscription_id: input.subscriptionId ?? null,
+      user_id: input.userId ?? null,
+      user_email: input.email,
+      plan_name: input.planName ?? null,
+      event_type: input.eventType,
+      status: input.status,
+      error_message: input.errorMessage ?? null,
+      amount: input.amount ?? null,
+      paddle_event_id: input.paddleEventId ?? null,
+      paddle_subscription_id: input.paddleSubscriptionId ?? null,
+      metadata: input.metadata ?? {},
+      timestamp: input.occurredAt ?? new Date().toISOString()
+    });
+  } catch (error) {
+    if (!isMissingTableError(error)) {
+      console.warn("[admin:billing_log_failed]", {
+        email: input.email,
+        eventType: input.eventType,
+        error: error instanceof Error ? error.message : "Unknown billing log failure"
       });
     }
   }

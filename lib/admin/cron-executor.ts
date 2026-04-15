@@ -4,6 +4,7 @@ import type { AdminCronName } from "@/lib/admin/constants";
 import { runLoggedCron } from "@/lib/admin/logging";
 import { processCompetitorScans } from "@/lib/competitor-monitoring";
 import { processLifecycleEmails } from "@/lib/lifecycle-email-service";
+import { processQueuedPaddleWebhooks } from "@/lib/paddle-subscriptions";
 import { processDueEmailReports } from "@/lib/report-service";
 import { processDueScans } from "@/lib/scan-service";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -63,6 +64,12 @@ export async function executeAdminCron(cronName: AdminCronName): Promise<Record<
     case "process-lifecycle-emails": {
       const sent = await runLoggedCron("process-lifecycle-emails", () => processLifecycleEmails());
       return { sent };
+    }
+    case "process-paddle-webhooks": {
+      const processed = await runLoggedCron("process-paddle-webhooks", () =>
+        processQueuedPaddleWebhooks()
+      );
+      return { processed };
     }
   }
 }

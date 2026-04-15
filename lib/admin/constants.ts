@@ -9,7 +9,8 @@ export type AdminCronName =
   | "sync-uptimerobot"
   | "process-competitors"
   | "expire-trials"
-  | "process-lifecycle-emails";
+  | "process-lifecycle-emails"
+  | "process-paddle-webhooks";
 
 export const ADMIN_SIDEBAR_LINKS = [
   { href: "/admin", label: "Overview", icon: "📊" },
@@ -72,6 +73,12 @@ export const ADMIN_CRON_DEFINITIONS: Record<
     path: "/api/cron/process-lifecycle-emails",
     schedule: "0 12 * * *",
     description: "Sends welcome, trial, onboarding, and lifecycle emails."
+  },
+  "process-paddle-webhooks": {
+    label: "process-paddle-webhooks",
+    path: "/api/cron/process-paddle-webhooks",
+    schedule: "15 * * * *",
+    description: "Processes queued Paddle webhook events asynchronously."
   }
 };
 

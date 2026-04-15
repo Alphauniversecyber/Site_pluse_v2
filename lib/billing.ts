@@ -5,8 +5,10 @@ export type PaidPlanKey = Exclude<PlanKey, "free">;
 export interface PlanBillingDefinition {
   displayName: string;
   internalPlan: PlanKey;
-  monthlyPrice: number;
-  yearlyPrice: number;
+  monthlyOriginalPrice: number;
+  monthlySalePrice: number;
+  yearlyOriginalPrice: number;
+  yearlySalePrice: number;
   yearlySavingsLabel?: string;
   yearlyValueCopy?: string;
   marketingBadge?: string;
@@ -14,12 +16,24 @@ export interface PlanBillingDefinition {
   audience: string;
 }
 
+export interface PlanPriceSnapshot {
+  plan: PlanKey;
+  billingCycle: BillingCycle;
+  displayName: string;
+  planName: string;
+  originalPrice: number;
+  salePrice: number;
+  monthlyEquivalent: number;
+}
+
 export const BILLING_PLANS: Record<PlanKey, PlanBillingDefinition> = {
   free: {
     displayName: "Starter",
     internalPlan: "free",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
+    monthlyOriginalPrice: 0,
+    monthlySalePrice: 0,
+    yearlyOriginalPrice: 0,
+    yearlySalePrice: 0,
     marketingBadge: "For testing value",
     trialDays: 0,
     audience: "For freelancers testing value"
@@ -27,9 +41,11 @@ export const BILLING_PLANS: Record<PlanKey, PlanBillingDefinition> = {
   starter: {
     displayName: "Growth",
     internalPlan: "starter",
-    monthlyPrice: 49,
-    yearlyPrice: 468,
-    yearlySavingsLabel: "Save 20%",
+    monthlyOriginalPrice: 49,
+    monthlySalePrice: 19,
+    yearlyOriginalPrice: 468,
+    yearlySalePrice: 180,
+    yearlySavingsLabel: "Sale pricing",
     yearlyValueCopy: "Save $120/year — close 1 extra client and it pays for itself",
     marketingBadge: "Most popular · Trusted by 500+ agencies",
     trialDays: 14,
@@ -38,9 +54,11 @@ export const BILLING_PLANS: Record<PlanKey, PlanBillingDefinition> = {
   agency: {
     displayName: "Pro",
     internalPlan: "agency",
-    monthlyPrice: 149,
-    yearlyPrice: 1428,
-    yearlySavingsLabel: "Save 20%",
+    monthlyOriginalPrice: 149,
+    monthlySalePrice: 59,
+    yearlyOriginalPrice: 1428,
+    yearlySalePrice: 588,
+    yearlySavingsLabel: "Sale pricing",
     yearlyValueCopy: "Save $360/year — one retained client covers this many times over",
     marketingBadge: "For serious scale",
     trialDays: 14,
@@ -48,29 +66,52 @@ export const BILLING_PLANS: Record<PlanKey, PlanBillingDefinition> = {
   }
 };
 
-export function getPlanAmount(plan: PlanKey, billingCycle: BillingCycle) {
-  const definition = BILLING_PLANS[plan];
-  return billingCycle === "yearly" ? definition.yearlyPrice : definition.monthlyPrice;
-}
-
-export function getDisplayedMonthlyEquivalent(plan: PlanKey, billingCycle: BillingCycle) {
-  const definition = BILLING_PLANS[plan];
-  return billingCycle === "yearly" ? Math.round(definition.yearlyPrice / 12) : definition.monthlyPrice;
-}
-
-export function getYearlyBillingCopy(plan: PlanKey) {
-  return `Billed ${formatUsdPrice(BILLING_PLANS[plan].yearlyPrice)}/year`;
-}
-
 export function isPaidPlan(plan: PlanKey): plan is PaidPlanKey {
   return plan !== "free";
 }
 
-export function formatUsdPrice(amount: number) {
+export function getPlanPricing(plan: PlanKey, billingCycle: BillingCycle): PlanPriceSnapshot {
+  const definition = BILLING_PLANS[plan];
+  const originalPrice =
+    billingCycle === "yearly" ? definition.yearlyOriginalPrice : definition.monthlyOriginalPrice;
+  const salePrice =
+    billingCycle === "yearly" ? definition.yearlySalePrice : definition.monthlySalePrice;
+
+  return {
+    plan,
+    billingCycle,
+    displayName: definition.displayName,
+    planName:
+      plan === "free"
+        ? definition.displayName
+        : `${definition.displayName} ${billingCycle === "yearly" ? "Yearly" : "Monthly"}`,
+    originalPrice,
+    salePrice,
+    monthlyEquivalent: billingCycle === "yearly" ? Math.round(salePrice / 12) : salePrice
+  };
+}
+
+export function getPlanAmount(plan: PlanKey, billingCycle: BillingCycle) {
+  return getPlanPricing(plan, billingCycle).salePrice;
+}
+
+export function getPlanOriginalAmount(plan: PlanKey, billingCycle: BillingCycle) {
+  return getPlanPricing(plan, billingCycle).originalPrice;
+}
+
+export function getDisplayedMonthlyEquivalent(plan: PlanKey, billingCycle: BillingCycle) {
+  return getPlanPricing(plan, billingCycle).monthlyEquivalent;
+}
+
+export function getYearlyBillingCopy(plan: PlanKey) {
+  return `Billed ${formatUsdPrice(BILLING_PLANS[plan].yearlySalePrice)}/year`;
+}
+
+export function formatUsdPrice(amount: number, options?: { maximumFractionDigits?: number }) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0
+    maximumFractionDigits: options?.maximumFractionDigits ?? 0
   }).format(amount);
 }
 
@@ -78,7 +119,10 @@ export function getBillingLine(plan: PlanKey, billingCycle: BillingCycle) {
   return `${formatUsdPrice(getPlanAmount(plan, billingCycle))} / ${billingCycle === "yearly" ? "year" : "month"}`;
 }
 
-export function getPayPalPlanName(plan: PaidPlanKey, billingCycle: BillingCycle) {
-  const definition = BILLING_PLANS[plan];
-  return `SitePulse ${definition.displayName} ${billingCycle === "yearly" ? "Yearly" : "Monthly"}`;
+export function getOriginalBillingLine(plan: PlanKey, billingCycle: BillingCycle) {
+  return `${formatUsdPrice(getPlanOriginalAmount(plan, billingCycle))} / ${billingCycle === "yearly" ? "year" : "month"}`;
+}
+
+export function getPaddlePlanName(plan: PaidPlanKey, billingCycle: BillingCycle) {
+  return getPlanPricing(plan, billingCycle).planName;
 }

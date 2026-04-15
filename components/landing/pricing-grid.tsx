@@ -15,8 +15,10 @@ import type { BillingCycle } from "@/types";
 const plans: Array<{
   key: "free" | "starter" | "agency";
   name: string;
-  monthlyAmount: number;
-  yearlyAmount: number;
+  monthlyOriginalAmount: number;
+  monthlySaleAmount: number;
+  yearlyOriginalAmount: number;
+  yearlySaleAmount: number;
   badge: string;
   subtitle: string;
   compactSubtitle: string;
@@ -30,8 +32,10 @@ const plans: Array<{
   {
     key: "free",
     name: "Starter",
-    monthlyAmount: 0,
-    yearlyAmount: 0,
+    monthlyOriginalAmount: 0,
+    monthlySaleAmount: 0,
+    yearlyOriginalAmount: 0,
+    yearlySaleAmount: 0,
     badge: "For testing value",
     subtitle: "For freelancers testing whether fast audits can open better client conversations.",
     compactSubtitle: "For freelancers validating whether fast audits can open better client conversations.",
@@ -44,8 +48,10 @@ const plans: Array<{
   {
     key: "starter",
     name: "Growth",
-    monthlyAmount: 49,
-    yearlyAmount: 468,
+    monthlyOriginalAmount: 49,
+    monthlySaleAmount: 19,
+    yearlyOriginalAmount: 468,
+    yearlySaleAmount: 180,
     badge: "Most popular · Trusted by 500+ agencies",
     subtitle: "For agencies managing multiple clients and turning website reviews into a repeatable sales and retention process.",
     compactSubtitle: "For agencies turning website reviews into a repeatable sales and retention system.",
@@ -59,8 +65,10 @@ const plans: Array<{
   {
     key: "agency",
     name: "Pro",
-    monthlyAmount: 149,
-    yearlyAmount: 1428,
+    monthlyOriginalAmount: 149,
+    monthlySaleAmount: 59,
+    yearlyOriginalAmount: 1428,
+    yearlySaleAmount: 588,
     badge: "For serious scale",
     subtitle: "For agencies that want SitePulse to feel like a premium client-delivery system inside their own service stack.",
     compactSubtitle: "For agencies that want a premium client-delivery system inside their own service stack.",
@@ -95,8 +103,12 @@ export function PricingGrid({
           const yearlySelected = billingCycle === "yearly";
           const displayedAmount =
             yearlySelected && plan.key !== "free"
-              ? Math.round(plan.yearlyAmount / 12)
-              : plan.monthlyAmount;
+              ? Math.round(plan.yearlySaleAmount / 12)
+              : plan.monthlySaleAmount;
+          const displayedOriginalAmount =
+            yearlySelected && plan.key !== "free"
+              ? Math.round(plan.yearlyOriginalAmount / 12)
+              : plan.monthlyOriginalAmount;
 
           return (
             <article
@@ -150,6 +162,18 @@ export function PricingGrid({
                     </span>
                   </div>
 
+                  {plan.key !== "free" ? (
+                    <p
+                      className={cn(
+                        compact ? "mt-1 text-[13px] leading-6" : "mt-1.5 text-[14px] leading-6",
+                        "line-through",
+                        plan.theme === "dark" ? "text-slate-600 dark:text-slate-200" : "text-slate-500"
+                      )}
+                    >
+                      Regularly {formatUsdPrice(displayedOriginalAmount)}/month
+                    </p>
+                  ) : null}
+
                   {yearlySelected && plan.key !== "free" ? (
                     <>
                       <p
@@ -158,7 +182,16 @@ export function PricingGrid({
                           plan.theme === "dark" ? "text-slate-600 dark:text-slate-200" : "text-slate-500"
                         )}
                       >
-                        Billed {formatUsdPrice(plan.yearlyAmount)}/year
+                        Billed {formatUsdPrice(plan.yearlySaleAmount)}/year
+                      </p>
+                      <p
+                        className={cn(
+                          compact ? "mt-1 text-[12px] leading-5" : "mt-1 text-[13px] leading-6",
+                          "line-through",
+                          plan.theme === "dark" ? "text-slate-600 dark:text-slate-200" : "text-slate-500"
+                        )}
+                      >
+                        Regularly {formatUsdPrice(plan.yearlyOriginalAmount)}/year
                       </p>
                       <p className="mt-1 text-[12px] leading-5 text-emerald-600 dark:text-emerald-300">
                         {plan.yearlyValueCopy}

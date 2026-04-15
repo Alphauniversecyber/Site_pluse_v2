@@ -9,7 +9,10 @@ export type SubscriptionStatus =
   | "active"
   | "cancelled"
   | "suspended"
-  | "payment_denied";
+  | "paused"
+  | "past_due"
+  | "payment_denied"
+  | "payment_failed";
 export type NotificationType =
   | "score_drop"
   | "critical_score"
@@ -53,15 +56,13 @@ export interface UserProfile {
   email: string;
   full_name: string | null;
   plan: PlanKey;
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
-  paypal_subscription_id: string | null;
-  paypal_plan_id: string | null;
-  paypal_payer_id: string | null;
+  paddle_customer_id: string | null;
+  paddle_subscription_id: string | null;
   billing_cycle: BillingCycle | null;
   subscription_price: number | null;
   subscription_status: SubscriptionStatus | null;
   next_billing_date: string | null;
+  last_payment_date: string | null;
   trial_end_date: string | null;
   trial_ends_at: string | null;
   is_trial: boolean;
@@ -72,6 +73,38 @@ export interface UserProfile {
   uptimerobot_api_key?: string | null;
   extra_report_recipients: string[];
   created_at: string;
+}
+
+export interface SubscriptionRecord {
+  id: string;
+  user_id: string;
+  email: string;
+  plan_name: string;
+  billing_interval: BillingCycle;
+  original_price: number;
+  sale_price: number;
+  paddle_subscription_id: string;
+  status: SubscriptionStatus;
+  next_billing_date: string | null;
+  last_payment_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentLogEntry {
+  id: string;
+  subscription_id: string | null;
+  user_id: string | null;
+  user_email: string;
+  plan_name: string | null;
+  event_type: string;
+  status: string;
+  error_message: string | null;
+  amount: number | null;
+  paddle_event_id: string | null;
+  paddle_subscription_id: string | null;
+  created_at: string;
+  timestamp: string;
 }
 
 export interface Website {
