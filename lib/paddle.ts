@@ -358,6 +358,12 @@ async function paddleRequest<T>(
         };
       };
       const detail = parsed.error?.detail ?? parsed.error?.type;
+      if (detail && /aren't permitted to perform this request/i.test(detail)) {
+        throw new Error(
+          "Paddle API permission error. Check that your API key has Transactions: Read and Subscriptions: Read, and that your API key environment matches PADDLE_ENVIRONMENT."
+        );
+      }
+
       throw new Error(detail ? `Paddle API error: ${detail}` : `Paddle API error: ${raw}`);
     } catch (error) {
       if (error instanceof Error) {
@@ -593,7 +599,7 @@ export async function getPaddleSubscription(subscriptionId: string) {
 
 export async function getPaddleTransaction(transactionId: string) {
   const response = await paddleRequest<PaddleApiResponse<PaddleTransaction>>(
-    `/transactions/${encodeURIComponent(transactionId)}?include=customer`
+    `/transactions/${encodeURIComponent(transactionId)}`
   );
 
   return response.data;
