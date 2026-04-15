@@ -18,6 +18,10 @@ function isMissingTableError(error: unknown) {
   return error instanceof Error && /does not exist|relation .* does not exist/i.test(error.message);
 }
 
+function isDuplicateContext(left: Record<string, unknown>, right: Record<string, unknown>) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export async function createCronLog(cronName: AdminCronName) {
   try {
     const admin = createSupabaseAdminClient();
@@ -82,15 +86,38 @@ export async function logAdminError(input: {
   websiteId?: string | null;
   userId?: string | null;
   context?: Record<string, unknown>;
+  dedupeWindowMinutes?: number;
 }) {
   try {
     const admin = createSupabaseAdminClient();
+    const context = input.context ?? {};
+
+    if (input.dedupeWindowMinutes && input.dedupeWindowMinutes > 0) {
+      const windowStart = new Date(Date.now() - input.dedupeWindowMinutes * 60_000).toISOString();
+      const { data: recentRows } = await admin
+        .from("admin_error_logs")
+        .select("error_message, context")
+        .eq("error_type", input.errorType)
+        .eq("website_id", input.websiteId ?? null)
+        .eq("user_id", input.userId ?? null)
+        .gte("created_at", windowStart)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      const duplicateExists = ((recentRows ?? []) as Array<{ error_message: string; context: Record<string, unknown> }>)
+        .some((row) => row.error_message === input.errorMessage && isDuplicateContext(row.context ?? {}, context));
+
+      if (duplicateExists) {
+        return;
+      }
+    }
+
     await admin.from("admin_error_logs").insert({
       error_type: input.errorType,
       error_message: input.errorMessage,
       website_id: input.websiteId ?? null,
       user_id: input.userId ?? null,
-      context: input.context ?? {}
+      context
     });
   } catch (error) {
     if (!isMissingTableError(error)) {

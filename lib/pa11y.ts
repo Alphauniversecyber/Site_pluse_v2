@@ -1,13 +1,9 @@
 import "server-only";
 
-import { createRequire } from "node:module";
-
 import axeCore from "axe-core";
 
 import type { ScanIssue, ScanRecommendation } from "@/types";
 import { ACCESSIBILITY_SCANNER_UNAVAILABLE_MESSAGE, isAccessibilityScannerUnavailableError } from "@/lib/scan-errors";
-
-const nodeRequire = createRequire(import.meta.url);
 
 function parsePositiveInt(raw: string | undefined, fallback: number) {
   if (!raw) {
@@ -21,44 +17,81 @@ function parsePositiveInt(raw: string | undefined, fallback: number) {
 const PA11Y_NAVIGATION_TIMEOUT_MS = parsePositiveInt(process.env.PA11Y_NAVIGATION_TIMEOUT_MS, 25_000);
 const PA11Y_AUDIT_TIMEOUT_MS = parsePositiveInt(process.env.PA11Y_AUDIT_TIMEOUT_MS, 20_000);
 
-type Pa11yRunner = (
-  url: string,
-  options: Record<string, unknown>
-) => Promise<{
-  issues: any[];
-}>;
-
-type PuppeteerModule = {
-  launch: (options: Record<string, unknown>) => Promise<any>;
+type BrowserPage = {
+  addScriptTag: (options: { content: string }) => Promise<unknown>;
+  evaluate: <T>(pageFunction: () => T | Promise<T>) => Promise<T>;
+  goto: (
+    url: string,
+    options: {
+      waitUntil: "networkidle2";
+      timeout: number;
+    }
+  ) => Promise<unknown>;
+  setBypassCSP: (enabled: boolean) => Promise<void>;
 };
 
-let pa11yRunner: Pa11yRunner | null = null;
-let puppeteerModule: PuppeteerModule | null = null;
+type BrowserInstance = {
+  close: () => Promise<void>;
+  newPage: () => Promise<BrowserPage>;
+};
 
-function requireRuntimeDefault<T>(specifier: string): T {
-  const loaded = nodeRequire(specifier) as T | { default?: T };
+type AxeNode = {
+  failureSummary?: string;
+  target?: string[];
+};
 
-  if (loaded && typeof loaded === "object" && "default" in loaded && loaded.default) {
-    return loaded.default;
+type AxeViolation = {
+  description?: string;
+  help?: string;
+  helpUrl?: string;
+  id?: string;
+  impact?: string | null;
+  nodes?: AxeNode[];
+};
+
+type AxeRunResult = {
+  violations?: AxeViolation[];
+};
+
+async function getBrowser(): Promise<BrowserInstance> {
+  const launchArgs = ["--no-sandbox", "--disable-setuid-sandbox"];
+  const useServerlessChromium =
+    process.env.VERCEL === "1" ||
+    process.env.VERCEL === "true" ||
+    Boolean(process.env.AWS_REGION) ||
+    process.platform === "linux";
+
+  if (useServerlessChromium) {
+    const [{ default: chromium }, { default: puppeteerCore }] = await Promise.all([
+      import("@sparticuz/chromium"),
+      import("puppeteer-core")
+    ]);
+    const headlessMode = "shell" as const;
+
+    return puppeteerCore.launch({
+      headless: headlessMode,
+      args: puppeteerCore.defaultArgs({
+        args: [...chromium.args, ...launchArgs],
+        headless: headlessMode
+      }),
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || (await chromium.executablePath()),
+      defaultViewport: {
+        width: 1280,
+        height: 800
+      }
+    });
   }
 
-  return loaded as T;
-}
+  const { default: puppeteer } = await import("puppeteer");
 
-function getPa11yRunner() {
-  if (!pa11yRunner) {
-    pa11yRunner = requireRuntimeDefault<Pa11yRunner>("pa11y");
-  }
-
-  return pa11yRunner;
-}
-
-function getPuppeteerModule() {
-  if (!puppeteerModule) {
-    puppeteerModule = requireRuntimeDefault<PuppeteerModule>("puppeteer");
-  }
-
-  return puppeteerModule;
+  return puppeteer.launch({
+    headless: true,
+    args: launchArgs,
+    defaultViewport: {
+      width: 1280,
+      height: 800
+    }
+  });
 }
 
 function mapImpactToSeverity(impact?: string | null): "low" | "medium" | "high" {
@@ -73,90 +106,90 @@ function mapImpactToSeverity(impact?: string | null): "low" | "medium" | "high" 
   return "low";
 }
 
+function getViolationMetric(violation: AxeViolation) {
+  const firstTarget = violation.nodes?.[0]?.target?.[0];
+
+  if (firstTarget) {
+    return firstTarget;
+  }
+
+  return `${violation.nodes?.length ?? 0} affected node(s)`;
+}
+
+async function runAxeAudit(page: BrowserPage) {
+  const auditResult = page.evaluate(async (): Promise<AxeRunResult> => {
+    const axe = (window as typeof window & {
+      axe: {
+        run: (node?: Element | Document, options?: Record<string, unknown>) => Promise<AxeRunResult>;
+      };
+    }).axe;
+
+    return axe.run(document, {
+      runOnly: {
+        type: "tag",
+        values: ["wcag2a", "wcag2aa", "best-practice"]
+      }
+    });
+  });
+
+  return Promise.race([
+    auditResult,
+    new Promise<AxeRunResult>((_, reject) => {
+      setTimeout(() => reject(new Error("Accessibility audit timed out.")), PA11Y_AUDIT_TIMEOUT_MS);
+    })
+  ]);
+}
+
 export async function runAccessibilityScan(url: string) {
-  let browser: Awaited<ReturnType<PuppeteerModule["launch"]>> | null = null;
+  let browser: BrowserInstance | null = null;
 
   try {
-    const puppeteer = getPuppeteerModule();
-    const pa11y = getPa11yRunner();
-
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"]
-    });
+    browser = await getBrowser();
 
     const page = await browser.newPage();
+    await page.setBypassCSP(true);
     await page.goto(url, {
       waitUntil: "networkidle2",
       timeout: PA11Y_NAVIGATION_TIMEOUT_MS
-    });
-
-    const pa11yResults = await pa11y(url, {
-      browser,
-      standard: "WCAG2AA",
-      timeout: PA11Y_AUDIT_TIMEOUT_MS,
-      includeNotices: false,
-      includeWarnings: true
     });
 
     await page.addScriptTag({
       content: axeCore.source
     });
 
-    const axeResults = await page.evaluate(async () => {
-      const axe = (window as typeof window & {
-        axe: {
-          run: (node?: Element | Document, options?: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        };
-      }).axe;
-
-      return axe.run(document, {
-        runOnly: {
-          type: "tag",
-          values: ["wcag2a", "wcag2aa", "best-practice"]
-        }
-      });
-    });
-
-    const pa11yIssues = pa11yResults.issues.map((issue: any) => ({
-      source: "pa11y",
-      code: issue.code,
-      message: issue.message,
-      selector: issue.selector,
-      type: issue.type,
-      typeCode: issue.typeCode,
-      severity: mapImpactToSeverity(issue.type)
+    const axeResults = await runAxeAudit(page);
+    const axeViolations = (axeResults.violations ?? []).map((violation) => ({
+      source: "axe",
+      id: violation.id ?? "accessibility-violation",
+      impact: violation.impact ?? null,
+      description: violation.description ?? "A WCAG accessibility issue was detected.",
+      help: violation.help ?? "Fix accessibility issue",
+      helpUrl: violation.helpUrl ?? null,
+      nodes: violation.nodes?.length ?? 0,
+      selectors: violation.nodes?.flatMap((node) => node.target ?? []).slice(0, 5) ?? [],
+      failureSummaries:
+        violation.nodes
+          ?.map((node) => node.failureSummary?.trim())
+          .filter((value): value is string => Boolean(value))
+          .slice(0, 3) ?? [],
+      severity: mapImpactToSeverity(violation.impact ?? null)
     }));
 
-    const axeViolations = ((axeResults.violations as Array<Record<string, unknown>>) ?? []).map(
-      (violation) => ({
-        source: "axe",
-        id: violation.id,
-        impact: violation.impact,
-        description: violation.description,
-        help: violation.help,
-        helpUrl: violation.helpUrl,
-        nodes: Array.isArray(violation.nodes) ? violation.nodes.length : 0,
-        severity: mapImpactToSeverity((violation.impact as string | undefined) ?? null)
-      })
-    );
+    const issues: ScanIssue[] = axeViolations.slice(0, 10).map((violation, index) => {
+      const sourceViolation = axeResults.violations?.[index] ?? {};
 
-    const issues: ScanIssue[] = [
-      ...pa11yIssues.slice(0, 10).map((issue: any, index: number) => ({
-        id: `pa11y-${index}`,
-        title: issue.code,
-        description: issue.message,
-        severity: issue.severity,
-        metric: issue.selector
-      })),
-      ...axeViolations.slice(0, 10).map((violation, index) => ({
+      return {
         id: `axe-${index}`,
         title: String(violation.help ?? violation.id ?? "Accessibility violation"),
-        description: String(violation.description ?? "A WCAG violation was detected."),
+        description: String(
+          violation.failureSummaries[0] ??
+            violation.description ??
+            "A WCAG accessibility issue was detected."
+        ),
         severity: violation.severity,
-        metric: `${violation.nodes} affected node(s)`
-      }))
-    ];
+        metric: getViolationMetric(sourceViolation)
+      };
+    });
 
     const recommendations: ScanRecommendation[] = axeViolations.slice(0, 10).map((violation, index) => ({
       id: `accessibility-rec-${index}`,
@@ -167,11 +200,10 @@ export async function runAccessibilityScan(url: string) {
     }));
 
     return {
-      accessibilityViolations: [...pa11yIssues, ...axeViolations],
+      accessibilityViolations: axeViolations,
       issues,
       recommendations,
       raw: {
-        pa11y: pa11yResults,
         axe: axeResults
       },
       error: null as string | null

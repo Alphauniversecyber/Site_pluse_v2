@@ -17,7 +17,10 @@ const nextConfig = {
     ],
     outputFileTracingIncludes: {
       "/api/cron/process-reports": ["node_modules/@sparticuz/chromium/**/*"],
-      "/api/reports/generate": ["node_modules/@sparticuz/chromium/**/*"]
+      "/api/reports/generate": ["node_modules/@sparticuz/chromium/**/*"],
+      "/api/cron/process-scans": ["node_modules/@sparticuz/chromium/**/*"],
+      "/api/preview-scan": ["node_modules/@sparticuz/chromium/**/*"],
+      "/api/scan/run": ["node_modules/@sparticuz/chromium/**/*"]
     }
   },
   images: {

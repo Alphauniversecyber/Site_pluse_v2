@@ -7,6 +7,9 @@ import { logAdminError } from "@/lib/admin/logging";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const SEO_AUDIT_CACHE_HOURS = 24;
+const SEO_AUDIT_TIMEOUT_MS = 20_000;
+const SEO_AUDIT_FETCH_ATTEMPTS = 3;
+const SEO_AUDIT_RETRY_DELAY_MS = 1_500;
 
 function isFresh(timestamp: string, hours: number) {
   return Date.now() - new Date(timestamp).getTime() < hours * 60 * 60 * 1000;
@@ -48,16 +51,59 @@ function buildSuggestion(title: string, description: string, severity: Severity)
   return { title, description, severity };
 }
 
-async function fetchHtml(url: string) {
-  const response = await fetch(url, {
-    cache: "no-store",
-    signal: AbortSignal.timeout(20000),
-    headers: { "user-agent": "SitePulse SEO Audit/1.0" }
-  });
-  if (!response.ok) {
-    throw new Error(`SEO audit request failed with status ${response.status}.`);
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientSeoFetchError(message: string) {
+  return /fetch failed|timeout|timed out|network|socket|econn|enotfound|eai_again|tls/i.test(message);
+}
+
+function normalizeSeoFetchError(error: Error) {
+  if (/fetch failed/i.test(error.message)) {
+    return new Error("Unable to fetch the page HTML for SEO audit. The site may be blocking automated requests.");
   }
-  return response.text();
+
+  return error;
+}
+
+async function fetchHtml(url: string) {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= SEO_AUDIT_FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        redirect: "follow",
+        signal: AbortSignal.timeout(SEO_AUDIT_TIMEOUT_MS),
+        headers: {
+          "user-agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 SitePulseSEOAudit/1.0",
+          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "accept-language": "en-US,en;q=0.9",
+          "cache-control": "no-cache",
+          pragma: "no-cache"
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`SEO audit request failed with status ${response.status}.`);
+      }
+
+      return response.text();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("SEO audit fetch failed.");
+
+      if (attempt < SEO_AUDIT_FETCH_ATTEMPTS && isTransientSeoFetchError(lastError.message)) {
+        await sleep(SEO_AUDIT_RETRY_DELAY_MS * attempt);
+        continue;
+      }
+
+      throw normalizeSeoFetchError(lastError);
+    }
+  }
+
+  throw normalizeSeoFetchError(lastError ?? new Error("SEO audit fetch failed."));
 }
 
 function parseSchemaTypes(values: string[]) {
@@ -257,7 +303,8 @@ export async function ensureSeoAudit(input: {
       context: {
         scanId: input.scanId,
         url: input.url
-      }
+      },
+      dedupeWindowMinutes: 30
     });
     throw error;
   }
