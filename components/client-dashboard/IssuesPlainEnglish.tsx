@@ -3,9 +3,12 @@
 import { Accessibility, Gauge, Search, Shield, Sparkles } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
-import type { ClientDashboardIssue } from "@/types";
+import type { ClientDashboardIssue, GaDashboardData, GscDashboardData } from "@/types";
 import { fetchJson } from "@/lib/api-client";
-import { getIssueSpecificNextStep } from "@/lib/client-dashboard-audit-copy";
+import {
+  buildClientDashboardRewriteContext,
+  GOOGLE_CONTEXT_BANNER_COPY
+} from "@/lib/client-dashboard-rewrite-context";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -91,20 +94,49 @@ function categoryIcon(category: PlainEnglishIssue["category"]) {
   return Sparkles;
 }
 
+function inferIssueCategory(issue: Pick<ClientDashboardIssue, "id" | "title" | "description">): PlainEnglishIssue["category"] {
+  const haystack = `${issue.id} ${issue.title} ${issue.description}`.toLowerCase();
+
+  if (
+    /(seo|meta|schema|search|crawl|index|sitemap|canonical|title tag|description tag|broken link|redirect)/.test(
+      haystack
+    )
+  ) {
+    return "seo";
+  }
+
+  if (/(accessib|aria|contrast|keyboard|screen reader|alt text|label)/.test(haystack)) {
+    return "accessibility";
+  }
+
+  if (/(security|ssl|header|https|hsts|csp|x-frame|x-content|permission-policy)/.test(haystack)) {
+    return "security";
+  }
+
+  if (
+    /(performance|speed|lcp|cls|tbt|render|cache|script|image|font|payload|load|javascript|css|server response)/.test(
+      haystack
+    )
+  ) {
+    return "performance";
+  }
+
+  return "best_practices";
+}
+
 function toFallbackIssue(issue: ClientDashboardIssue): DisplayIssue {
+  const rawDescription = stripMarkdown(issue.description) || stripMarkdown(issue.title) || "This item needs review.";
+
   return {
     id: issue.id,
     severity: issue.severity,
     affectedPages: issue.affectedPages,
     urls: issue.urls,
     title: issue.title,
-    description: issue.description,
-    whatToDo: getIssueSpecificNextStep(issue),
-    realWorldImpact:
-      issue.severity === "info"
-        ? "This is a smaller improvement opportunity that can still make the site easier to understand and trust."
-        : "This can make the site harder to find, use, or trust, which can reduce enquiries and sales.",
-    category: "best_practices",
+    description: rawDescription,
+    whatToDo: rawDescription,
+    realWorldImpact: rawDescription,
+    category: inferIssueCategory(issue),
     icon: ""
   };
 }
@@ -116,7 +148,7 @@ function mergeIssue(issue: ClientDashboardIssue, rewritten?: Partial<PlainEnglis
     ...fallback,
     title: rewritten?.title?.trim() || fallback.title,
     description: rewritten?.description?.trim() || fallback.description,
-    whatToDo: getIssueSpecificNextStep(issue),
+    whatToDo: rewritten?.whatToDo?.trim() || fallback.whatToDo,
     realWorldImpact: rewritten?.realWorldImpact?.trim() || fallback.realWorldImpact,
     category: rewritten?.category ?? fallback.category,
     icon: rewritten?.icon?.trim() || fallback.icon
@@ -157,10 +189,16 @@ function IssueSkeletonCard() {
 
 export function Issues({
   issues,
-  hasScan
+  hasScan,
+  websiteUrl,
+  gsc,
+  ga
 }: {
   issues: ClientDashboardIssue[];
   hasScan: boolean;
+  websiteUrl: string;
+  gsc: GscDashboardData;
+  ga: GaDashboardData;
 }) {
   const [filter, setFilter] = useState<IssueFilter>("all");
   const [rewrittenIssues, setRewrittenIssues] = useState<DisplayIssue[]>(() => issues.map(toFallbackIssue));
@@ -175,6 +213,15 @@ export function Issues({
       info: issues.filter((issue) => issue.severity === "info").length
     }),
     [issues]
+  );
+  const { context: rewriteContext, showGoogleConnectBanner } = useMemo(
+    () =>
+      buildClientDashboardRewriteContext({
+        websiteUrl,
+        gsc,
+        ga
+      }),
+    [ga, gsc, websiteUrl]
   );
 
   useEffect(() => {
@@ -196,7 +243,9 @@ export function Issues({
           method: "POST",
           body: JSON.stringify({
             type: "issues",
+            context: rewriteContext,
             items: issues.map((issue) => ({
+              id: issue.id,
               title: issue.title,
               description: issue.description,
               severity: issue.severity
@@ -233,7 +282,7 @@ export function Issues({
       active = false;
       controller.abort();
     };
-  }, [fallbackIssues, issues]);
+  }, [fallbackIssues, issues, rewriteContext]);
 
   const filteredIssues = useMemo(
     () =>
@@ -267,6 +316,12 @@ export function Issues({
 
   return (
     <div className="space-y-6">
+      {showGoogleConnectBanner ? (
+        <div className="rounded-[1.6rem] border border-sky-500/20 bg-sky-500/10 px-5 py-4 text-sm text-sky-700 dark:text-sky-100">
+          {GOOGLE_CONTEXT_BANNER_COPY}
+        </div>
+      ) : null}
+
       <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
         <p className="text-sm leading-6 text-muted-foreground">
           These are the biggest issues most likely to slow down visibility, trust, or conversions.

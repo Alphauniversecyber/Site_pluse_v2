@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { GscDashboardData, GscDailyPoint, GscSitemapRecord, GscTopQuery } from "@/types";
+import type { GscDashboardData, GscDailyPoint, GscSitemapRecord, GscTopPage, GscTopQuery } from "@/types";
 
 class GoogleApiError extends Error {
   status: number;
@@ -217,6 +217,7 @@ export function buildEmptyGscData(input: {
     },
     daily: [],
     topQueries: [],
+    topPages: [],
     sitemaps: []
   } satisfies GscDashboardData;
 }
@@ -254,7 +255,7 @@ export async function fetchGscDashboardData(input: {
   const previousEnd = shiftDays(currentStart, -1);
   const previousStart = shiftDays(previousEnd, -27);
 
-  const [dailyResponse, previousResponse, topQueriesResponse, sitemapResponse] = await Promise.all([
+  const [dailyResponse, previousResponse, topQueriesResponse, topPagesResponse, sitemapResponse] = await Promise.all([
     querySearchAnalytics({
       accessToken: input.accessToken,
       property: input.property,
@@ -276,6 +277,14 @@ export async function fetchGscDashboardData(input: {
       endDate: formatDate(endDate),
       dimensions: ["query"],
       rowLimit: 8
+    }),
+    querySearchAnalytics({
+      accessToken: input.accessToken,
+      property: input.property,
+      startDate: formatDate(currentStart),
+      endDate: formatDate(endDate),
+      dimensions: ["page"],
+      rowLimit: 5
     }),
     fetch(
       `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(input.property)}/sitemaps`,
@@ -339,6 +348,13 @@ export async function fetchGscDashboardData(input: {
     ctr: Number(((row.ctr ?? 0) * 100).toFixed(2)),
     position: Number((row.position ?? 0).toFixed(1))
   }));
+  const topPages: GscTopPage[] = (topPagesResponse.rows ?? []).map((row) => ({
+    page: row.keys?.[0] ?? "/",
+    clicks: Math.round(row.clicks ?? 0),
+    impressions: Math.round(row.impressions ?? 0),
+    ctr: Number(((row.ctr ?? 0) * 100).toFixed(2)),
+    position: Number((row.position ?? 0).toFixed(1))
+  }));
 
   return {
     connected: true,
@@ -361,6 +377,7 @@ export async function fetchGscDashboardData(input: {
     },
     daily,
     topQueries,
+    topPages,
     sitemaps
   } satisfies GscDashboardData;
 }

@@ -557,6 +557,14 @@ export interface GscTopQuery {
   position: number;
 }
 
+export interface GscTopPage {
+  page: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
 export interface GscSitemapRecord {
   path: string;
   submitted: number;
@@ -586,6 +594,7 @@ export interface GscDashboardData {
   };
   daily: GscDailyPoint[];
   topQueries: GscTopQuery[];
+  topPages: GscTopPage[];
   sitemaps: GscSitemapRecord[];
 }
 
@@ -594,12 +603,14 @@ export interface GaDailyPoint {
   label: string;
   sessions: number;
   bounceRate: number;
+  averageSessionDuration: number;
 }
 
 export interface GaTopPage {
   page: string;
   sessions: number;
   bounceRate: number;
+  averageSessionDuration: number;
 }
 
 export interface DeviceBreakdownPoint {
@@ -621,16 +632,36 @@ export interface GaDashboardData {
   summary: {
     sessions: number;
     bounceRate: number;
+    averageSessionDuration: number;
   };
   comparison: {
     sessions: number;
     bounceRate: number;
+    averageSessionDuration: number;
   };
   daily: GaDailyPoint[];
   sparkline: number[];
   topPages: GaTopPage[];
   devices: DeviceBreakdownPoint[];
   countries: CountryBreakdownPoint[];
+}
+
+export interface ClientDashboardRewriteContext {
+  websiteUrl: string;
+  includeGoogleInsights: boolean;
+  gsc: {
+    connected: boolean;
+    live: boolean;
+    summary: Pick<GscDashboardData["summary"], "clicks" | "impressions" | "ctr" | "avgPosition">;
+    topQueries: GscTopQuery[];
+    topPages: GscTopPage[];
+  };
+  ga: {
+    connected: boolean;
+    live: boolean;
+    summary: Pick<GaDashboardData["summary"], "sessions" | "bounceRate" | "averageSessionDuration">;
+    topPages: GaTopPage[];
+  };
 }
 
 export interface ClientDashboardIssue {

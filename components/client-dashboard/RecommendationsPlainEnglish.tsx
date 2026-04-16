@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 
-import type { ClientDashboardRecommendation } from "@/types";
+import type { ClientDashboardRecommendation, GaDashboardData, GscDashboardData } from "@/types";
 import { fetchJson } from "@/lib/api-client";
-import { getRecommendationSpecificWhy } from "@/lib/client-dashboard-audit-copy";
+import {
+  buildClientDashboardRewriteContext,
+  GOOGLE_CONTEXT_BANNER_COPY
+} from "@/lib/client-dashboard-rewrite-context";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -108,12 +111,14 @@ function fallbackEffort(priority: ClientDashboardRecommendation["priority"]): Pl
 function toFallbackRecommendation(
   recommendation: ClientDashboardRecommendation
 ): DisplayRecommendation {
+  const rawDescription = stripMarkdown(recommendation.action) || stripMarkdown(recommendation.title) || "This item needs review.";
+
   return {
     id: recommendation.id,
     priority: recommendation.priority,
     title: recommendation.title,
-    whatToDo: recommendation.action,
-    whyItMatters: getRecommendationSpecificWhy(recommendation),
+    whatToDo: rawDescription,
+    whyItMatters: rawDescription,
     estimatedTime: fallbackEstimatedTime(recommendation.priority),
     effort: fallbackEffort(recommendation.priority)
   };
@@ -129,7 +134,7 @@ function mergeRecommendation(
     ...fallback,
     title: rewritten?.title?.trim() || fallback.title,
     whatToDo: rewritten?.whatToDo?.trim() || fallback.whatToDo,
-    whyItMatters: getRecommendationSpecificWhy(recommendation),
+    whyItMatters: rewritten?.whyItMatters?.trim() || fallback.whyItMatters,
     estimatedTime: rewritten?.estimatedTime?.trim() || fallback.estimatedTime,
     effort:
       rewritten?.effort === "Easy" || rewritten?.effort === "Medium" || rewritten?.effort === "Hard"
@@ -171,11 +176,17 @@ function RecommendationSkeletonCard() {
 export function Recommendations({
   token,
   recommendations,
-  hasScan
+  hasScan,
+  websiteUrl,
+  gsc,
+  ga
 }: {
   token: string;
   recommendations: ClientDashboardRecommendation[];
   hasScan: boolean;
+  websiteUrl: string;
+  gsc: GscDashboardData;
+  ga: GaDashboardData;
 }) {
   const storageKey = `sitepulse-review-state:${token}`;
   const [reviewedIds, setReviewedIds] = useState<string[]>([]);
@@ -187,6 +198,15 @@ export function Recommendations({
   const fallbackRecommendations = useMemo(
     () => recommendations.map(toFallbackRecommendation),
     [recommendations]
+  );
+  const { context: rewriteContext, showGoogleConnectBanner } = useMemo(
+    () =>
+      buildClientDashboardRewriteContext({
+        websiteUrl,
+        gsc,
+        ga
+      }),
+    [ga, gsc, websiteUrl]
   );
 
   useEffect(() => {
@@ -223,7 +243,9 @@ export function Recommendations({
           method: "POST",
           body: JSON.stringify({
             type: "recommendations",
+            context: rewriteContext,
             items: recommendations.map((recommendation) => ({
+              id: recommendation.id,
               title: recommendation.title,
               description: recommendation.action,
               priority: recommendation.priority
@@ -264,7 +286,7 @@ export function Recommendations({
       active = false;
       controller.abort();
     };
-  }, [fallbackRecommendations, recommendations]);
+  }, [fallbackRecommendations, recommendations, rewriteContext]);
 
   const reviewedSet = useMemo(() => new Set(reviewedIds), [reviewedIds]);
   const reviewedCount = useMemo(
@@ -310,6 +332,12 @@ export function Recommendations({
 
   return (
     <div className="space-y-6">
+      {showGoogleConnectBanner ? (
+        <div className="rounded-[1.6rem] border border-sky-500/20 bg-sky-500/10 px-5 py-4 text-sm text-sky-700 dark:text-sky-100">
+          {GOOGLE_CONTEXT_BANNER_COPY}
+        </div>
+      ) : null}
+
       <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>

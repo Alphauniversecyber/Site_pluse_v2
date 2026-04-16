@@ -192,13 +192,24 @@ export function TabNav({
   const content = useMemo(() => {
     switch (activeTab) {
       case "issues":
-        return <Issues issues={dashboard.issues} hasScan={dashboard.hasScan} />;
+        return (
+          <Issues
+            issues={dashboard.issues}
+            hasScan={dashboard.hasScan}
+            websiteUrl={dashboard.website.url}
+            gsc={gsc}
+            ga={ga}
+          />
+        );
       case "recommendations":
         return (
           <Recommendations
             token={dashboard.token}
             recommendations={dashboard.recommendations}
             hasScan={dashboard.hasScan}
+            websiteUrl={dashboard.website.url}
+            gsc={gsc}
+            ga={ga}
           />
         );
       case "google-signals":
@@ -233,6 +244,7 @@ export function TabNav({
     dashboard.recommendations,
     dashboard.statusLabel,
     dashboard.token,
+    dashboard.website.url,
     ga,
     gaLoading,
     gsc,

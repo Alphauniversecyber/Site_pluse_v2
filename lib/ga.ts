@@ -87,10 +87,15 @@ function summarizeDaily(points: GaDailyPoint[]) {
     sessions > 0
       ? points.reduce((sum, point) => sum + point.sessions * point.bounceRate, 0) / sessions
       : 0;
+  const weightedSessionDuration =
+    sessions > 0
+      ? points.reduce((sum, point) => sum + point.sessions * point.averageSessionDuration, 0) / sessions
+      : 0;
 
   return {
     sessions,
-    bounceRate: Number(weightedBounce.toFixed(1))
+    bounceRate: Number(weightedBounce.toFixed(1)),
+    averageSessionDuration: Number(weightedSessionDuration.toFixed(1))
   };
 }
 
@@ -163,11 +168,13 @@ export function buildEmptyGaData(input: {
     lastSyncedAt: null,
     summary: {
       sessions: 0,
-      bounceRate: 0
+      bounceRate: 0,
+      averageSessionDuration: 0
     },
     comparison: {
       sessions: 0,
-      bounceRate: 0
+      bounceRate: 0,
+      averageSessionDuration: 0
     },
     daily: [],
     sparkline: [],
@@ -249,7 +256,7 @@ export async function fetchGaDashboardData(input: {
         startDate: formatDate(currentStart),
         endDate: formatDate(endDate),
         dimensions: ["date"],
-        metrics: ["sessions", "bounceRate"]
+        metrics: ["sessions", "bounceRate", "averageSessionDuration"]
       }),
       runGaReport({
         accessToken: input.accessToken,
@@ -257,7 +264,7 @@ export async function fetchGaDashboardData(input: {
         startDate: formatDate(previousStart),
         endDate: formatDate(previousEnd),
         dimensions: ["date"],
-        metrics: ["sessions", "bounceRate"]
+        metrics: ["sessions", "bounceRate", "averageSessionDuration"]
       }),
       runGaReport({
         accessToken: input.accessToken,
@@ -265,7 +272,7 @@ export async function fetchGaDashboardData(input: {
         startDate: formatDate(currentStart),
         endDate: formatDate(endDate),
         dimensions: ["pagePath"],
-        metrics: ["sessions", "bounceRate"],
+        metrics: ["sessions", "bounceRate", "averageSessionDuration"],
         limit: 5,
         orderByMetric: "sessions"
       }),
@@ -297,7 +304,8 @@ export async function fetchGaDashboardData(input: {
       date: date.date,
       label: date.label,
       sessions: Number(row.metricValues?.[0]?.value ?? 0),
-      bounceRate: Number(Number(row.metricValues?.[1]?.value ?? 0).toFixed(1))
+      bounceRate: Number(Number(row.metricValues?.[1]?.value ?? 0).toFixed(1)),
+      averageSessionDuration: Number(Number(row.metricValues?.[2]?.value ?? 0).toFixed(1))
     };
   });
   const previousDaily: GaDailyPoint[] = (previousResponse.rows ?? []).map((row) => {
@@ -306,7 +314,8 @@ export async function fetchGaDashboardData(input: {
       date: date.date,
       label: date.label,
       sessions: Number(row.metricValues?.[0]?.value ?? 0),
-      bounceRate: Number(Number(row.metricValues?.[1]?.value ?? 0).toFixed(1))
+      bounceRate: Number(Number(row.metricValues?.[1]?.value ?? 0).toFixed(1)),
+      averageSessionDuration: Number(Number(row.metricValues?.[2]?.value ?? 0).toFixed(1))
     };
   });
   const currentSummary = summarizeDaily(daily);
@@ -314,7 +323,8 @@ export async function fetchGaDashboardData(input: {
   const topPages: GaTopPage[] = (topPagesResponse.rows ?? []).map((row) => ({
     page: row.dimensionValues?.[0]?.value ?? "/",
     sessions: Number(row.metricValues?.[0]?.value ?? 0),
-    bounceRate: Number(Number(row.metricValues?.[1]?.value ?? 0).toFixed(1))
+    bounceRate: Number(Number(row.metricValues?.[1]?.value ?? 0).toFixed(1)),
+    averageSessionDuration: Number(Number(row.metricValues?.[2]?.value ?? 0).toFixed(1))
   }));
   const deviceTotal = (devicesResponse.rows ?? []).reduce(
     (sum, row) => sum + Number(row.metricValues?.[0]?.value ?? 0),
@@ -341,7 +351,11 @@ export async function fetchGaDashboardData(input: {
     summary: currentSummary,
     comparison: {
       sessions: percentDelta(currentSummary.sessions, previousSummary.sessions),
-      bounceRate: improvementDelta(currentSummary.bounceRate, previousSummary.bounceRate)
+      bounceRate: improvementDelta(currentSummary.bounceRate, previousSummary.bounceRate),
+      averageSessionDuration: percentDelta(
+        currentSummary.averageSessionDuration,
+        previousSummary.averageSessionDuration
+      )
     },
     daily,
     sparkline: daily.map((point) => point.sessions),
