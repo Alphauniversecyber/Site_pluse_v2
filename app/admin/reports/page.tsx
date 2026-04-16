@@ -4,9 +4,12 @@ import { AdminEmptyState } from "@/components/admin/admin-empty-state";
 import { AdminErrorNotice } from "@/components/admin/admin-error-notice";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { AdminPagination } from "@/components/admin/admin-pagination";
+import { AdminActionButton } from "@/components/admin/admin-action-button";
 import { requireAdminPageAccess } from "@/lib/admin/auth";
 import { getAdminReportsData } from "@/lib/admin/data";
 import { formatAdminDate, parsePageParam, parseTextParam } from "@/lib/admin/format";
+
+import { runAdminEmailRecoveryAction } from "../emails/actions";
 
 function buildHref(params: URLSearchParams, page: number) {
   const next = new URLSearchParams(params);
@@ -23,6 +26,9 @@ export default async function AdminReportsPage({
 
   const filter = parseTextParam(searchParams?.filter) || "all";
   const page = parsePageParam(searchParams?.page, 1);
+  const actionType = parseTextParam(searchParams?.actionType) || "";
+  const actionStatus = parseTextParam(searchParams?.actionStatus) || "";
+  const actionMessage = parseTextParam(searchParams?.actionMessage) || "";
   const data = await getAdminReportsData({ filter, page });
   const params = new URLSearchParams();
   if (filter) params.set("filter", filter);
@@ -35,6 +41,19 @@ export default async function AdminReportsPage({
       />
 
       <AdminErrorNotice message={data.error} />
+
+      {actionMessage ? (
+        <div
+          className={`mb-6 rounded-2xl border px-4 py-3 text-sm ${
+            actionStatus === "success"
+              ? "border-[#14532D] bg-[#052E16] text-[#86EFAC]"
+              : "border-[#7F1D1D] bg-[#450A0A] text-[#FCA5A5]"
+          }`}
+        >
+          {actionType ? `${actionType}: ` : null}
+          {actionMessage}
+        </div>
+      ) : null}
 
       <div className="mb-6 grid gap-4 md:grid-cols-2">
         <AdminCard>
@@ -80,6 +99,7 @@ export default async function AdminReportsPage({
                     <th className="px-4 py-3 font-medium">PDF</th>
                     <th className="px-4 py-3 font-medium">Type</th>
                     <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -98,6 +118,23 @@ export default async function AdminReportsPage({
                       <td className="px-4 py-4 text-zinc-300">{row.reportType}</td>
                       <td className="px-4 py-4">
                         <AdminBadge label={row.status} tone={row.status === "sent" ? "green" : "red"} />
+                      </td>
+                      <td className="px-4 py-4">
+                        {row.status === "failed" ? (
+                          <form action={runAdminEmailRecoveryAction}>
+                            <input type="hidden" name="actionType" value="send-report" />
+                            <input type="hidden" name="websiteId" value={row.websiteId} />
+                            <input type="hidden" name="returnTo" value="/admin/reports" />
+                            <input type="hidden" name="page" value={String(page)} />
+                            <input type="hidden" name="filter" value={filter} />
+                            <input type="hidden" name="monitorUser" value="" />
+                            <input type="hidden" name="monitorStatus" value="all" />
+                            <input type="hidden" name="monitorDate" value="" />
+                            <AdminActionButton idleLabel="Send Now" pendingLabel="Sending..." className="px-3 py-2 text-xs" />
+                          </form>
+                        ) : (
+                          <span className="text-xs text-zinc-500">Already sent</span>
+                        )}
                       </td>
                     </tr>
                   ))}

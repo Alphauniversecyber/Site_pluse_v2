@@ -10,9 +10,11 @@ export async function runAdminCronAction(formData: FormData) {
   requireAdminPageAccess();
 
   const cronName = String(formData.get("cronName") ?? "");
+  let target = "/admin/crons";
 
   if (!ADMIN_CRON_NAMES.includes(cronName as AdminCronName)) {
-    redirect("/admin/crons?status=failed&message=Invalid+cron+name.");
+    target = "/admin/crons?status=failed&message=Invalid+cron+name.";
+    redirect(target);
   }
 
   try {
@@ -23,7 +25,7 @@ export async function runAdminCronAction(formData: FormData) {
       message: result.message
     });
 
-    redirect(`/admin/crons?${query.toString()}`);
+    target = `/admin/crons?${query.toString()}`;
   } catch (error) {
     const query = new URLSearchParams({
       run: cronName,
@@ -31,6 +33,8 @@ export async function runAdminCronAction(formData: FormData) {
       message: error instanceof Error ? error.message : "Unable to trigger cron."
     });
 
-    redirect(`/admin/crons?${query.toString()}`);
+    target = `/admin/crons?${query.toString()}`;
   }
+
+  redirect(target);
 }

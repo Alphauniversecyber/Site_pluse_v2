@@ -4,6 +4,7 @@ import { AdminEmptyState } from "@/components/admin/admin-empty-state";
 import { AdminErrorNotice } from "@/components/admin/admin-error-notice";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { AdminSeriesChart } from "@/components/admin/admin-series-chart";
+import { AdminActionButton } from "@/components/admin/admin-action-button";
 import { requireAdminPageAccess } from "@/lib/admin/auth";
 import { getAdminCronsData } from "@/lib/admin/data";
 import { getAdminScanMonitoringData } from "@/lib/admin/scan-monitoring";
@@ -259,12 +260,7 @@ export default async function AdminCronsPage({
               </div>
               <form action={runAdminCronAction}>
                 <input type="hidden" name="cronName" value={row.name} />
-                <button
-                  type="submit"
-                  className="rounded-full border border-[#1D4ED8] bg-[#172554] px-4 py-2 text-sm font-medium text-[#BFDBFE]"
-                >
-                  Run Now
-                </button>
+                <AdminActionButton idleLabel="Run Now" pendingLabel="Running..." />
               </form>
             </div>
 

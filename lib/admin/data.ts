@@ -196,6 +196,7 @@ export type AdminWebsitesPageData = {
 export type AdminReportsPageData = {
   rows: Array<{
     id: string;
+    websiteId: string;
     websiteUrl: string;
     ownerEmail: string;
     sentTo: string;
@@ -1007,6 +1008,7 @@ export async function getAdminReportsData(input: {
                   : "manual";
         return {
           id: report.id,
+          websiteId: report.website_id,
           websiteUrl: website?.url ?? "Unknown website",
           ownerEmail: owner?.email ?? "Unknown owner",
           sentTo: report.sent_to_email ?? "No recipient saved",

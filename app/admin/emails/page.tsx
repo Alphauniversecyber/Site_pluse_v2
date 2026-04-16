@@ -5,6 +5,7 @@ import { AdminErrorNotice } from "@/components/admin/admin-error-notice";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { AdminPagination } from "@/components/admin/admin-pagination";
 import { AdminSeriesChart } from "@/components/admin/admin-series-chart";
+import { AdminActionButton } from "@/components/admin/admin-action-button";
 import { requireAdminPageAccess } from "@/lib/admin/auth";
 import { getAdminEmailMonitoringData } from "@/lib/admin/email-monitoring";
 import { getAdminEmailsData } from "@/lib/admin/data";
@@ -270,30 +271,31 @@ export default async function AdminEmailsPage({
                             <form action={runAdminEmailRecoveryAction}>
                               <input type="hidden" name="actionType" value="send-report" />
                               <input type="hidden" name="websiteId" value={row.websiteId} />
+                              <input type="hidden" name="returnTo" value="/admin/emails" />
                               <input type="hidden" name="page" value={String(page)} />
                               <input type="hidden" name="monitorUser" value={monitoring.filters.user} />
                               <input type="hidden" name="monitorStatus" value={monitoring.filters.status} />
                               <input type="hidden" name="monitorDate" value={monitoring.filters.date} />
-                              <button
-                                type="submit"
-                                className="w-full rounded-full border border-[#1D4ED8] bg-[#172554] px-3 py-2 text-xs font-medium text-[#BFDBFE]"
-                              >
-                                Send Report Now
-                              </button>
+                              <AdminActionButton
+                                idleLabel="Send Report Now"
+                                pendingLabel="Sending..."
+                                className="w-full px-3 py-2 text-xs"
+                              />
                             </form>
                             <form action={runAdminEmailRecoveryAction}>
                               <input type="hidden" name="actionType" value="run-scan" />
                               <input type="hidden" name="websiteId" value={row.websiteId} />
+                              <input type="hidden" name="returnTo" value="/admin/emails" />
                               <input type="hidden" name="page" value={String(page)} />
                               <input type="hidden" name="monitorUser" value={monitoring.filters.user} />
                               <input type="hidden" name="monitorStatus" value={monitoring.filters.status} />
                               <input type="hidden" name="monitorDate" value={monitoring.filters.date} />
-                              <button
-                                type="submit"
-                                className="w-full rounded-full border border-[#27272A] bg-[#111827] px-3 py-2 text-xs font-medium text-white"
-                              >
-                                Run Scan Now
-                              </button>
+                              <AdminActionButton
+                                idleLabel="Run Scan Now"
+                                pendingLabel="Running..."
+                                tone="secondary"
+                                className="w-full px-3 py-2 text-xs"
+                              />
                             </form>
                           </div>
                         </td>
@@ -386,30 +388,31 @@ export default async function AdminEmailsPage({
                             <form action={runAdminEmailRecoveryAction}>
                               <input type="hidden" name="actionType" value="send-report" />
                               <input type="hidden" name="websiteId" value={row.websiteId} />
+                              <input type="hidden" name="returnTo" value="/admin/emails" />
                               <input type="hidden" name="page" value={String(page)} />
                               <input type="hidden" name="monitorUser" value={monitoring.filters.user} />
                               <input type="hidden" name="monitorStatus" value={monitoring.filters.status} />
                               <input type="hidden" name="monitorDate" value={monitoring.filters.date} />
-                              <button
-                                type="submit"
-                                className="w-full rounded-full border border-[#1D4ED8] bg-[#172554] px-3 py-2 text-xs font-medium text-[#BFDBFE]"
-                              >
-                                Send Report Now
-                              </button>
+                              <AdminActionButton
+                                idleLabel="Send Report Now"
+                                pendingLabel="Sending..."
+                                className="w-full px-3 py-2 text-xs"
+                              />
                             </form>
                             <form action={runAdminEmailRecoveryAction}>
                               <input type="hidden" name="actionType" value="run-scan" />
                               <input type="hidden" name="websiteId" value={row.websiteId} />
+                              <input type="hidden" name="returnTo" value="/admin/emails" />
                               <input type="hidden" name="page" value={String(page)} />
                               <input type="hidden" name="monitorUser" value={monitoring.filters.user} />
                               <input type="hidden" name="monitorStatus" value={monitoring.filters.status} />
                               <input type="hidden" name="monitorDate" value={monitoring.filters.date} />
-                              <button
-                                type="submit"
-                                className="w-full rounded-full border border-[#27272A] bg-[#111827] px-3 py-2 text-xs font-medium text-white"
-                              >
-                                Run Scan Now
-                              </button>
+                              <AdminActionButton
+                                idleLabel="Run Scan Now"
+                                pendingLabel="Running..."
+                                tone="secondary"
+                                className="w-full px-3 py-2 text-xs"
+                              />
                             </form>
                           </div>
                         </td>

@@ -42,6 +42,11 @@ type CronLogRow = {
   items_processed: number | null;
 };
 
+type SentReportRow = {
+  website_id: string;
+  sent_at: string | null;
+};
+
 type EmailCandidate = {
   id: string;
   userId: string;
@@ -53,17 +58,6 @@ type EmailCandidate = {
   queueRow: ReportEmailQueueRow | null;
   latestScan: Pick<ScanResult, "id" | "scan_status" | "scanned_at"> | null;
   sentToday: boolean;
-};
-
-type EmailLogRow = {
-  website_id: string | null;
-  user_id: string | null;
-  status: "sent" | "failed";
-  email_type: string;
-  template_id: string | null;
-  campaign: string | null;
-  error_message: string | null;
-  sent_at: string;
 };
 
 export type AdminEmailMonitoringRow = {
@@ -186,28 +180,6 @@ function buildChart(reference: Date, queueRows: ReportEmailQueueRow[]) {
   });
 }
 
-function isScheduledReportLog(row: EmailLogRow) {
-  if (row.email_type !== "report") {
-    return false;
-  }
-
-  return row.campaign === "report_daily" || row.campaign === "report_weekly" || row.campaign === "report_monthly";
-}
-
-function findLatestScheduledSendBeforeToday(logs: EmailLogRow[], timezone: string, todayKey: string) {
-  for (const row of logs) {
-    if (row.status !== "sent") {
-      continue;
-    }
-
-    if (getLocalDayKey(row.sent_at, timezone) < todayKey) {
-      return row.sent_at;
-    }
-  }
-
-  return null;
-}
-
 function toMonitoringRow(candidate: EmailCandidate, latestCron: CronLogRow | null, cronRanToday: boolean) {
   const queueRow = candidate.queueRow;
 
@@ -319,7 +291,7 @@ export async function getAdminEmailMonitoringData(input?: {
   const dateFilter = isValidDayKey(input?.date) ? (input?.date as string) : "";
 
   try {
-    const [usersResult, websitesResult, scansResult, queueResult, cronLogsResult, emailLogsResult] = await Promise.all([
+    const [usersResult, websitesResult, scansResult, queueResult, cronLogsResult, reportsResult] = await Promise.all([
       admin
         .from("users")
         .select("id,email,plan,email_report_frequency,email_reports_enabled,timezone,extra_report_recipients"),
@@ -346,8 +318,9 @@ export async function getAdminEmailMonitoringData(input?: {
         .order("started_at", { ascending: false })
         .limit(20),
       admin
-        .from("email_logs")
-        .select("website_id,user_id,status,email_type,template_id,campaign,error_message,sent_at")
+        .from("reports")
+        .select("website_id,sent_at")
+        .not("sent_at", "is", null)
         .gte("sent_at", lookbackIso)
         .order("sent_at", { ascending: false })
         .limit(5000)
@@ -358,7 +331,7 @@ export async function getAdminEmailMonitoringData(input?: {
     if (scansResult.error) throw new Error(scansResult.error.message);
     if (queueResult.error) throw new Error(queueResult.error.message);
     if (cronLogsResult.error) throw new Error(cronLogsResult.error.message);
-    if (emailLogsResult.error) throw new Error(emailLogsResult.error.message);
+    if (reportsResult.error) throw new Error(reportsResult.error.message);
 
     const users = (usersResult.data ?? []) as Array<
       Pick<
@@ -383,7 +356,7 @@ export async function getAdminEmailMonitoringData(input?: {
     const scans = (scansResult.data ?? []) as Array<Pick<ScanResult, "id" | "website_id" | "scan_status" | "scanned_at">>;
     const queueRows = (queueResult.data ?? []) as ReportEmailQueueRow[];
     const cronRows = (cronLogsResult.data ?? []) as CronLogRow[];
-    const emailLogs = ((emailLogsResult.data ?? []) as EmailLogRow[]).filter(isScheduledReportLog);
+    const sentReports = (reportsResult.data ?? []) as SentReportRow[];
 
     const usersById = new Map(users.map((user) => [user.id, user]));
     const latestScanByWebsite = new Map<string, Pick<ScanResult, "id" | "scan_status" | "scanned_at">>();
@@ -399,17 +372,15 @@ export async function getAdminEmailMonitoringData(input?: {
     }
 
     const queueByDedupeKey = new Map(queueRows.map((row) => [row.dedupe_key, row]));
+    const latestSentReportByWebsite = new Map<string, SentReportRow>();
+    for (const row of sentReports) {
+      if (!latestSentReportByWebsite.has(row.website_id)) {
+        latestSentReportByWebsite.set(row.website_id, row);
+      }
+    }
+
     const latestCron = cronRows[0] ?? null;
     const cronRanToday = cronRows.some((row) => new Date(row.started_at).getTime() >= new Date(todayIso).getTime());
-    const scheduledLogsByWebsite = emailLogs.reduce<Record<string, EmailLogRow[]>>((accumulator, row) => {
-      if (!row.website_id) {
-        return accumulator;
-      }
-
-      accumulator[row.website_id] = accumulator[row.website_id] ?? [];
-      accumulator[row.website_id]?.push(row);
-      return accumulator;
-    }, {});
 
     const dueCandidates = websites
       .map((website) => {
@@ -420,19 +391,10 @@ export async function getAdminEmailMonitoringData(input?: {
 
         const timezone = normalizeTimezone(user.timezone);
         const frequency = website.email_report_frequency ?? user.email_report_frequency;
-        const todayKey = getLocalDayKey(now, timezone);
-        const websiteLogs = scheduledLogsByWebsite[website.id] ?? [];
-        const latestSentAt = findLatestScheduledSendBeforeToday(websiteLogs, timezone, todayKey);
-        const sentToday =
-          websiteLogs.some((row) => row.status === "sent" && getLocalDayKey(row.sent_at, timezone) === todayKey) ||
-          Boolean(
-            queueRows.find(
-              (row) =>
-                row.website_id === website.id &&
-                row.status === "sent" &&
-                getLocalDayKey(row.sent_at ?? row.scheduled_for, timezone) === todayKey
-            )
-          );
+        const latestSentAt = latestSentReportByWebsite.get(website.id)?.sent_at ?? null;
+        const sentToday = Boolean(
+          latestSentAt && getLocalDayKey(latestSentAt, timezone) === getLocalDayKey(now, timezone)
+        );
 
         if (!isDueForPeriod({ frequency, lastEventAt: latestSentAt, timezone, reference: now })) {
           return null;
