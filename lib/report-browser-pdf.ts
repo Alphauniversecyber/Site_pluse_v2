@@ -292,6 +292,7 @@ function buildReportContext(
   input: PdfRenderInput,
   narrative: Awaited<ReturnType<typeof buildReportNarrative>>
 ): ReportContext {
+  const whiteLabelBranding = input.profile.plan === "agency" ? input.branding ?? null : null;
   const score = overallScore(input.scan);
   const securityBreakdown = buildHealthScore({
     scan: input.scan,
@@ -315,14 +316,15 @@ function buildReportContext(
   const mobileScore = clampScore(input.scan.mobile_snapshot?.performance_score ?? input.scan.performance_score);
   const desktopScore = clampScore(input.scan.desktop_snapshot?.performance_score ?? input.scan.performance_score);
   const clientName = input.website.label || input.profile.full_name || input.website.url;
-  const agencyName = input.branding?.agency_name || "SitePulse";
-  const agencyEmail = process.env.FROM_EMAIL ?? input.profile.email;
-  const brandColor = input.branding?.brand_color || "#2563EB";
+  const agencyName = whiteLabelBranding?.agency_name || "SitePulse";
+  const agencyEmail = whiteLabelBranding ? input.profile.email : process.env.FROM_EMAIL ?? input.profile.email;
+  const brandColor = whiteLabelBranding?.brand_color || "#2563EB";
   const monitoringSamples = (input.uptimeChecks ?? []).length;
 
   return {
+    white_label: Boolean(whiteLabelBranding),
     agency_name: agencyName,
-    agency_logo_url: input.branding?.logo_url ?? "",
+    agency_logo_url: whiteLabelBranding?.logo_url ?? "",
     agency_email: agencyEmail,
     brand_color: brandColor,
     client_name: clientName,
@@ -457,11 +459,12 @@ function buildReportContext(
 }
 
 export async function renderAiReportPdf(input: PdfRenderInput): Promise<Buffer> {
+  const whiteLabelBranding = input.profile.plan === "agency" ? input.branding ?? null : null;
   const narrative = await buildReportNarrative({
     website: input.website,
     scan: input.scan,
     previousScan: input.previousScan,
-    branding: input.branding ?? null,
+    branding: whiteLabelBranding,
     profile: input.profile
   });
   const context = buildReportContext(input, narrative);

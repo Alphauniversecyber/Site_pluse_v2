@@ -441,6 +441,7 @@ export async function sendStoredReportEmail(input: {
           to: recipient,
           reportId: report.id,
           website,
+          profile,
           branding,
           scan,
           previousScan: (previousRows?.[0] as ScanResult | undefined) ?? null,
