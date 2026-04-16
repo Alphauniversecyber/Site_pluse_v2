@@ -35,26 +35,26 @@ export const ADMIN_CRON_DEFINITIONS: Record<
   "process-scans": {
     label: "process-scans",
     path: "/api/cron/process-scans",
-    schedule: "0 6 * * *",
-    description: "Runs due website scans."
+    schedule: "*/15 * * * *",
+    description: "Runs due website scans in safe queue batches every 15 minutes."
   },
   "process-reports": {
     label: "process-reports",
     path: "/api/cron/process-reports",
-    schedule: "0 10 * * *",
-    description: "Sends scheduled weekly reports."
+    schedule: "15 * * * *",
+    description: "Sends scheduled report emails in safe hourly queue batches."
   },
   "process-uptime": {
     label: "process-uptime",
     path: "/api/cron/process-uptime",
-    schedule: "0 7 * * *",
-    description: "Checks website uptime and alerts."
+    schedule: "5 * * * *",
+    description: "Checks website uptime hourly."
   },
   "sync-uptimerobot": {
     label: "sync-uptimerobot",
     path: "/api/cron/sync-uptimerobot",
-    schedule: "0 8 * * *",
-    description: "Syncs UptimeRobot monitor results."
+    schedule: "20 * * * *",
+    description: "Syncs UptimeRobot monitor results hourly."
   },
   "process-competitors": {
     label: "process-competitors",
@@ -77,7 +77,7 @@ export const ADMIN_CRON_DEFINITIONS: Record<
   "process-paddle-webhooks": {
     label: "process-paddle-webhooks",
     path: "/api/cron/process-paddle-webhooks",
-    schedule: "0 5 * * *",
+    schedule: "*/15 * * * *",
     description: "Processes queued Paddle webhook events asynchronously, with immediate kicks from the live webhook endpoint."
   }
 };

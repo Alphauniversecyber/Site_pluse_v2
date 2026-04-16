@@ -149,6 +149,7 @@ export async function dispatchCronContinuation(input: {
       cache: "no-store",
       headers: {
         authorization: `Bearer ${cronSecret}`,
+        "x-sitepulse-cron-secret": cronSecret,
         "x-sitepulse-cron-chain": String(nextChainDepth)
       },
       signal: AbortSignal.timeout(getCronContinuationTimeoutMs(input.defaultDispatchTimeoutMs ?? 8_000))

@@ -19,6 +19,7 @@ async function kickPaddleWebhookProcessor(request: Request) {
       cache: "no-store",
       headers: {
         authorization: `Bearer ${cronSecret}`,
+        "x-sitepulse-cron-secret": cronSecret,
         "x-sitepulse-webhook-kick": "1"
       },
       signal: AbortSignal.timeout(5_000)

@@ -13,6 +13,7 @@ type ContinuableCronPayload = {
 
 function isAuthorizedCronRequest(request: Request, label: string) {
   const authHeader = request.headers.get("authorization");
+  const headerSecret = request.headers.get("x-sitepulse-cron-secret");
   const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {
@@ -20,7 +21,7 @@ function isAuthorizedCronRequest(request: Request, label: string) {
     return false;
   }
 
-  return authHeader === `Bearer ${cronSecret}`;
+  return authHeader === `Bearer ${cronSecret}` || headerSecret === cronSecret;
 }
 
 export async function runContinuableCronRoute<T extends ContinuableCronPayload>(
@@ -30,6 +31,7 @@ export async function runContinuableCronRoute<T extends ContinuableCronPayload>(
     label: string;
     failureMessage: string;
     run: (cursor: number) => Promise<T>;
+    allowContinuation?: boolean;
   }
 ) {
   if (!isAuthorizedCronRequest(request, input.label)) {
@@ -43,14 +45,22 @@ export async function runContinuableCronRoute<T extends ContinuableCronPayload>(
   try {
     const cursor = getCronCursorOffset(request);
     const result = await runLoggedCron(input.cronName, () => input.run(cursor));
-    const continuation = await dispatchCronContinuation({
-      request,
-      label: input.label,
-      hasMore: result.hasMore,
-      nextCursor: result.nextCursor ?? null
-    });
+    const continuation = input.allowContinuation
+      ? await dispatchCronContinuation({
+          request,
+          label: input.label,
+          hasMore: result.hasMore,
+          nextCursor: result.nextCursor ?? null
+        })
+      : {
+          queued: false,
+          reason: "no_more_work" as const,
+          nextCursor: result.nextCursor ?? null,
+          nextChainDepth: 0,
+          maxChainDepth: 0
+        };
 
-    if (result.hasMore && !continuation.queued && continuation.reason !== "no_more_work") {
+    if (input.allowContinuation && result.hasMore && !continuation.queued && continuation.reason !== "no_more_work") {
       await logAdminError({
         errorType: "cron_failed",
         errorMessage: `Cron continuation was not queued for ${input.label}.`,

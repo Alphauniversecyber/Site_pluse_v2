@@ -165,8 +165,22 @@ export function getNextCronRun(cronName: AdminCronName, reference = new Date()) 
   const hasFixedHour = hourRaw !== "*";
   const hour = hasFixedHour ? Number.parseInt(hourRaw, 10) : null;
   const next = new Date(reference);
+  const minuteStep = /^\*\/\d+$/.test(minuteRaw) ? Number.parseInt(minuteRaw.slice(2), 10) : null;
 
   next.setSeconds(0, 0);
+
+  if (!hasFixedHour && minuteStep && Number.isFinite(minuteStep) && minuteStep > 0) {
+    const currentMinute = reference.getMinutes();
+    const nextMinute = Math.ceil((currentMinute + 1) / minuteStep) * minuteStep;
+
+    if (nextMinute >= 60) {
+      next.setHours(reference.getHours() + 1, nextMinute % 60, 0, 0);
+    } else {
+      next.setHours(reference.getHours(), nextMinute, 0, 0);
+    }
+
+    return next.toISOString();
+  }
 
   if (!hasFixedHour && Number.isFinite(minute)) {
     next.setMinutes(minute);

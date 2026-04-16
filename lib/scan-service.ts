@@ -808,7 +808,7 @@ export async function executeWebsiteScan(
   };
 }
 
-export async function processDueScans(limit = getCronBatchLimit("SCAN_CRON_LIMIT", 20)) {
+export async function processDueScans(limit = getCronBatchLimit("SCAN_CRON_LIMIT", 250)) {
   return processDueScansBatch({
     discoveryLimit: limit,
     discoveryOffset: 0
@@ -822,16 +822,36 @@ export async function processDueScansBatch(input: {
 }) {
   const guard = createCronExecutionGuard("process-scans", 240_000);
   const { enqueueDueScanJobs, processQueuedScanJobs } = await import("@/lib/scan-job-queue");
-  const discoveryLimit = input.discoveryLimit ?? getCronBatchLimit("SCAN_CRON_LIMIT", 20);
-  const queueLimit = input.queueLimit ?? getCronBatchLimit("SCAN_QUEUE_BATCH_LIMIT", 20);
+  const discoveryLimit = input.discoveryLimit ?? getCronBatchLimit("SCAN_CRON_LIMIT", 250);
+  const queueLimit = input.queueLimit ?? getCronBatchLimit("SCAN_QUEUE_BATCH_LIMIT", 6);
   const discoveryOffset = input.discoveryOffset ?? 0;
+  let cursor: number | null = discoveryOffset;
+  let queuedCount = 0;
+  let inspectedCount = 0;
+  let discoveryHasMore = false;
+  let stoppedBeforeQueue = false;
 
-  const enqueueResult = await enqueueDueScanJobs(discoveryLimit, discoveryOffset);
-  const stoppedBeforeQueue = guard.shouldStop({
-    stage: "queue",
-    queue: "scan_job_queue",
-    nextOffset: enqueueResult.nextOffset
-  });
+  while (cursor !== null) {
+    const enqueueResult = await enqueueDueScanJobs(discoveryLimit, cursor);
+    queuedCount += enqueueResult.queuedCount;
+    inspectedCount += enqueueResult.inspectedCount;
+    discoveryHasMore = enqueueResult.hasMoreCandidates;
+    cursor = enqueueResult.nextOffset;
+
+    if (guard.shouldStop({
+      stage: "discovery",
+      queue: "scan_job_queue",
+      nextOffset: enqueueResult.nextOffset,
+      inspectedCount
+    })) {
+      stoppedBeforeQueue = true;
+      break;
+    }
+
+    if (!enqueueResult.hasMoreCandidates) {
+      break;
+    }
+  }
 
   const queueResult = stoppedBeforeQueue
     ? {
@@ -845,11 +865,11 @@ export async function processDueScansBatch(input: {
   return {
     processedIds: queueResult.executedWebsiteIds,
     processedCount: queueResult.processedCount,
-    inspectedCount: enqueueResult.inspectedCount + queueResult.inspectedCount,
-    queuedCount: enqueueResult.queuedCount,
-    nextCursor: enqueueResult.nextOffset,
-    hasMore: enqueueResult.hasMoreCandidates || queueResult.hasMore,
-    discoveryHasMore: enqueueResult.hasMoreCandidates,
+    inspectedCount: inspectedCount + queueResult.inspectedCount,
+    queuedCount,
+    nextCursor: cursor,
+    hasMore: discoveryHasMore || queueResult.hasMore,
+    discoveryHasMore,
     queueHasMore: queueResult.hasMore
   };
 }
