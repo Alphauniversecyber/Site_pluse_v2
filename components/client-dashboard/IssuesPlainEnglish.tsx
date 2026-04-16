@@ -367,7 +367,7 @@ export function Issues({
             return (
               <article
                 key={issue.id}
-                className="rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl"
+                className="overflow-hidden rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl"
               >
                 <div className="flex flex-col gap-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -380,7 +380,7 @@ export function Issues({
                       </div>
                       <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-3">
-                          <p className="font-display text-xl font-semibold text-foreground">
+                          <p className="break-words font-display text-xl font-semibold text-foreground">
                             {stripMarkdown(issue.title)}
                           </p>
                           <span
@@ -392,7 +392,7 @@ export function Issues({
                             {meta.label}
                           </span>
                         </div>
-                        <p className="text-sm leading-6 text-muted-foreground">
+                        <p className="break-words text-sm leading-6 text-muted-foreground">
                           {stripMarkdown(issue.description)}
                         </p>
                         <p className="text-sm text-muted-foreground">
@@ -405,11 +405,11 @@ export function Issues({
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="rounded-2xl border border-border bg-background/80 p-4">
                       <p className="text-sm font-semibold text-foreground">{ISSUE_COPY.whatToDoLabel}</p>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{issue.whatToDo}</p>
+                      <p className="mt-2 break-words text-sm leading-6 text-muted-foreground">{issue.whatToDo}</p>
                     </div>
                     <div className="rounded-2xl border border-border bg-background/80 p-4">
                       <p className="text-sm font-semibold text-foreground">{ISSUE_COPY.impactLabel}</p>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{issue.realWorldImpact}</p>
+                      <p className="mt-2 break-words text-sm leading-6 text-muted-foreground">{issue.realWorldImpact}</p>
                     </div>
                   </div>
                 </div>

@@ -1,12 +1,31 @@
 import { AdminBadge } from "@/components/admin/admin-badge";
 import { AdminCard } from "@/components/admin/admin-card";
+import { AdminEmptyState } from "@/components/admin/admin-empty-state";
 import { AdminErrorNotice } from "@/components/admin/admin-error-notice";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { AdminSeriesChart } from "@/components/admin/admin-series-chart";
 import { requireAdminPageAccess } from "@/lib/admin/auth";
 import { getAdminCronsData } from "@/lib/admin/data";
+import { getAdminScanMonitoringData } from "@/lib/admin/scan-monitoring";
 import { formatAdminDate, parseTextParam } from "@/lib/admin/format";
 
 import { runAdminCronAction } from "./actions";
+
+function getStatusTone(status: string) {
+  if (status === "success" || status === "completed") {
+    return "green" as const;
+  }
+
+  if (status === "running" || status === "processing") {
+    return "blue" as const;
+  }
+
+  if (status === "pending" || status === "timeout") {
+    return "amber" as const;
+  }
+
+  return "red" as const;
+}
 
 export default async function AdminCronsPage({
   searchParams
@@ -18,16 +37,25 @@ export default async function AdminCronsPage({
   const run = parseTextParam(searchParams?.run);
   const status = parseTextParam(searchParams?.status);
   const message = parseTextParam(searchParams?.message);
+  const scanUser = parseTextParam(searchParams?.scanUser);
+  const scanStatus = parseTextParam(searchParams?.scanStatus) || "all";
+  const scanDate = parseTextParam(searchParams?.scanDate);
   const data = await getAdminCronsData();
+  const monitoring = await getAdminScanMonitoringData({
+    user: scanUser,
+    status: scanStatus,
+    date: scanDate
+  });
 
   return (
     <div>
       <AdminPageHeader
         title="Crons"
-        description="Monitor schedules, inspect the last 10 runs of each cron, and manually kick off a job when you need to recover backlog or debug production behavior."
+        description="Monitor schedules, see how many website scans were required vs completed today, and manually kick off a job when you need to recover backlog or debug production behavior."
       />
 
       <AdminErrorNotice message={data.error} />
+      <AdminErrorNotice message={monitoring.error} />
 
       {message ? (
         <div
@@ -41,6 +69,185 @@ export default async function AdminCronsPage({
           {message}
         </div>
       ) : null}
+
+      <div className="mb-8">
+        <div className="mb-4 flex flex-col gap-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#22C55E]">Scan Monitoring</p>
+          <h2 className="text-2xl font-semibold text-white">Required vs completed scans</h2>
+          <p className="max-w-3xl text-sm leading-6 text-zinc-400">
+            Due scans are calculated from each website&apos;s schedule, the owner&apos;s plan limits, duplicate prevention rules, and the owner&apos;s timezone-aware scan period.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <AdminCard>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Required today</p>
+            <p className="mt-4 text-3xl font-semibold text-white">{monitoring.summary.requiredToday}</p>
+            <p className="mt-2 text-sm text-zinc-500">Websites that should have been scanned in the current period.</p>
+          </AdminCard>
+          <AdminCard>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Completed today</p>
+            <p className="mt-4 text-3xl font-semibold text-[#86EFAC]">{monitoring.summary.completedToday}</p>
+            <p className="mt-2 text-sm text-zinc-500">Queue jobs that finished successfully and stored a fresh scan result.</p>
+          </AdminCard>
+          <AdminCard>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Failed / Not executed</p>
+            <p className="mt-4 text-3xl font-semibold text-[#FCA5A5]">{monitoring.summary.failedPendingToday}</p>
+            <p className="mt-2 text-sm text-zinc-500">Anything still missing because of backlog, timeout, API issues, or plan limits.</p>
+          </AdminCard>
+          <AdminCard>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Last scan cron</p>
+            <p className="mt-4 text-lg font-semibold text-white">{formatAdminDate(monitoring.cron.lastRunAt)}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <AdminBadge label={monitoring.cron.lastRunStatus} tone={getStatusTone(monitoring.cron.lastRunStatus)} />
+              <AdminBadge label={`${monitoring.cron.lastRunProcessed} items`} tone="neutral" mono />
+            </div>
+          </AdminCard>
+        </div>
+
+        <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr,1fr]">
+          <div className="space-y-6">
+            <AdminCard>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-white">Today&apos;s scan progress</p>
+                  <p className="mt-1 text-sm leading-6 text-zinc-400">
+                    {monitoring.progress.completed} of {monitoring.progress.required} required scans are complete.
+                  </p>
+                </div>
+                <AdminBadge label={`${monitoring.progress.percent}% complete`} tone={monitoring.progress.percent >= 100 ? "green" : monitoring.progress.percent >= 50 ? "amber" : "red"} />
+              </div>
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#0D0D0D]">
+                <div
+                  className="h-full rounded-full bg-[#22C55E] transition-[width] duration-300"
+                  style={{ width: `${monitoring.progress.percent}%` }}
+                />
+              </div>
+            </AdminCard>
+
+            <AdminSeriesChart
+              title="Scans completed vs required"
+              description="Daily queue activity for website scans over the last 7 days."
+              points={monitoring.chart}
+              series={[
+                { key: "required", label: "Required", tone: "blue" },
+                { key: "completed", label: "Completed", tone: "green" },
+                { key: "failed", label: "Failed", tone: "red" }
+              ]}
+            />
+          </div>
+
+          <AdminCard>
+            <form action="/admin/crons" className="grid gap-4">
+              <div>
+                <label htmlFor="scanUser" className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  User / Website
+                </label>
+                <input
+                  id="scanUser"
+                  name="scanUser"
+                  defaultValue={monitoring.filters.user}
+                  placeholder="email, user id, or website"
+                  className="mt-2 w-full rounded-2xl border border-[#27272A] bg-[#0D0D0D] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="scanStatus" className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  Status
+                </label>
+                <select
+                  id="scanStatus"
+                  name="scanStatus"
+                  defaultValue={monitoring.filters.status}
+                  className="mt-2 w-full rounded-2xl border border-[#27272A] bg-[#0D0D0D] px-4 py-3 text-sm text-white outline-none"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="processing">Processing</option>
+                  <option value="failed">Failed</option>
+                  <option value="skipped">Skipped</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="scanDate" className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  Last scan date
+                </label>
+                <input
+                  id="scanDate"
+                  name="scanDate"
+                  type="date"
+                  defaultValue={monitoring.filters.date}
+                  className="mt-2 w-full rounded-2xl border border-[#27272A] bg-[#0D0D0D] px-4 py-3 text-sm text-white outline-none"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  className="rounded-full border border-[#1D4ED8] bg-[#172554] px-4 py-2 text-sm font-medium text-[#BFDBFE]"
+                >
+                  Apply filters
+                </button>
+                <a href="/admin/crons" className="text-sm text-zinc-400 underline-offset-4 hover:text-white hover:underline">
+                  Reset
+                </a>
+              </div>
+            </form>
+          </AdminCard>
+        </div>
+
+        <div className="mt-6">
+          {monitoring.rows.length ? (
+            <AdminCard className="overflow-hidden p-0">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-[#0D0D0D] text-zinc-400">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Website</th>
+                      <th className="px-4 py-3 font-medium">User</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                      <th className="px-4 py-3 font-medium">Reason</th>
+                      <th className="px-4 py-3 font-medium">Last Scan Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monitoring.rows.map((row, index) => (
+                      <tr key={row.id} className={`${index % 2 === 0 ? "bg-[#101010]" : "bg-[#141414]"} align-top hover:bg-[#181818]`}>
+                        <td className="px-4 py-4 text-zinc-300">
+                          <p className="font-medium text-white">{row.websiteLabel}</p>
+                          <p className="mt-1 break-all text-xs text-zinc-500">{row.websiteUrl}</p>
+                        </td>
+                        <td className="px-4 py-4">
+                          <p className="break-all font-medium text-white">{row.email}</p>
+                          <p className="mt-1 font-mono text-xs text-zinc-500">{row.userId}</p>
+                          <p className="mt-2 text-xs uppercase tracking-[0.16em] text-[#86EFAC]">{row.planLabel}</p>
+                        </td>
+                        <td className="px-4 py-4">
+                          <AdminBadge label={row.status} tone={getStatusTone(row.status)} />
+                        </td>
+                        <td className="px-4 py-4 text-zinc-300">
+                          <p>{row.reason}</p>
+                          {row.lastError ? <p className="mt-2 text-xs leading-5 text-[#FCA5A5]">{row.lastError}</p> : null}
+                        </td>
+                        <td className="px-4 py-4 font-mono text-xs text-zinc-500">{formatAdminDate(row.lastScanTime)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </AdminCard>
+          ) : (
+            <AdminEmptyState
+              title="No missed scans for the selected filters"
+              description="Every website that should be scanned right now has either completed successfully or there is no backlog matching the selected filters."
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-col gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">Cron Definitions</p>
+        <h2 className="text-2xl font-semibold text-white">Scheduled jobs and history</h2>
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
         {data.rows.map((row) => (

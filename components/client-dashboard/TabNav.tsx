@@ -171,24 +171,6 @@ export function TabNav({
       .at(-1);
   }, [dashboard.lastUpdated, ga.lastSyncedAt, gsc.lastSyncedAt]);
 
-  const liveDataWarnings = useMemo(() => {
-    const warnings: string[] = [];
-
-    if (dashboard.connections.gsc && !gscLoading && gsc.source === "unavailable") {
-      warnings.push(
-        "Search Console is connected, but SitePulse still has not received a successful live sync. Check property access and confirm the Search Console API is enabled."
-      );
-    }
-
-    if (dashboard.connections.ga && !gaLoading && ga.source === "unavailable") {
-      warnings.push(
-        "GA4 is connected, but SitePulse still has not received a successful live sync. Check property access and confirm the Analytics Data API and Analytics Admin API are enabled."
-      );
-    }
-
-    return warnings;
-  }, [dashboard.connections.ga, dashboard.connections.gsc, ga.source, gaLoading, gsc.source, gscLoading]);
-
   const content = useMemo(() => {
     switch (activeTab) {
       case "issues":
@@ -258,7 +240,7 @@ export function TabNav({
         <div className="rounded-[2rem] border border-border/70 bg-card/90 p-4 shadow-[0_30px_90px_-52px_rgba(15,23,42,0.42)] backdrop-blur-2xl sm:p-6">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap items-center gap-4">
-              <div className="rounded-2xl border border-border bg-background/80 px-4 py-3">
+              <div className="rounded-2xl border border-border bg-white px-4 py-3 shadow-sm dark:bg-slate-950">
                 <span className="dark:hidden">
                   <SitePulseLogo variant="dark" className="h-8 w-[132px] sm:w-[148px]" priority />
                 </span>
@@ -269,9 +251,9 @@ export function TabNav({
               <ThemeToggle />
             </div>
 
-            <div className="flex min-w-0 flex-1 items-center justify-center gap-3 rounded-[1.6rem] border border-border bg-background/80 px-4 py-4 text-center">
+            <div className="flex min-w-0 flex-1 items-start gap-3 rounded-[1.6rem] border border-border bg-background/80 px-4 py-4 text-left">
               <Globe2 className="h-4 w-4 shrink-0 text-sky-500 dark:text-sky-300" />
-              <p className="min-w-0 truncate font-display text-lg font-semibold text-foreground sm:text-xl">
+              <p className="min-w-0 break-all font-display text-lg font-semibold leading-tight text-foreground sm:text-xl">
                 {dashboard.website.url}
               </p>
             </div>
@@ -296,18 +278,6 @@ export function TabNav({
 
         <div className="mt-6 space-y-6">
           {connectionNotice ? <SyncNotice service={connectionNotice} /> : null}
-          {liveDataWarnings.length ? (
-            <div className="space-y-3">
-              {liveDataWarnings.map((warning) => (
-                <div
-                  key={warning}
-                  className="rounded-[1.6rem] border border-amber-500/20 bg-amber-500/10 px-5 py-4 text-sm text-amber-700 dark:text-amber-100"
-                >
-                  {warning}
-                </div>
-              ))}
-            </div>
-          ) : null}
 
           <div className="flex gap-3 overflow-x-auto pb-1">
             {TAB_ITEMS.map((tab) => (

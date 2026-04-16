@@ -175,6 +175,41 @@ export async function logEmailDelivery(input: {
   }
 }
 
+export async function logScanExecution(input: {
+  scanJobId?: string | null;
+  websiteId?: string | null;
+  userId?: string | null;
+  status: string;
+  failureReason?: string | null;
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  try {
+    const admin = createSupabaseAdminClient();
+    await admin.from("scan_logs").insert({
+      scan_job_id: input.scanJobId ?? null,
+      website_id: input.websiteId ?? null,
+      user_id: input.userId ?? null,
+      status: input.status,
+      failure_reason: input.failureReason ?? null,
+      error_message: input.errorMessage ?? null,
+      started_at: input.startedAt ?? new Date().toISOString(),
+      finished_at: input.finishedAt ?? new Date().toISOString(),
+      metadata: input.metadata ?? {}
+    });
+  } catch (error) {
+    if (!isMissingTableError(error)) {
+      console.warn("[admin:scan_log_failed]", {
+        websiteId: input.websiteId,
+        status: input.status,
+        error: error instanceof Error ? error.message : "Unknown scan log failure"
+      });
+    }
+  }
+}
+
 export async function logBillingEvent(input: {
   subscriptionId?: string | null;
   userId?: string | null;

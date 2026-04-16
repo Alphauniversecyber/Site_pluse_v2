@@ -29,15 +29,6 @@ type NotificationType =
   | "accessibility_regression"
   | "ssl_expiry";
 
-function parsePositiveInt(raw: string | undefined, fallback: number) {
-  if (!raw) {
-    return fallback;
-  }
-
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 async function createNotification(input: {
   userId: string;
   websiteId: string;
@@ -818,72 +809,14 @@ export async function executeWebsiteScan(
 }
 
 export async function processDueScans(limit = getCronBatchLimit("SCAN_CRON_LIMIT", 20)) {
-  const admin = createSupabaseAdminClient();
   const guard = createCronExecutionGuard("process-scans", 240_000);
-  const concurrency = parsePositiveInt(process.env.SCAN_CRON_CONCURRENCY, 2);
-  const { data: schedules, error } = await admin
-    .from("scan_schedules")
-    .select("id, website_id, next_scan_at")
-    .lte("next_scan_at", new Date().toISOString())
-    .order("next_scan_at", { ascending: true })
-    .limit(limit);
+  const { enqueueDueScanJobs, processQueuedScanJobs } = await import("@/lib/scan-job-queue");
 
-  if (error) {
-    throw new Error(error.message);
+  await enqueueDueScanJobs(limit);
+
+  if (guard.shouldStop({ stage: "queue", queue: "scan_job_queue" })) {
+    return [];
   }
 
-  const executed: string[] = [];
-  const scheduleRows = schedules ?? [];
-
-  for (let index = 0; index < scheduleRows.length; ) {
-    const batch: Array<Promise<string | null>> = [];
-    const batchWebsiteIds: string[] = [];
-
-    while (index < scheduleRows.length && batch.length < concurrency) {
-      const schedule = scheduleRows[index];
-
-      if (guard.shouldStop({ executedCount: executed.length, nextWebsiteId: schedule.website_id })) {
-        return executed;
-      }
-
-      batchWebsiteIds.push(schedule.website_id);
-      batch.push(
-        (async () => {
-          const { data: website } = await admin
-            .from("websites")
-            .select("id, is_active")
-            .eq("id", schedule.website_id)
-            .single();
-
-          if (!website?.is_active) {
-            return null;
-          }
-
-          await executeWebsiteScan(schedule.website_id);
-          return schedule.website_id;
-        })()
-      );
-
-      index += 1;
-    }
-
-    const results = await Promise.allSettled(batch);
-    results.forEach((result, batchIndex) => {
-      const websiteId = batchWebsiteIds[batchIndex] ?? "unknown";
-
-      if (result.status === "fulfilled") {
-        if (result.value) {
-          executed.push(result.value);
-        }
-        return;
-      }
-
-      console.warn("[cron:process-scans] scan_failed", {
-        websiteId,
-        error: result.reason instanceof Error ? result.reason.message : "Unknown scan error"
-      });
-    });
-  }
-
-  return executed;
+  return processQueuedScanJobs(getCronBatchLimit("SCAN_QUEUE_BATCH_LIMIT", 20));
 }

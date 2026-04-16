@@ -78,6 +78,7 @@ create table if not exists public.users (
   email text not null unique,
   full_name text,
   plan public.plan_tier not null default 'free',
+  timezone text not null default 'UTC',
   paddle_customer_id text,
   paddle_subscription_id text,
   billing_cycle public.billing_cycle,
@@ -252,6 +253,64 @@ create table if not exists public.scan_schedules (
   last_scan_at timestamptz
 );
 
+create table if not exists public.report_email_queue (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users (id) on delete cascade,
+  website_id uuid not null references public.websites (id) on delete cascade,
+  report_id uuid references public.reports (id) on delete set null,
+  frequency public.scan_frequency not null,
+  timezone text not null default 'UTC',
+  period_key text not null,
+  dedupe_key text not null unique,
+  scheduled_for timestamptz not null default timezone('utc', now()),
+  next_attempt_at timestamptz not null default timezone('utc', now()),
+  attempt_count integer not null default 0,
+  status text not null default 'pending',
+  failure_reason text,
+  last_error text,
+  last_attempt_at timestamptz,
+  sent_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.scan_job_queue (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users (id) on delete cascade,
+  website_id uuid not null references public.websites (id) on delete cascade,
+  scan_result_id uuid references public.scan_results (id) on delete set null,
+  frequency public.scan_frequency not null,
+  timezone text not null default 'UTC',
+  period_key text not null,
+  dedupe_key text not null unique,
+  scheduled_for timestamptz not null default timezone('utc', now()),
+  next_attempt_at timestamptz not null default timezone('utc', now()),
+  attempt_count integer not null default 0,
+  status text not null default 'pending',
+  failure_reason text,
+  last_error text,
+  last_attempt_at timestamptz,
+  completed_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.scan_logs (
+  id uuid primary key default gen_random_uuid(),
+  scan_job_id uuid references public.scan_job_queue (id) on delete set null,
+  website_id uuid references public.websites (id) on delete cascade,
+  user_id uuid references public.users (id) on delete set null,
+  status text not null,
+  failure_reason text,
+  error_message text,
+  started_at timestamptz not null default timezone('utc', now()),
+  finished_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
 create table if not exists public.ssl_checks (
   id uuid primary key default gen_random_uuid(),
   website_id uuid not null references public.websites (id) on delete cascade,
@@ -360,6 +419,7 @@ create table if not exists public.competitor_scans (
 );
 
 alter table public.users add column if not exists uptimerobot_api_key text;
+alter table public.users add column if not exists timezone text not null default 'UTC';
 alter table public.users add column if not exists paddle_customer_id text;
 alter table public.users add column if not exists paddle_subscription_id text;
 alter table public.users add column if not exists billing_cycle public.billing_cycle;
@@ -414,6 +474,7 @@ create index if not exists idx_websites_user_id on public.websites (user_id);
 create index if not exists idx_subscriptions_user_id on public.subscriptions (user_id);
 create index if not exists idx_subscriptions_status on public.subscriptions (status, updated_at desc);
 create index if not exists idx_subscriptions_email on public.subscriptions (lower(email));
+create index if not exists idx_users_timezone on public.users (timezone);
 create unique index if not exists idx_websites_magic_token
   on public.websites (magic_token)
   where magic_token is not null;
@@ -440,6 +501,22 @@ create index if not exists idx_payment_logs_email on public.payment_logs (lower(
 create index if not exists idx_payment_logs_subscription on public.payment_logs (paddle_subscription_id, timestamp desc);
 create index if not exists idx_paddle_webhook_events_status_retry
   on public.paddle_webhook_events (status, next_retry_at asc, created_at asc);
+create index if not exists idx_report_email_queue_status_scheduled
+  on public.report_email_queue (status, next_attempt_at asc);
+create index if not exists idx_report_email_queue_user_period
+  on public.report_email_queue (user_id, website_id, period_key);
+create index if not exists idx_report_email_queue_sent_at
+  on public.report_email_queue (sent_at desc);
+create index if not exists idx_scan_job_queue_status_scheduled
+  on public.scan_job_queue (status, next_attempt_at asc);
+create index if not exists idx_scan_job_queue_user_period
+  on public.scan_job_queue (user_id, website_id, period_key);
+create index if not exists idx_scan_job_queue_completed_at
+  on public.scan_job_queue (completed_at desc);
+create index if not exists idx_scan_logs_website_started_at
+  on public.scan_logs (website_id, started_at desc);
+create index if not exists idx_scan_logs_user_started_at
+  on public.scan_logs (user_id, started_at desc);
 
 create or replace function public.handle_new_user()
 returns trigger

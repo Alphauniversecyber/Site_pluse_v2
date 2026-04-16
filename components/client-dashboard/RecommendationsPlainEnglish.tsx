@@ -370,14 +370,14 @@ export function Recommendations({
               <label
                 key={recommendation.id}
                 className={cn(
-                  "flex cursor-pointer flex-col gap-4 rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl transition-colors hover:bg-accent/60",
+                  "flex cursor-pointer flex-col gap-4 overflow-hidden rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl transition-colors hover:bg-accent/60",
                   reviewed && "border-emerald-500/20 bg-emerald-500/10"
                 )}
               >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-display text-2xl font-semibold text-foreground">
+                      <p className="break-words font-display text-2xl font-semibold text-foreground">
                         {stripMarkdown(recommendation.title)}
                       </p>
                       <span
@@ -398,13 +398,13 @@ export function Recommendations({
                       </span>
                     </div>
 
-                    <p className="text-sm leading-6 text-muted-foreground">
+                    <p className="break-words text-sm leading-6 text-muted-foreground">
                       {stripMarkdown(recommendation.whatToDo)}
                     </p>
 
                     <div className="rounded-2xl border border-border bg-background/80 p-4">
                       <p className="text-sm font-semibold text-foreground">{RECOMMENDATION_COPY.whyItMattersLabel}</p>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{recommendation.whyItMatters}</p>
+                      <p className="mt-2 break-words text-sm leading-6 text-muted-foreground">{recommendation.whyItMatters}</p>
                     </div>
 
                     <p className="text-sm font-medium text-foreground">

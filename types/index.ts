@@ -56,6 +56,7 @@ export interface UserProfile {
   email: string;
   full_name: string | null;
   plan: PlanKey;
+  timezone?: string | null;
   paddle_customer_id: string | null;
   paddle_subscription_id: string | null;
   billing_cycle: BillingCycle | null;

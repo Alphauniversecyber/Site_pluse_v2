@@ -547,121 +547,15 @@ export async function sendStoredReportEmail(input: {
   }
 }
 
-function isDue(lastSentAt: string | null, frequency: ScanFrequency) {
-  if (!lastSentAt) {
-    return true;
-  }
-
-  const diff = Date.now() - new Date(lastSentAt).getTime();
-  const threshold =
-    frequency === "daily"
-      ? 24 * 60 * 60 * 1000
-      : frequency === "weekly"
-        ? 7 * 24 * 60 * 60 * 1000
-        : 30 * 24 * 60 * 60 * 1000;
-
-  return diff >= threshold;
-}
-
 export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_CRON_USER_LIMIT", 20)) {
-  const admin = createSupabaseAdminClient();
   const guard = createCronExecutionGuard("process-reports", 240_000);
-  const { data: users } = await admin
-    .from("users")
-    .select("*")
-    .eq("email_reports_enabled", true)
-    .in("plan", ["starter", "agency"])
-    .limit(limit);
+  const { enqueueDueReportEmails, processQueuedReportEmails } = await import("@/lib/report-email-queue");
 
-  const sent: string[] = [];
+  await enqueueDueReportEmails(limit);
 
-  for (const profile of (users ?? []) as UserProfile[]) {
-    if (guard.shouldStop({ stage: "users", sentCount: sent.length, userId: profile.id })) {
-      break;
-    }
-
-    const { data: websites } = await admin
-      .from("websites")
-      .select("*")
-      .eq("user_id", profile.id)
-      .eq("is_active", true)
-      .eq("email_reports_enabled", true);
-
-    for (const website of (websites ?? []) as Website[]) {
-      if (guard.shouldStop({ stage: "websites", sentCount: sent.length, userId: profile.id, websiteId: website.id })) {
-        return sent;
-      }
-
-      const { data: latestRows } = await admin
-        .from("scan_results")
-        .select("*")
-        .eq("website_id", website.id)
-        .order("scanned_at", { ascending: false })
-        .limit(1);
-
-      const latestScan = (latestRows?.[0] as ScanResult | undefined) ?? null;
-      if (!latestScan || latestScan.scan_status === "failed") {
-        if (profile.email_notifications_enabled) {
-          await trySendCriticalAlertEmail({
-            templateId: "alert_scan_failure",
-            dedupeKey: buildEmailDedupeKey("alert", "scan_failure", website.id, latestScan?.id ?? "missing"),
-            to: profile.email,
-            website,
-            scan:
-              latestScan ??
-              ({
-                performance_score: 0,
-                seo_score: 0,
-                accessibility_score: 0,
-                best_practices_score: 0,
-                issues: [],
-                recommendations: [],
-                raw_data: {},
-                scanned_at: new Date().toISOString()
-              } as unknown as ScanResult),
-            reason: "A scheduled report could not be sent because the latest scan failed.",
-            triggeredAt: latestScan?.scanned_at ?? new Date().toISOString()
-          });
-        }
-
-        continue;
-      }
-
-      const { data: lastReport } = await admin
-        .from("reports")
-        .select("sent_at")
-        .eq("website_id", website.id)
-        .order("sent_at", { ascending: false, nullsFirst: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!isDue(lastReport?.sent_at ?? null, website.email_report_frequency ?? profile.email_report_frequency)) {
-        continue;
-      }
-
-      const report = await generateAndStoreReport({
-        websiteId: website.id,
-        scanId: latestScan.id
-      });
-
-      try {
-        await sendStoredReportEmail({
-          reportId: report.id,
-          skipAlreadySentRecipients: true,
-          deliveryMode: "scheduled"
-        });
-
-        sent.push(report.id);
-      } catch (error) {
-        console.error("[reports:cron] scheduled_delivery_failed", {
-          reportId: report.id,
-          websiteId: website.id,
-          userId: profile.id,
-          error: error instanceof Error ? error.message : "Unknown scheduled delivery error."
-        });
-      }
-    }
+  if (guard.shouldStop({ stage: "queue", queue: "report_email_queue" })) {
+    return [];
   }
 
-  return sent;
+  return processQueuedReportEmails(getCronBatchLimit("REPORT_QUEUE_BATCH_LIMIT", 25));
 }
