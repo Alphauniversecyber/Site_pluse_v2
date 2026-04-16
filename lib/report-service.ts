@@ -557,5 +557,5 @@ export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_C
     return [];
   }
 
-  return processQueuedReportEmails(getCronBatchLimit("REPORT_QUEUE_BATCH_LIMIT", 25));
+  return processQueuedReportEmails(getCronBatchLimit("REPORT_QUEUE_BATCH_LIMIT", 25), guard);
 }

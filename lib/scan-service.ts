@@ -818,5 +818,5 @@ export async function processDueScans(limit = getCronBatchLimit("SCAN_CRON_LIMIT
     return [];
   }
 
-  return processQueuedScanJobs(getCronBatchLimit("SCAN_QUEUE_BATCH_LIMIT", 20));
+  return processQueuedScanJobs(getCronBatchLimit("SCAN_QUEUE_BATCH_LIMIT", 20), guard);
 }

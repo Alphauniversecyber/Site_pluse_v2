@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { ScanResult, UptimeCheckRecord, UserProfile, Website } from "@/types";
-import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
+import { createCronExecutionGuard, getCronBatchLimit, type CronExecutionGuard } from "@/lib/cron";
 import { buildEmailDedupeKey } from "@/lib/email-utils";
 import { trySendCriticalAlertEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -305,6 +305,8 @@ function classifyVercelHealthCheck(response: Response) {
 export async function syncUptimeRobotForUser(input: {
   profile: UserProfile;
   websites: Website[];
+  guard?: CronExecutionGuard;
+  syncedCount?: number;
 }) {
   if (process.env.UPTIMEROBOT_ENABLED === "false") {
     return [];
@@ -343,6 +345,18 @@ export async function syncUptimeRobotForUser(input: {
   const inserted: UptimeCheckRecord[] = [];
 
   for (const website of input.websites) {
+    if (
+      input.guard?.shouldStop({
+        syncedCount: input.syncedCount ?? 0,
+        websiteChecks: inserted.length,
+        userId: input.profile.id,
+        websiteId: website.id,
+        source: "uptimerobot"
+      })
+    ) {
+      break;
+    }
+
     const monitor = matchMonitor(monitors, website.url);
     if (!monitor) {
       continue;
@@ -456,7 +470,9 @@ export async function processUptimeRobotSync(limit = getCronBatchLimit("UPTIMERO
 
     await syncUptimeRobotForUser({
       profile,
-      websites: (websites ?? []) as Website[]
+      websites: (websites ?? []) as Website[],
+      guard,
+      syncedCount: synced.length
     });
 
     synced.push(profile.id);

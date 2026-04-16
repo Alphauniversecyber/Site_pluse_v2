@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ScanFrequency, ScanResult, UserProfile, Website } from "@/types";
 import { logAdminError } from "@/lib/admin/logging";
+import type { CronExecutionGuard } from "@/lib/cron";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { generateAndStoreReport, sendStoredReportEmail } from "@/lib/report-service";
 import { getPeriodKey, getRetryAt, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
@@ -286,7 +287,7 @@ export async function enqueueDueReportEmails(limit = 200) {
   return rowsToInsert.length;
 }
 
-export async function processQueuedReportEmails(limit = 25) {
+export async function processQueuedReportEmails(limit = 25, guard?: CronExecutionGuard) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("report_email_queue")
@@ -304,6 +305,17 @@ export async function processQueuedReportEmails(limit = 25) {
   const sentReportIds: string[] = [];
 
   for (const row of rows) {
+    if (
+      guard?.shouldStop({
+        queue: "report_email_queue",
+        processedCount: sentReportIds.length,
+        queueId: row.id,
+        websiteId: row.website_id
+      })
+    ) {
+      break;
+    }
+
     const startedAt = new Date().toISOString();
 
     try {

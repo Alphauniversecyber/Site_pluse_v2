@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ScanFrequency, UserProfile, Website } from "@/types";
 import { logAdminError, logScanExecution } from "@/lib/admin/logging";
+import type { CronExecutionGuard } from "@/lib/cron";
 import { executeWebsiteScan } from "@/lib/scan-service";
 import { getPeriodKey, getRetryAt, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -244,7 +245,7 @@ export async function enqueueDueScanJobs(limit = 250) {
   return rowsToInsert.length;
 }
 
-export async function processQueuedScanJobs(limit = 20) {
+export async function processQueuedScanJobs(limit = 20, guard?: CronExecutionGuard) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("scan_job_queue")
@@ -262,6 +263,17 @@ export async function processQueuedScanJobs(limit = 20) {
   const executedWebsiteIds: string[] = [];
 
   for (const row of rows) {
+    if (
+      guard?.shouldStop({
+        queue: "scan_job_queue",
+        processedCount: executedWebsiteIds.length,
+        queueId: row.id,
+        websiteId: row.website_id
+      })
+    ) {
+      break;
+    }
+
     if (row.failure_reason === "plan_limit_reached") {
       continue;
     }

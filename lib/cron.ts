@@ -17,7 +17,11 @@ export function getCronSoftTimeoutMs(fallback: number) {
   return parsePositiveInt(process.env.CRON_SOFT_TIMEOUT_MS, fallback);
 }
 
-export function createCronExecutionGuard(label: string, fallbackSoftTimeoutMs: number) {
+export type CronExecutionGuard = {
+  shouldStop(context?: Record<string, unknown>): boolean;
+};
+
+export function createCronExecutionGuard(label: string, fallbackSoftTimeoutMs: number): CronExecutionGuard {
   const startedAt = Date.now();
   const softTimeoutMs = Math.max(getCronSoftTimeoutMs(fallbackSoftTimeoutMs), fallbackSoftTimeoutMs);
   let logged = false;
