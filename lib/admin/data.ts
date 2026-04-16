@@ -1367,6 +1367,48 @@ export async function getAdminErrorsData(input: {
   }
 }
 
+function getAdminCronSuccessMessage(cronName: AdminCronName, data: Record<string, unknown>) {
+  if (cronName === "process-scans") {
+    const result = data.executed as
+      | {
+          processedCount?: number;
+          queuedCount?: number;
+          hasMore?: boolean;
+        }
+      | undefined;
+
+    if (result) {
+      const processedCount = result.processedCount ?? 0;
+      const queuedCount = result.queuedCount ?? 0;
+
+      return result.hasMore
+        ? `process-scans ran ${processedCount} scan(s), queued ${queuedCount} job(s), and there is still backlog left for the next run.`
+        : `process-scans ran ${processedCount} scan(s), queued ${queuedCount} job(s), and cleared the current due backlog.`;
+    }
+  }
+
+  if (cronName === "process-reports") {
+    const result = data.sent as
+      | {
+          processedCount?: number;
+          queuedCount?: number;
+          hasMore?: boolean;
+        }
+      | undefined;
+
+    if (result) {
+      const processedCount = result.processedCount ?? 0;
+      const queuedCount = result.queuedCount ?? 0;
+
+      return result.hasMore
+        ? `process-reports sent ${processedCount} report(s), queued ${queuedCount} job(s), and there is still backlog left for the next run.`
+        : `process-reports sent ${processedCount} report(s), queued ${queuedCount} job(s), and cleared the current due backlog.`;
+    }
+  }
+
+  return `${cronName} triggered successfully.`;
+}
+
 export async function triggerAdminCron(cronName: AdminCronName) {
   try {
     const data = await executeAdminCron(cronName);
@@ -1378,7 +1420,7 @@ export async function triggerAdminCron(cronName: AdminCronName) {
       payload: {
         data
       },
-      message: `${cronName} triggered successfully.`
+      message: getAdminCronSuccessMessage(cronName, data)
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to trigger cron.";

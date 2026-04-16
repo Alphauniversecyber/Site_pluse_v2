@@ -860,7 +860,42 @@ export async function processDueScansBatch(input: {
         inspectedCount: 0,
         hasMore: true
       }
-    : await processQueuedScanJobs(queueLimit, guard);
+    : await (async () => {
+        const executedWebsiteIds: string[] = [];
+        let processedCount = 0;
+        let queueInspectedCount = 0;
+        let hasMore = false;
+
+        while (true) {
+          const batchResult = await processQueuedScanJobs(queueLimit, guard);
+          executedWebsiteIds.push(...batchResult.executedWebsiteIds);
+          processedCount += batchResult.processedCount;
+          queueInspectedCount += batchResult.inspectedCount;
+          hasMore = batchResult.hasMore;
+
+          if (!batchResult.hasMore) {
+            break;
+          }
+
+          if (
+            guard.shouldStop({
+              stage: "queue",
+              queue: "scan_job_queue",
+              processedCount,
+              inspectedCount: queueInspectedCount
+            })
+          ) {
+            break;
+          }
+        }
+
+        return {
+          executedWebsiteIds,
+          processedCount,
+          inspectedCount: queueInspectedCount,
+          hasMore
+        };
+      })();
 
   return {
     processedIds: queueResult.executedWebsiteIds,

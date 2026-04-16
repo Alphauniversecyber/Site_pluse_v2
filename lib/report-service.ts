@@ -594,7 +594,42 @@ export async function processDueEmailReportsBatch(input: {
         inspectedCount: 0,
         hasMore: true
       }
-    : await processQueuedReportEmails(queueLimit, guard);
+    : await (async () => {
+        const sentReportIds: string[] = [];
+        let processedCount = 0;
+        let queueInspectedCount = 0;
+        let hasMore = false;
+
+        while (true) {
+          const batchResult = await processQueuedReportEmails(queueLimit, guard);
+          sentReportIds.push(...batchResult.sentReportIds);
+          processedCount += batchResult.processedCount;
+          queueInspectedCount += batchResult.inspectedCount;
+          hasMore = batchResult.hasMore;
+
+          if (!batchResult.hasMore) {
+            break;
+          }
+
+          if (
+            guard.shouldStop({
+              stage: "queue",
+              queue: "report_email_queue",
+              processedCount,
+              inspectedCount: queueInspectedCount
+            })
+          ) {
+            break;
+          }
+        }
+
+        return {
+          sentReportIds,
+          processedCount,
+          inspectedCount: queueInspectedCount,
+          hasMore
+        };
+      })();
 
   return {
     sentReportIds: queueResult.sentReportIds,
