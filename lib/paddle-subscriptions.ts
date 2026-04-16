@@ -342,6 +342,10 @@ function mapToSubscriptionStatus(status: string): SubscriptionStatus {
   return "inactive";
 }
 
+function getPaidSubscriptionTrialEndsAt(status: SubscriptionStatus, nextBillingDate: string | null) {
+  return status === "trialing" ? nextBillingDate : null;
+}
+
 async function upsertSubscriptionAndUser(input: {
   subscription: PaddleSubscription;
   selection: ResolvedSelection;
@@ -352,6 +356,7 @@ async function upsertSubscriptionAndUser(input: {
   const admin = createSupabaseAdminClient();
   const status = input.statusOverride ?? mapToSubscriptionStatus(input.subscription.status);
   const nextBillingDate = status === "cancelled" ? null : input.subscription.next_billed_at;
+  const trialEndsAt = getPaidSubscriptionTrialEndsAt(status, nextBillingDate);
   const subscriptionPayload = {
     user_id: input.user.id,
     email: input.user.email,
@@ -392,8 +397,8 @@ async function upsertSubscriptionAndUser(input: {
       next_billing_date: nextBillingDate,
       last_payment_date: input.lastPaymentDate ?? input.user.last_payment_date ?? null,
       is_trial: status === "cancelled" ? false : false,
-      trial_end_date: null,
-      trial_ends_at: null
+      trial_end_date: trialEndsAt,
+      trial_ends_at: trialEndsAt
     })
     .eq("id", input.user.id);
 
@@ -415,6 +420,7 @@ async function updateSubscriptionStatusFromTransaction(input: {
   const admin = createSupabaseAdminClient();
   const paddleSubscriptionId = input.subscription?.id ?? input.transaction.subscription_id;
   const nextBillingDate = input.subscription?.next_billed_at ?? input.user.next_billing_date ?? null;
+  const trialEndsAt = getPaidSubscriptionTrialEndsAt(input.status, nextBillingDate);
   const currentLastPaymentDate = input.user.last_payment_date ?? null;
   const lastPaymentDate =
     input.status === "payment_failed"
@@ -444,8 +450,8 @@ async function updateSubscriptionStatusFromTransaction(input: {
       paddle_customer_id: input.transaction.customer_id ?? input.user.paddle_customer_id,
       paddle_subscription_id: paddleSubscriptionId ?? input.user.paddle_subscription_id,
       is_trial: false,
-      trial_end_date: null,
-      trial_ends_at: null
+      trial_end_date: trialEndsAt,
+      trial_ends_at: trialEndsAt
     })
     .eq("id", input.user.id);
 

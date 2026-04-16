@@ -71,7 +71,9 @@ const foundingSaleUrgencyCopy = "Sale closes Jun 30 — price locked in forever 
 const foundingPriceLockText = "Cancel anytime \u00B7 Founding price stays as long as you're subscribed";
 const starterLockCopyText = "Upgrade before Jun 30 to lock in founding pricing";
 const foundingSaleUrgencyText = "Sale closes Jun 30 \u2014 price locked in forever after";
-const paidTrialText = "Start free for 14 days \u2014 no credit card required";
+const monthlyTrialText = "Start with a 14-day free trial \u2014 no credit card required";
+const yearlyTrialText =
+  "Start with a 14-day free trial \u2014 yearly plans also include 2 extra free months before annual billing starts";
 
 void [foundingPriceLockCopy, starterLockCopyCopy, foundingSaleUrgencyCopy];
 
@@ -210,7 +212,7 @@ export function PricingGrid({
                   ) : null}
                 </PriceFade>
 
-                {false ? (
+                {!yearlySelected && planDefinition.displayName !== "Starter" ? (
                   <p
                     className={cn(
                       compact ? "mt-1 text-[12px] leading-5" : "mt-1.5 text-[13px] leading-6",
@@ -221,14 +223,14 @@ export function PricingGrid({
                   </p>
                 ) : null}
 
-                {planDefinition.displayName !== "Starter" ? (
+                {yearlySelected && planDefinition.displayName !== "Starter" ? (
                   <p
                     className={cn(
                       compact ? "mt-1 text-[12px] leading-5" : "mt-1.5 text-[13px] leading-6",
                       plan.theme === "dark" ? "text-slate-600 dark:text-slate-300" : "text-slate-500"
                     )}
                   >
-                    {paidTrialText}
+                    {yearlyTrialText}
                   </p>
                 ) : null}
 

@@ -73,6 +73,9 @@ const planMarketingCopy: Record<
 const foundingPriceLockCopy = "Cancel anytime \u00B7 Founding price stays as long as you're subscribed";
 const starterLockCopy = "Upgrade before Jun 30 to lock in founding pricing";
 const foundingSaleUrgencyCopy = "Sale closes Jun 30 \u2014 price locked in forever after";
+const monthlyTrialCopy = "Start with a 14-day free trial \u2014 no credit card required.";
+const yearlyTrialCopy =
+  "Start with a 14-day free trial \u2014 yearly plans also include 2 extra free months in Paddle before the annual charge starts.";
 
 type RefundState = {
   eligible: boolean;
@@ -422,7 +425,9 @@ export default function BillingPage() {
                     {user.plan === "free" && !user.is_trial
                       ? "You are currently on the free Starter plan."
                       : user.is_trial && !user.paddle_subscription_id
-                        ? `You currently have trial access to the ${currentPlanLabel} plan.`
+                        ? `You currently have the standard 14-day free trial for the ${currentPlanLabel} plan.`
+                        : user.subscription_status === "trialing" && user.billing_cycle === "yearly"
+                          ? `You are currently in the 2-month free trial for the ${currentPlanLabel} yearly plan.`
                         : `You are on the ${currentPlanLabel} plan.`}
                   </p>
                   {currentPaidSelection ? (
@@ -619,7 +624,9 @@ export default function BillingPage() {
                     {isPaidPlan(planKey)
                       ? hasPaidPaddleSubscription
                         ? "Use the Paddle portal to change an active subscription without creating duplicates."
-                        : "All paid subscriptions are charged at the sale price shown here."
+                        : yearlySelected
+                          ? yearlyTrialCopy
+                          : monthlyTrialCopy
                       : "Stay on Starter for $0/month or $0/year while you validate demand."}
                   </p>
 
