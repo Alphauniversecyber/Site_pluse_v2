@@ -15,13 +15,18 @@ export default async function ClientDashboardPage({
 
   if (!payload) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0F172A] px-4 text-white">
-        <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-white/[0.05] p-8 text-center shadow-[0_30px_80px_-44px_rgba(15,23,42,0.85)] backdrop-blur-2xl">
-          <div className="mx-auto flex w-fit rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3">
-            <SitePulseLogo variant="light" className="h-8 w-[140px]" priority />
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+        <div className="w-full max-w-lg rounded-[2rem] border border-border/70 bg-card/90 p-8 text-center shadow-[0_30px_80px_-44px_rgba(15,23,42,0.35)] backdrop-blur-2xl">
+          <div className="mx-auto flex w-fit rounded-2xl border border-border bg-background/80 px-4 py-3">
+            <span className="dark:hidden">
+              <SitePulseLogo variant="dark" className="h-8 w-[140px]" priority />
+            </span>
+            <span className="hidden dark:inline-flex">
+              <SitePulseLogo variant="light" className="h-8 w-[140px]" priority />
+            </span>
           </div>
           <p className="mt-8 font-display text-3xl font-semibold">This link is invalid or has expired</p>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
             Ask your agency contact to send you a fresh SitePulse dashboard link.
           </p>
         </div>

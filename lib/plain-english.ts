@@ -168,21 +168,21 @@ export async function rewriteIssuesToPlainEnglish(issues: RawIssue[]): Promise<P
   try {
     const groqClient = getGroqClient();
     const prompt = `
-You are an SEO expert who explains technical website issues
-to non-technical business owners in plain, friendly English.
+You are rewriting website review findings for a client dashboard used by
+busy business owners and account managers.
 
-Rewrite each of these SEO/performance issues into plain English.
-Strip all markdown links like [text](url) completely.
-Remove all technical jargon.
-Make it sound like a friendly expert talking to a business owner.
+Rewrite each issue in clear, practical language.
+Strip all markdown links like [text](url).
+Avoid jargon, acronyms, and audit-style wording unless it is commonly understood.
+Make it sound like a calm expert explaining what matters to the business.
 
 For each issue return:
 - title: short clear title (max 8 words, action oriented)
 - description: 2 sentences max, plain English, no jargon
-- whatToDo: 1-2 sentences, simple action the owner can take or ask dev to do
-- realWorldImpact: 1 sentence starting with "This means..." explaining business impact
+- whatToDo: 1-2 sentences with the next sensible action for the team
+- realWorldImpact: 1 sentence explaining the business impact in terms of trust, leads, sales, or visibility
 - category: one of: performance, seo, accessibility, security, best_practices
-- icon: single emoji that represents the category
+- icon: a short category label
 
 Issues to rewrite:
 ${JSON.stringify(cleanedIssues, null, 2)}
@@ -208,8 +208,8 @@ Return ONLY a valid JSON array. No markdown, no explanation, no backticks.
     return cleanedIssues.map((issue) => ({
       title: stripMarkdown(issue.title),
       description: stripMarkdown(issue.description),
-      whatToDo: "Ask your developer to review and fix this issue.",
-      realWorldImpact: "This may affect your website visibility and user experience.",
+      whatToDo: "Ask your web partner to review this in the next update cycle and confirm when it is fixed.",
+      realWorldImpact: "This can make the site harder to find, use, or trust, which may lower enquiries and sales.",
       category: "best_practices" as const,
       icon: "⚠️"
     }));
@@ -230,17 +230,16 @@ export async function rewriteRecommendationsToPlainEnglish(
   try {
     const groqClient = getGroqClient();
     const prompt = `
-You are an SEO expert explaining website improvements to
-non-technical business owners in plain, friendly English.
+You are rewriting website improvement recommendations for a client dashboard.
 
-Rewrite each recommendation into plain English.
-Strip all markdown links like [text](url) completely.
-No technical jargon. Sound like a friendly expert.
+Explain each recommendation in clear business language.
+Strip all markdown links like [text](url).
+Avoid jargon and make the advice easy to act on for non-technical readers.
 
 For each recommendation return:
 - title: short action-oriented title (max 8 words)
 - whatToDo: 2-3 sentences, simple steps in plain English
-- whyItMatters: 1 sentence, real business benefit
+- whyItMatters: 1 sentence focused on the business benefit
 - estimatedTime: realistic time estimate like "~15 mins" or "~1 hour" or "~1 day"
 - effort: one of: Easy, Medium, Hard
 
@@ -268,7 +267,7 @@ Return ONLY a valid JSON array. No markdown, no explanation, no backticks.
     return cleanedRecommendations.map((rec) => ({
       title: stripMarkdown(rec.title),
       whatToDo: stripMarkdown(rec.description),
-      whyItMatters: "Fixing this will improve your website performance.",
+      whyItMatters: "This should improve the customer experience and strengthen the site's ability to turn traffic into results.",
       estimatedTime: "~30 mins",
       effort: "Medium" as const
     }));

@@ -1,5 +1,6 @@
 "use client";
 
+import { Accessibility, Gauge, Search, Shield, Sparkles } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import type { ClientDashboardIssue } from "@/types";
@@ -31,11 +32,8 @@ type DisplayIssue = PlainEnglishIssue & {
 };
 
 const ISSUE_COPY = {
-  criticalIcon: "\u{1F6A8}",
-  warningIcon: "\u26A0\uFE0F",
-  infoIcon: "\u2139\uFE0F",
-  whatToDoLabel: "\u{1F4A1} What to do:",
-  impactLabel: "\u{1F4CA} Business impact:"
+  whatToDoLabel: "Recommended next step",
+  impactLabel: "Why this matters"
 } as const;
 
 function stripMarkdown(text: string | null | undefined) {
@@ -55,33 +53,41 @@ function severityMeta(severity: ClientDashboardIssue["severity"]) {
   if (severity === "critical") {
     return {
       label: "Critical",
-      tone: "border-rose-400/20 bg-rose-400/10 text-rose-200"
+      tone: "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-200"
     };
   }
 
   if (severity === "warning") {
     return {
       label: "Warning",
-      tone: "border-amber-400/20 bg-amber-400/10 text-amber-100"
+      tone: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-100"
     };
   }
 
   return {
     label: "Info",
-    tone: "border-sky-400/20 bg-sky-400/10 text-sky-100"
+    tone: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-100"
   };
 }
 
-function fallbackIssueIcon(severity: ClientDashboardIssue["severity"]) {
-  if (severity === "critical") {
-    return ISSUE_COPY.criticalIcon;
+function categoryIcon(category: PlainEnglishIssue["category"]) {
+  if (category === "performance") {
+    return Gauge;
   }
 
-  if (severity === "warning") {
-    return ISSUE_COPY.warningIcon;
+  if (category === "seo") {
+    return Search;
   }
 
-  return ISSUE_COPY.infoIcon;
+  if (category === "accessibility") {
+    return Accessibility;
+  }
+
+  if (category === "security") {
+    return Shield;
+  }
+
+  return Sparkles;
 }
 
 function toFallbackIssue(issue: ClientDashboardIssue): DisplayIssue {
@@ -94,14 +100,14 @@ function toFallbackIssue(issue: ClientDashboardIssue): DisplayIssue {
     description: issue.description,
     whatToDo:
       issue.severity === "critical"
-        ? "Ask your developer to fix this as soon as possible so it stops hurting the site."
-        : "Ask your developer to review this issue and include it in the next round of website updates.",
+        ? "Ask your web partner to fix this first. It is one of the clearest blockers to a stronger customer experience."
+        : "Add this to the next website update so it does not keep reducing trust, visibility, or conversions.",
     realWorldImpact:
       issue.severity === "info"
-        ? "This means there is a smaller improvement opportunity that could still make the site easier to use or trust."
-        : "This means visitors may have a worse experience and your site may be less likely to turn traffic into leads or sales.",
+        ? "This is a smaller improvement opportunity that can still make the site easier to understand and trust."
+        : "This can make the site harder to find, use, or trust, which can reduce enquiries and sales.",
     category: "best_practices",
-    icon: fallbackIssueIcon(issue.severity)
+    icon: ""
   };
 }
 
@@ -121,29 +127,29 @@ function mergeIssue(issue: ClientDashboardIssue, rewritten?: Partial<PlainEnglis
 
 function IssueSkeletonCard() {
   return (
-    <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_24px_64px_-36px_rgba(15,23,42,0.72)] backdrop-blur-xl">
+    <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
       <div className="flex flex-col gap-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-start gap-3">
-            <Skeleton className="mt-1 h-10 w-10 rounded-2xl bg-white/10" />
+            <Skeleton className="mt-1 h-10 w-10 rounded-2xl bg-muted" />
             <div className="min-w-0 flex-1 space-y-2">
-              <Skeleton className="h-5 w-52 bg-white/10" />
-              <Skeleton className="h-4 w-full bg-white/10" />
-              <Skeleton className="h-4 w-5/6 bg-white/10" />
+              <Skeleton className="h-5 w-52 bg-muted" />
+              <Skeleton className="h-4 w-full bg-muted" />
+              <Skeleton className="h-4 w-5/6 bg-muted" />
             </div>
           </div>
-          <Skeleton className="h-8 w-24 rounded-full bg-white/10" />
+          <Skeleton className="h-8 w-24 rounded-full bg-muted" />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-[#08101f]/70 p-4">
-            <Skeleton className="h-4 w-28 bg-white/10" />
-            <Skeleton className="mt-3 h-4 w-full bg-white/10" />
-            <Skeleton className="mt-2 h-4 w-5/6 bg-white/10" />
+          <div className="rounded-2xl border border-border bg-background/80 p-4">
+            <Skeleton className="h-4 w-28 bg-muted" />
+            <Skeleton className="mt-3 h-4 w-full bg-muted" />
+            <Skeleton className="mt-2 h-4 w-5/6 bg-muted" />
           </div>
-          <div className="rounded-2xl border border-white/10 bg-[#08101f]/70 p-4">
-            <Skeleton className="h-4 w-32 bg-white/10" />
-            <Skeleton className="mt-3 h-4 w-full bg-white/10" />
+          <div className="rounded-2xl border border-border bg-background/80 p-4">
+            <Skeleton className="h-4 w-32 bg-muted" />
+            <Skeleton className="mt-3 h-4 w-full bg-muted" />
           </div>
         </div>
       </div>
@@ -151,7 +157,13 @@ function IssueSkeletonCard() {
   );
 }
 
-export function Issues({ issues }: { issues: ClientDashboardIssue[] }) {
+export function Issues({
+  issues,
+  hasScan
+}: {
+  issues: ClientDashboardIssue[];
+  hasScan: boolean;
+}) {
   const [filter, setFilter] = useState<IssueFilter>("all");
   const [rewrittenIssues, setRewrittenIssues] = useState<DisplayIssue[]>(() => issues.map(toFallbackIssue));
   const [rewriteStatus, setRewriteStatus] = useState<"loading" | "ready" | "fallback">("loading");
@@ -233,22 +245,39 @@ export function Issues({ issues }: { issues: ClientDashboardIssue[] }) {
     [deferredFilter, rewrittenIssues]
   );
 
+  if (!hasScan) {
+    return (
+      <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-8 text-center shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
+        <p className="font-display text-2xl font-semibold text-foreground">Your first review is still pending</p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          Once the first scan completes, this page will translate technical issues into clear business language and simple next steps.
+        </p>
+      </div>
+    );
+  }
+
   if (!issues.length) {
     return (
-      <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.05] p-8 text-center shadow-[0_24px_64px_-36px_rgba(15,23,42,0.72)] backdrop-blur-xl">
-        <p className="font-display text-2xl font-semibold text-white">No issues found. Your site looks healthy!</p>
+      <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-8 text-center shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
+        <p className="font-display text-2xl font-semibold text-foreground">No major issues in the latest review</p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          The latest scan did not flag any urgent problems, so your team can focus on routine improvements instead of firefighting.
+        </p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_24px_64px_-36px_rgba(15,23,42,0.72)] backdrop-blur-xl">
-        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300">
+      <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
+        <p className="text-sm leading-6 text-muted-foreground">
+          These are the biggest issues most likely to slow down visibility, trust, or conversions.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span>{counts.critical} Critical</span>
-          <span className="text-slate-600">|</span>
+          <span className="text-border">|</span>
           <span>{counts.warning} Warnings</span>
-          <span className="text-slate-600">|</span>
+          <span className="text-border">|</span>
           <span>{counts.info} Info</span>
         </div>
 
@@ -261,15 +290,14 @@ export function Issues({ issues }: { issues: ClientDashboardIssue[] }) {
               className={cn(
                 "rounded-full border px-4 py-2 text-sm font-medium capitalize transition-colors",
                 filter === item
-                  ? "border-sky-400/30 bg-sky-400/15 text-white"
-                  : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                  ? "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-100"
+                  : "border-border bg-card/80 text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
             >
               {item}
             </button>
           ))}
         </div>
-
       </div>
 
       {rewriteStatus === "loading" ? (
@@ -286,17 +314,20 @@ export function Issues({ issues }: { issues: ClientDashboardIssue[] }) {
             return (
               <article
                 key={issue.id}
-                className="rounded-[1.8rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_24px_64px_-36px_rgba(15,23,42,0.72)] backdrop-blur-xl"
+                className="rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl"
               >
                 <div className="flex flex-col gap-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-[#08101f]/80 text-xl">
-                        <span aria-hidden="true">{issue.icon}</span>
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border bg-background/80 text-foreground">
+                        {(() => {
+                          const Icon = categoryIcon(issue.category);
+                          return <Icon className="h-5 w-5" />;
+                        })()}
                       </div>
                       <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-3">
-                          <p className="font-display text-xl font-semibold text-white">
+                          <p className="font-display text-xl font-semibold text-foreground">
                             {stripMarkdown(issue.title)}
                           </p>
                           <span
@@ -308,10 +339,10 @@ export function Issues({ issues }: { issues: ClientDashboardIssue[] }) {
                             {meta.label}
                           </span>
                         </div>
-                        <p className="text-sm leading-6 text-slate-300">
+                        <p className="text-sm leading-6 text-muted-foreground">
                           {stripMarkdown(issue.description)}
                         </p>
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-muted-foreground">
                           {issue.affectedPages} affected {issue.affectedPages === 1 ? "page" : "pages"}
                         </p>
                       </div>
@@ -319,13 +350,13 @@ export function Issues({ issues }: { issues: ClientDashboardIssue[] }) {
                   </div>
 
                   <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="rounded-2xl border border-white/10 bg-[#08101f]/75 p-4">
-                      <p className="text-sm font-semibold text-white">{ISSUE_COPY.whatToDoLabel}</p>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">{issue.whatToDo}</p>
+                    <div className="rounded-2xl border border-border bg-background/80 p-4">
+                      <p className="text-sm font-semibold text-foreground">{ISSUE_COPY.whatToDoLabel}</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{issue.whatToDo}</p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-[#08101f]/75 p-4">
-                      <p className="text-sm font-semibold text-white">{ISSUE_COPY.impactLabel}</p>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">{issue.realWorldImpact}</p>
+                    <div className="rounded-2xl border border-border bg-background/80 p-4">
+                      <p className="text-sm font-semibold text-foreground">{ISSUE_COPY.impactLabel}</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{issue.realWorldImpact}</p>
                     </div>
                   </div>
                 </div>
@@ -334,8 +365,11 @@ export function Issues({ issues }: { issues: ClientDashboardIssue[] }) {
           })}
         </div>
       ) : (
-        <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.05] p-8 text-center shadow-[0_24px_64px_-36px_rgba(15,23,42,0.72)] backdrop-blur-xl">
-          <p className="font-display text-2xl font-semibold text-white">No issues found. Your site looks healthy!</p>
+        <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-8 text-center shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
+          <p className="font-display text-2xl font-semibold text-foreground">No issues match this filter</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            Try a different filter to review the rest of the findings from the latest scan.
+          </p>
         </div>
       )}
     </div>

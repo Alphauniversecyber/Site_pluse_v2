@@ -27,8 +27,8 @@ type DisplayRecommendation = PlainEnglishRecommendation & {
 };
 
 const RECOMMENDATION_COPY = {
-  whyItMattersLabel: "\u2705 Why it matters:",
-  estimatedTimePrefix: "\u23F1 Estimated time:"
+  whyItMattersLabel: "Why this matters",
+  estimatedTimePrefix: "Estimated time"
 } as const;
 
 function stripMarkdown(text: string | null | undefined) {
@@ -46,26 +46,26 @@ function stripMarkdown(text: string | null | undefined) {
 
 function priorityTone(priority: ClientDashboardRecommendation["priority"]) {
   if (priority === "high") {
-    return "border-rose-400/20 bg-rose-400/10 text-rose-200";
+    return "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-200";
   }
 
   if (priority === "medium") {
-    return "border-amber-400/20 bg-amber-400/10 text-amber-100";
+    return "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-100";
   }
 
-  return "border-sky-400/20 bg-sky-400/10 text-sky-100";
+  return "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-100";
 }
 
 function effortTone(effort: PlainEnglishRecommendation["effort"]) {
   if (effort === "Easy") {
-    return "border-emerald-400/20 bg-emerald-400/10 text-emerald-200";
+    return "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200";
   }
 
   if (effort === "Hard") {
-    return "border-rose-400/20 bg-rose-400/10 text-rose-200";
+    return "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-200";
   }
 
-  return "border-amber-400/20 bg-amber-400/10 text-amber-100";
+  return "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-100";
 }
 
 function impactLabel(priority: ClientDashboardRecommendation["priority"]) {
@@ -139,28 +139,28 @@ function mergeRecommendation(
 
 function RecommendationSkeletonCard() {
   return (
-    <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_24px_64px_-36px_rgba(15,23,42,0.72)] backdrop-blur-xl">
+    <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
       <div className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1 space-y-2">
-            <Skeleton className="h-6 w-56 bg-white/10" />
-            <Skeleton className="h-4 w-full bg-white/10" />
-            <Skeleton className="h-4 w-5/6 bg-white/10" />
+            <Skeleton className="h-6 w-56 bg-muted" />
+            <Skeleton className="h-4 w-full bg-muted" />
+            <Skeleton className="h-4 w-5/6 bg-muted" />
           </div>
           <div className="flex gap-2">
-            <Skeleton className="h-8 w-24 rounded-full bg-white/10" />
-            <Skeleton className="h-8 w-28 rounded-full bg-white/10" />
+            <Skeleton className="h-8 w-24 rounded-full bg-muted" />
+            <Skeleton className="h-8 w-28 rounded-full bg-muted" />
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-[#08101f]/70 p-4">
-          <Skeleton className="h-4 w-28 bg-white/10" />
-          <Skeleton className="mt-3 h-4 w-full bg-white/10" />
+        <div className="rounded-2xl border border-border bg-background/80 p-4">
+          <Skeleton className="h-4 w-28 bg-muted" />
+          <Skeleton className="mt-3 h-4 w-full bg-muted" />
         </div>
 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <Skeleton className="h-4 w-32 bg-white/10" />
-          <Skeleton className="h-11 w-40 rounded-2xl bg-white/10" />
+          <Skeleton className="h-4 w-32 bg-muted" />
+          <Skeleton className="h-11 w-40 rounded-2xl bg-muted" />
         </div>
       </div>
     </div>
@@ -169,10 +169,12 @@ function RecommendationSkeletonCard() {
 
 export function Recommendations({
   token,
-  recommendations
+  recommendations,
+  hasScan
 }: {
   token: string;
   recommendations: ClientDashboardRecommendation[];
+  hasScan: boolean;
 }) {
   const storageKey = `sitepulse-review-state:${token}`;
   const [reviewedIds, setReviewedIds] = useState<string[]>([]);
@@ -283,11 +285,23 @@ export function Recommendations({
     });
   }
 
+  if (!hasScan) {
+    return (
+      <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-8 text-center shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
+        <p className="font-display text-2xl font-semibold text-foreground">Your action plan will appear after the first review</p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          Once the first scan finishes, this page will turn the findings into a simple, business-friendly checklist.
+        </p>
+      </div>
+    );
+  }
+
   if (!recommendations.length) {
     return (
-      <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.05] p-8 text-center shadow-[0_24px_64px_-36px_rgba(15,23,42,0.72)] backdrop-blur-xl">
-        <p className="font-display text-2xl font-semibold text-white">
-          No recommendations right now. Your site is in good shape!
+      <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-8 text-center shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
+        <p className="font-display text-2xl font-semibold text-foreground">No active recommendations right now</p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          The latest review did not surface any immediate follow-up actions for your team.
         </p>
       </div>
     );
@@ -295,22 +309,21 @@ export function Recommendations({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_24px_64px_-36px_rgba(15,23,42,0.72)] backdrop-blur-xl">
+      <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Progress</p>
-            <p className="mt-2 font-display text-2xl font-semibold text-white">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Action plan progress</p>
+            <p className="mt-2 font-display text-2xl font-semibold text-foreground">
               {reviewedCount} of {recommendations.length} done
             </p>
           </div>
-          <div className="h-3 w-full max-w-sm overflow-hidden rounded-full bg-white/10">
+          <div className="h-3 w-full max-w-sm overflow-hidden rounded-full bg-secondary">
             <div
               className="h-full rounded-full bg-sky-400 transition-[width] duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
         </div>
-
       </div>
 
       {rewriteStatus === "loading" ? (
@@ -328,14 +341,14 @@ export function Recommendations({
               <label
                 key={recommendation.id}
                 className={cn(
-                  "flex cursor-pointer flex-col gap-4 rounded-[1.8rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_24px_64px_-36px_rgba(15,23,42,0.72)] backdrop-blur-xl transition-colors hover:bg-white/[0.07]",
-                  reviewed && "border-emerald-400/20 bg-emerald-400/10"
+                  "flex cursor-pointer flex-col gap-4 rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl transition-colors hover:bg-accent/60",
+                  reviewed && "border-emerald-500/20 bg-emerald-500/10"
                 )}
               >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-display text-2xl font-semibold text-white">
+                      <p className="font-display text-2xl font-semibold text-foreground">
                         {stripMarkdown(recommendation.title)}
                       </p>
                       <span
@@ -356,29 +369,29 @@ export function Recommendations({
                       </span>
                     </div>
 
-                    <p className="text-sm leading-6 text-slate-300">
+                    <p className="text-sm leading-6 text-muted-foreground">
                       {stripMarkdown(recommendation.whatToDo)}
                     </p>
 
-                    <div className="rounded-2xl border border-white/10 bg-[#08101f]/75 p-4">
-                      <p className="text-sm font-semibold text-white">{RECOMMENDATION_COPY.whyItMattersLabel}</p>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">{recommendation.whyItMatters}</p>
+                    <div className="rounded-2xl border border-border bg-background/80 p-4">
+                      <p className="text-sm font-semibold text-foreground">{RECOMMENDATION_COPY.whyItMattersLabel}</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{recommendation.whyItMatters}</p>
                     </div>
 
-                    <p className="text-sm font-medium text-slate-200">
-                      {RECOMMENDATION_COPY.estimatedTimePrefix} {recommendation.estimatedTime}
+                    <p className="text-sm font-medium text-foreground">
+                      {RECOMMENDATION_COPY.estimatedTimePrefix}: {recommendation.estimatedTime}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#08101f]/75 px-4 py-3 text-sm text-slate-200">
+                  <div className="flex items-center gap-3 rounded-2xl border border-border bg-background/80 px-4 py-3 text-sm text-foreground">
                     <input
                       type="checkbox"
                       checked={reviewed}
                       onChange={() => toggleReviewed(recommendation.id)}
-                      className="h-4 w-4 rounded border-white/20 bg-transparent text-sky-400 focus:ring-sky-400"
+                      className="h-4 w-4 rounded border-border bg-transparent text-sky-500 focus:ring-sky-500"
                     />
                     <span className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
                       Mark as done
                     </span>
                   </div>

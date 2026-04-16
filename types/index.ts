@@ -536,7 +536,7 @@ export interface CompetitorScanRecord {
   scanned_at: string;
 }
 
-export type DashboardDataSource = "live" | "mock";
+export type DashboardDataSource = "live" | "disconnected" | "unavailable";
 export type ClientDashboardSeverity = "critical" | "warning" | "info";
 export type ClientDashboardPriority = "high" | "medium" | "low";
 
@@ -658,9 +658,10 @@ export interface ClientDashboardPayload {
     url: string;
     label: string;
   };
-  lastUpdated: string;
-  healthScore: number;
-  statusLabel: "NEEDS ATTENTION" | "GOOD" | "EXCELLENT";
+  lastUpdated: string | null;
+  hasScan: boolean;
+  healthScore: number | null;
+  statusLabel: "AWAITING REVIEW" | "NEEDS ATTENTION" | "GOOD" | "EXCELLENT";
   connections: {
     gsc: boolean;
     ga: boolean;

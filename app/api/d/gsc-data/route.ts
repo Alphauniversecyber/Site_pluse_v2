@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 
 import { apiError, apiSuccess } from "@/lib/api";
 import { getClientByToken } from "@/lib/client-token";
-import { buildMockGscData, fetchGscDashboardData, isGoogleAuthError } from "@/lib/gsc";
+import { buildEmptyGscData, fetchGscDashboardData, isGoogleAuthError } from "@/lib/gsc";
 import { refreshToken } from "@/lib/refresh-token";
 
 export const runtime = "nodejs";
@@ -20,15 +20,19 @@ export async function GET(request: NextRequest) {
     return apiError("This link is invalid or has expired.", 404);
   }
 
-  const fallback = buildMockGscData({
-    seed: token,
-    websiteUrl: client.url,
-    connected: Boolean(client.gsc_refresh_token || client.gsc_access_token),
+  const isConnected = Boolean((client.gsc_refresh_token || client.gsc_access_token) && client.gsc_property);
+  const disconnected = buildEmptyGscData({
+    connected: false,
+    property: client.gsc_property ?? null,
+    source: "disconnected"
+  });
+  const unavailable = buildEmptyGscData({
+    connected: isConnected,
     property: client.gsc_property ?? null
   });
 
   if (!client.gsc_access_token || !client.gsc_property) {
-    return apiSuccess(fallback);
+    return apiSuccess(disconnected);
   }
 
   try {
@@ -61,6 +65,6 @@ export async function GET(request: NextRequest) {
       error: error instanceof Error ? error.message : "Unable to load Search Console data."
     });
 
-    return apiSuccess(fallback);
+    return apiSuccess(unavailable);
   }
 }

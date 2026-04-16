@@ -11,33 +11,6 @@ class GoogleApiError extends Error {
   }
 }
 
-function hashSeed(value: string) {
-  let hash = 2166136261;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return hash >>> 0;
-}
-
-function createRng(seed: string) {
-  let state = hashSeed(seed) || 1;
-
-  return () => {
-    state |= 0;
-    state = (state + 0x6d2b79f5) | 0;
-    let result = Math.imul(state ^ (state >>> 15), 1 | state);
-    result ^= result + Math.imul(result ^ (result >>> 7), 61 | result);
-    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
 function shiftDays(date: Date, amount: number) {
   const value = new Date(date);
   value.setUTCDate(value.getUTCDate() + amount);
@@ -218,6 +191,36 @@ export function isGoogleAuthError(error: unknown) {
   return error instanceof GoogleApiError && (error.status === 401 || error.status === 403);
 }
 
+export function buildEmptyGscData(input: {
+  connected: boolean;
+  property?: string | null;
+  source?: Exclude<GscDashboardData["source"], "live">;
+}) {
+  return {
+    connected: input.connected,
+    source: input.source ?? (input.connected ? "unavailable" : "disconnected"),
+    property: input.property ?? null,
+    lastSyncedAt: null,
+    summary: {
+      clicks: 0,
+      impressions: 0,
+      avgPosition: 0,
+      indexedPages: 0,
+      sitemapSubmitted: 0,
+      ctr: 0
+    },
+    comparison: {
+      clicks: 0,
+      impressions: 0,
+      avgPosition: 0,
+      indexedPages: 0
+    },
+    daily: [],
+    topQueries: [],
+    sitemaps: []
+  } satisfies GscDashboardData;
+}
+
 export async function pickBestGscProperty(accessToken: string, websiteUrl: string) {
   const response = await fetch("https://www.googleapis.com/webmasters/v3/sites", {
     headers: {
@@ -355,119 +358,6 @@ export async function fetchGscDashboardData(input: {
       impressions: percentDelta(currentSummary.impressions, previousSummary.impressions),
       avgPosition: improvementDelta(currentSummary.avgPosition, previousSummary.avgPosition),
       indexedPages: 0
-    },
-    daily,
-    topQueries,
-    sitemaps
-  } satisfies GscDashboardData;
-}
-
-export function buildMockGscData(input: {
-  seed: string;
-  websiteUrl: string;
-  connected: boolean;
-  property?: string | null;
-}) {
-  const rng = createRng(`${input.seed}:gsc`);
-  const endDate = shiftDays(new Date(), -1);
-  const startDate = shiftDays(endDate, -55);
-  const allDays: GscDailyPoint[] = [];
-  const brand = hostFromUrl(input.websiteUrl).split(".")[0].replace(/[-_]/g, " ");
-  const clicksBase = 112 + rng() * 34;
-  const impressionsBase = 2950 + rng() * 850;
-  const positionBase = 21.5 - rng() * 1.8;
-
-  for (let index = 0; index < 56; index += 1) {
-    const date = shiftDays(startDate, index);
-    const weeklyWave = Math.sin(index / 3.4) * 14;
-    const trend = index * 0.95;
-    const clicks = clamp(Math.round(clicksBase + weeklyWave + trend + (rng() - 0.5) * 16), 80, 205);
-    const impressions = clamp(
-      Math.round(impressionsBase + weeklyWave * 26 + trend * 20 + (rng() - 0.5) * 360),
-      2000,
-      5000
-    );
-    const position = Number(
-      clamp(positionBase - index * 0.11 + Math.sin(index / 5.5) * 0.6 + (rng() - 0.5) * 0.5, 12, 22).toFixed(1)
-    );
-
-    allDays.push({
-      date: formatDate(date),
-      label: formatLabel(formatDate(date)),
-      clicks,
-      impressions,
-      ctr: Number(((clicks / impressions) * 100).toFixed(2)),
-      position
-    });
-  }
-
-  const previousDaily = allDays.slice(0, 28);
-  const daily = allDays.slice(28);
-  const currentSummary = summarizeDaily(daily);
-  const previousSummary = summarizeDaily(previousDaily);
-  const indexedPages = Math.round(62 + rng() * 78);
-  const sitemapSubmitted = indexedPages + Math.round(rng() * 12);
-  const sitemaps: GscSitemapRecord[] = [
-    {
-      path: `${normalizeOrigin(input.websiteUrl)}sitemap.xml`,
-      submitted: Math.round(indexedPages * 0.72),
-      errors: 0,
-      warnings: 0,
-      healthy: true
-    },
-    (() => {
-      const errors = rng() > 0.72 ? 1 : 0;
-      const warnings = rng() > 0.55 ? 1 : 0;
-
-      return {
-      path: `${normalizeOrigin(input.websiteUrl)}post-sitemap.xml`,
-      submitted: Math.round(indexedPages * 0.28),
-      errors,
-      warnings,
-      healthy: errors === 0 && warnings === 0
-    };
-    })()
-  ];
-  const querySeeds = [
-    brand,
-    `${brand} services`,
-    `${brand} pricing`,
-    `${brand} reviews`,
-    `${brand} contact`,
-    `${brand} near me`,
-    `${brand} seo audit`,
-    `${brand} website performance`
-  ];
-  const topQueries: GscTopQuery[] = querySeeds.map((query, index) => {
-    const clicks = clamp(Math.round(14 + rng() * 28 + (8 - index) * 4), 8, 56);
-    const impressions = clamp(Math.round(clicks * (18 + rng() * 24)), 180, 2200);
-    return {
-      query,
-      clicks,
-      impressions,
-      ctr: Number(((clicks / impressions) * 100).toFixed(2)),
-      position: Number(clamp(6 + index * 1.3 + rng() * 2.2, 4, 24).toFixed(1))
-    };
-  });
-
-  return {
-    connected: input.connected,
-    source: "mock" as const,
-    property: input.property ?? null,
-    lastSyncedAt: null,
-    summary: {
-      clicks: currentSummary.clicks,
-      impressions: currentSummary.impressions,
-      avgPosition: currentSummary.avgPosition,
-      indexedPages,
-      sitemapSubmitted,
-      ctr: currentSummary.ctr
-    },
-    comparison: {
-      clicks: percentDelta(currentSummary.clicks, previousSummary.clicks),
-      impressions: percentDelta(currentSummary.impressions, previousSummary.impressions),
-      avgPosition: improvementDelta(currentSummary.avgPosition, previousSummary.avgPosition),
-      indexedPages: Number((((indexedPages - (indexedPages - 4)) / Math.max(indexedPages - 4, 1)) * 100).toFixed(1))
     },
     daily,
     topQueries,

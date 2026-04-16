@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { apiError, apiSuccess } from "@/lib/api";
-import { buildMockGaData, fetchGaDashboardData, isGoogleAuthError } from "@/lib/ga";
+import { buildEmptyGaData, fetchGaDashboardData, isGoogleAuthError } from "@/lib/ga";
 import { getClientByToken } from "@/lib/client-token";
 import { refreshToken } from "@/lib/refresh-token";
 
@@ -20,15 +20,19 @@ export async function GET(request: NextRequest) {
     return apiError("This link is invalid or has expired.", 404);
   }
 
-  const fallback = buildMockGaData({
-    seed: token,
-    websiteUrl: client.url,
-    connected: Boolean(client.ga_refresh_token || client.ga_access_token),
+  const isConnected = Boolean((client.ga_refresh_token || client.ga_access_token) && client.ga_property_id);
+  const disconnected = buildEmptyGaData({
+    connected: false,
+    propertyId: client.ga_property_id ?? null,
+    source: "disconnected"
+  });
+  const unavailable = buildEmptyGaData({
+    connected: isConnected,
     propertyId: client.ga_property_id ?? null
   });
 
   if (!client.ga_access_token || !client.ga_property_id) {
-    return apiSuccess(fallback);
+    return apiSuccess(disconnected);
   }
 
   try {
@@ -61,6 +65,6 @@ export async function GET(request: NextRequest) {
       error: error instanceof Error ? error.message : "Unable to load GA4 data."
     });
 
-    return apiSuccess(fallback);
+    return apiSuccess(unavailable);
   }
 }

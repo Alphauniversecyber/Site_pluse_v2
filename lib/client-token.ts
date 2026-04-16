@@ -15,36 +15,9 @@ import type {
   Website
 } from "@/types";
 import { buildHealthScore } from "@/lib/health-score";
-import { buildMockGaData } from "@/lib/ga";
-import { buildMockGscData } from "@/lib/gsc";
+import { buildEmptyGaData } from "@/lib/ga";
+import { buildEmptyGscData } from "@/lib/gsc";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-
-function hashSeed(value: string) {
-  let hash = 2166136261;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return hash >>> 0;
-}
-
-function createRng(seed: string) {
-  let state = hashSeed(seed) || 1;
-
-  return () => {
-    state |= 0;
-    state = (state + 0x6d2b79f5) | 0;
-    let result = Math.imul(state ^ (state >>> 15), 1 | state);
-    result ^= result + Math.imul(result ^ (result >>> 7), 61 | result);
-    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
 
 function stripProtocol(url: string) {
   return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
@@ -91,8 +64,7 @@ function scoreLabel(score: number): ClientDashboardPayload["statusLabel"] {
 }
 
 function fallbackHealthScore(seed: string) {
-  const rng = createRng(`${seed}:health`);
-  return Math.round(54 + rng() * 28);
+  return seed.length;
 }
 
 function defaultPaths(websiteUrl: string) {
@@ -107,159 +79,11 @@ function defaultPaths(websiteUrl: string) {
 }
 
 function buildFallbackIssues(website: Website) {
-  const paths = defaultPaths(website.url);
-  const host = hostFromUrl(website.url);
-
-  return [
-    {
-      id: "mock-meta-descriptions",
-      severity: "warning",
-      title: "Key pages are missing meta descriptions",
-      description: `Search snippets for ${host} are not fully optimized, which can reduce click-through rate from Google.`,
-      affectedPages: 4,
-      urls: paths.slice(0, 4)
-    },
-    {
-      id: "mock-broken-links",
-      severity: "critical",
-      title: "Internal links are sending visitors to broken pages",
-      description: "A few navigation and footer links are creating dead-end journeys that weaken trust and crawlability.",
-      affectedPages: 3,
-      urls: [paths[0], paths[1], normalizeUrlPath(website.url, "/resources")]
-    },
-    {
-      id: "mock-alt-text",
-      severity: "warning",
-      title: "Product and service imagery is missing alt text",
-      description: "Important visual content does not include descriptive text, which hurts accessibility and image search context.",
-      affectedPages: 5,
-      urls: paths.slice(0, 5)
-    },
-    {
-      id: "mock-schema",
-      severity: "info",
-      title: "Structured data is not implemented on high-intent pages",
-      description: "Adding schema can help search engines understand your offers, reviews, and contact details more clearly.",
-      affectedPages: 2,
-      urls: [paths[0], paths[1]]
-    },
-    {
-      id: "mock-canonicals",
-      severity: "warning",
-      title: "Canonical tags are inconsistent across landing pages",
-      description: "Some marketing pages may be competing with each other because their canonical signals are incomplete.",
-      affectedPages: 3,
-      urls: [paths[0], paths[4], normalizeUrlPath(website.url, "/landing")]
-    },
-    {
-      id: "mock-headings",
-      severity: "info",
-      title: "Heading structure needs cleanup on content pages",
-      description: "Several pages jump between heading levels, which makes content harder to parse for both users and crawlers.",
-      affectedPages: 4,
-      urls: [paths[2], paths[4], normalizeUrlPath(website.url, "/blog/seo-tips"), normalizeUrlPath(website.url, "/blog/web-performance")]
-    },
-    {
-      id: "mock-lcp",
-      severity: "critical",
-      title: "Homepage hero loads too slowly on mobile",
-      description: "The largest visible content on the homepage is taking too long to appear, increasing bounce risk from paid and organic traffic.",
-      affectedPages: 1,
-      urls: [paths[0]]
-    },
-    {
-      id: "mock-sitemap",
-      severity: "warning",
-      title: "Sitemap coverage is incomplete",
-      description: "A few live pages appear to be missing from the sitemap, which can slow discovery and re-crawling.",
-      affectedPages: 2,
-      urls: [paths[1], normalizeUrlPath(website.url, "/case-studies")]
-    },
-    {
-      id: "mock-internal-links",
-      severity: "info",
-      title: "Internal linking is weak on conversion-focused pages",
-      description: "Important service pages could pass more authority to each other with better contextual internal links.",
-      affectedPages: 3,
-      urls: [paths[1], normalizeUrlPath(website.url, "/services/seo"), normalizeUrlPath(website.url, "/services/web-design")]
-    },
-    {
-      id: "mock-page-titles",
-      severity: "warning",
-      title: "Page titles are duplicated across location pages",
-      description: "Duplicate title tags make it harder for Google to understand which pages deserve to rank for local intent.",
-      affectedPages: 4,
-      urls: [
-        normalizeUrlPath(website.url, "/locations"),
-        normalizeUrlPath(website.url, "/locations/london"),
-        normalizeUrlPath(website.url, "/locations/manchester"),
-        normalizeUrlPath(website.url, "/locations/birmingham")
-      ]
-    }
-  ] satisfies ClientDashboardIssue[];
+  return [] satisfies ClientDashboardIssue[];
 }
 
 function buildFallbackRecommendations(website: Website) {
-  const host = hostFromUrl(website.url);
-
-  return [
-    {
-      id: "mock-rec-compress-hero",
-      priority: "high",
-      title: "Compress and modernize homepage hero media",
-      action: "Convert oversized hero images to next-gen formats and preload only the primary image above the fold.",
-      impact: `Faster first impressions for ${host}, especially on mobile traffic.`
-    },
-    {
-      id: "mock-rec-fix-links",
-      priority: "high",
-      title: "Repair broken internal links and add redirects",
-      action: "Update dead internal links in the navigation, footer, and resource pages, then add redirects for retired URLs.",
-      impact: "Stronger crawl paths and fewer abandoned journeys."
-    },
-    {
-      id: "mock-rec-metadata",
-      priority: "high",
-      title: "Rewrite metadata for service and location pages",
-      action: "Create unique page titles and meta descriptions that reflect search intent and local targeting.",
-      impact: "Higher click-through potential from search results."
-    },
-    {
-      id: "mock-rec-schema",
-      priority: "medium",
-      title: "Add organization, service, and FAQ schema",
-      action: "Publish structured data on core commercial pages so search engines understand offerings and trust signals.",
-      impact: "Clearer content understanding and better rich-result eligibility."
-    },
-    {
-      id: "mock-rec-sitemap",
-      priority: "medium",
-      title: "Refresh the sitemap and resubmit key sections",
-      action: "Audit the sitemap for missing URLs and ensure core pages are included with correct canonicals.",
-      impact: "More reliable discovery for newly updated pages."
-    },
-    {
-      id: "mock-rec-alt",
-      priority: "medium",
-      title: "Add descriptive alt text to marketing imagery",
-      action: "Write concise alt text for service, testimonial, and case-study visuals that convey intent without keyword stuffing.",
-      impact: "Improved accessibility and image search context."
-    },
-    {
-      id: "mock-rec-links",
-      priority: "low",
-      title: "Strengthen contextual internal links",
-      action: "Link related service and blog pages together using natural anchor text that helps visitors move deeper into the site.",
-      impact: "Better authority flow and more guided browsing paths."
-    },
-    {
-      id: "mock-rec-headings",
-      priority: "low",
-      title: "Normalize heading order on content templates",
-      action: "Standardize H1, H2, and H3 patterns across reusable templates and long-form blog layouts.",
-      impact: "Cleaner structure for readers, screen readers, and crawlers."
-    }
-  ] satisfies ClientDashboardRecommendation[];
+  return [] satisfies ClientDashboardRecommendation[];
 }
 
 function severityFromScanIssue(issue: ScanIssue): ClientDashboardIssue["severity"] {
@@ -314,6 +138,22 @@ function recommendationImpact(title: string, priority: ClientDashboardRecommenda
   return "Helpful polish that protects long-term SEO health.";
 }
 
+function resolveStatusLabel(score: number | null): ClientDashboardPayload["statusLabel"] {
+  if (score === null) {
+    return "AWAITING REVIEW";
+  }
+
+  if (score > 70) {
+    return "EXCELLENT";
+  }
+
+  if (score >= 40) {
+    return "GOOD";
+  }
+
+  return "NEEDS ATTENTION";
+}
+
 function uniqueById<T extends { id: string }>(values: T[]) {
   const map = new Map<string, T>();
 
@@ -353,7 +193,7 @@ function buildDashboardIssues(input: {
   brokenLinks: BrokenLinkRecord | null;
 }) {
   if (!input.scan) {
-    return buildFallbackIssues(input.website);
+    return [];
   }
 
   const mapped = (input.scan.issues ?? []).map((issue) => {
@@ -418,7 +258,7 @@ function buildDashboardRecommendations(input: {
   brokenLinks: BrokenLinkRecord | null;
 }) {
   if (!input.scan) {
-    return buildFallbackRecommendations(input.website);
+    return [];
   }
 
   const mapped = (input.scan.recommendations ?? []).map((recommendation) => ({
@@ -449,10 +289,7 @@ function buildDashboardRecommendations(input: {
     });
   }
 
-  const unique = uniqueById(mapped);
-  return unique.length >= 4
-    ? unique.slice(0, 8)
-    : unique.concat(buildFallbackRecommendations(input.website).slice(0, 8 - unique.length));
+  return uniqueById(mapped).slice(0, 8);
 }
 
 async function loadLatestScan(websiteId: string) {
@@ -631,7 +468,7 @@ export async function buildClientDashboardPayload(token: string): Promise<Client
   const { scan, seoAudit, sslCheck, securityHeaders, brokenLinks, uptimeChecks } = await loadLatestScan(
     website.id
   );
-
+  const hasScan = Boolean(scan);
   const healthScore = scan
     ? buildHealthScore({
         scan,
@@ -640,13 +477,14 @@ export async function buildClientDashboardPayload(token: string): Promise<Client
         securityHeaders,
         uptimeChecks
       }).overall
-    : fallbackHealthScore(token);
+    : null;
   const lastUpdated =
     scan?.scanned_at ??
     website.updated_at ??
     website.gsc_connected_at ??
     website.ga_connected_at ??
-    website.created_at;
+    website.created_at ??
+    null;
 
   const gscConnected = Boolean((website.gsc_refresh_token || website.gsc_access_token) && website.gsc_property);
   const gaConnected = Boolean((website.ga_refresh_token || website.ga_access_token) && website.ga_property_id);
@@ -660,23 +498,22 @@ export async function buildClientDashboardPayload(token: string): Promise<Client
       label: website.label
     },
     lastUpdated,
+    hasScan,
     healthScore,
-    statusLabel: scoreLabel(healthScore),
+    statusLabel: resolveStatusLabel(healthScore),
     connections: {
       gsc: gscConnected,
       ga: gaConnected
     },
-    gsc: buildMockGscData({
-      seed: token,
-      websiteUrl: website.url,
+    gsc: buildEmptyGscData({
       connected: gscConnected,
-      property: website.gsc_property ?? null
+      property: website.gsc_property ?? null,
+      source: gscConnected ? "unavailable" : "disconnected"
     }),
-    ga: buildMockGaData({
-      seed: token,
-      websiteUrl: website.url,
+    ga: buildEmptyGaData({
       connected: gaConnected,
-      propertyId: website.ga_property_id ?? null
+      propertyId: website.ga_property_id ?? null,
+      source: gaConnected ? "unavailable" : "disconnected"
     }),
     issues: buildDashboardIssues({
       website,

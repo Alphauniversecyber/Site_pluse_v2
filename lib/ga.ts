@@ -11,33 +11,6 @@ class GoogleApiError extends Error {
   }
 }
 
-function hashSeed(value: string) {
-  let hash = 2166136261;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return hash >>> 0;
-}
-
-function createRng(seed: string) {
-  let state = hashSeed(seed) || 1;
-
-  return () => {
-    state |= 0;
-    state = (state + 0x6d2b79f5) | 0;
-    let result = Math.imul(state ^ (state >>> 15), 1 | state);
-    result ^= result + Math.imul(result ^ (result >>> 7), 61 | result);
-    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
 function shiftDays(date: Date, amount: number) {
   const value = new Date(date);
   value.setUTCDate(value.getUTCDate() + amount);
@@ -176,6 +149,32 @@ async function runGaReport(input: {
 
 export function isGoogleAuthError(error: unknown) {
   return error instanceof GoogleApiError && (error.status === 401 || error.status === 403);
+}
+
+export function buildEmptyGaData(input: {
+  connected: boolean;
+  propertyId?: string | null;
+  source?: Exclude<GaDashboardData["source"], "live">;
+}) {
+  return {
+    connected: input.connected,
+    source: input.source ?? (input.connected ? "unavailable" : "disconnected"),
+    propertyId: input.propertyId ?? null,
+    lastSyncedAt: null,
+    summary: {
+      sessions: 0,
+      bounceRate: 0
+    },
+    comparison: {
+      sessions: 0,
+      bounceRate: 0
+    },
+    daily: [],
+    sparkline: [],
+    topPages: [],
+    devices: [],
+    countries: []
+  } satisfies GaDashboardData;
 }
 
 export async function pickBestGaPropertyId(accessToken: string, websiteUrl: string) {
@@ -347,99 +346,6 @@ export async function fetchGaDashboardData(input: {
     daily,
     sparkline: daily.map((point) => point.sessions),
     topPages,
-    devices,
-    countries
-  } satisfies GaDashboardData;
-}
-
-export function buildMockGaData(input: {
-  seed: string;
-  websiteUrl: string;
-  connected: boolean;
-  propertyId?: string | null;
-}) {
-  const rng = createRng(`${input.seed}:ga`);
-  const endDate = shiftDays(new Date(), -1);
-  const startDate = shiftDays(endDate, -55);
-  const allDays: GaDailyPoint[] = [];
-  const sessionsBase = 338 + rng() * 42;
-  const bounceBase = 49.8 - rng() * 2.6;
-  const host = hostFromUrl(input.websiteUrl);
-
-  for (let index = 0; index < 56; index += 1) {
-    const date = shiftDays(startDate, index);
-    const sessions = clamp(
-      Math.round(sessionsBase + Math.sin(index / 3.1) * 26 + index * 1.8 + (rng() - 0.5) * 28),
-      300,
-      500
-    );
-    const bounceRate = Number(
-      clamp(bounceBase - index * 0.03 + Math.sin(index / 4.8) * 0.7 + (rng() - 0.5) * 0.6, 44, 52).toFixed(1)
-    );
-    const normalized = formatDate(date);
-
-    allDays.push({
-      date: normalized,
-      label: formatLabel(normalized),
-      sessions,
-      bounceRate
-    });
-  }
-
-  const previousDaily = allDays.slice(0, 28);
-  const daily = allDays.slice(28);
-  const currentSummary = summarizeDaily(daily);
-  const previousSummary = summarizeDaily(previousDaily);
-  const pageSeeds = [
-    "/",
-    "/services",
-    "/contact",
-    "/pricing",
-    "/blog/seo-audit-checklist"
-  ];
-  const topPages: GaTopPage[] = pageSeeds.map((page, index) => ({
-    page,
-    sessions: clamp(Math.round(88 + rng() * 66 - index * 10), 38, 180),
-    bounceRate: Number(clamp(44 + rng() * 8 + index * 0.6, 42, 58).toFixed(1))
-  }));
-  const deviceRaw = [
-    { device: "desktop", sessions: Math.round(4200 + rng() * 700) },
-    { device: "mobile", sessions: Math.round(2800 + rng() * 620) },
-    { device: "tablet", sessions: Math.round(380 + rng() * 120) }
-  ];
-  const deviceTotal = deviceRaw.reduce((sum, item) => sum + item.sessions, 0);
-  const devices: DeviceBreakdownPoint[] = deviceRaw.map((item) => ({
-    device: item.device,
-    sessions: item.sessions,
-    share: Number(((item.sessions / deviceTotal) * 100).toFixed(1))
-  }));
-  const countries = [
-    "United States",
-    "United Kingdom",
-    "Canada",
-    "Australia",
-    "India"
-  ].map((country, index) => ({
-    country,
-    sessions: clamp(Math.round(420 + rng() * 180 - index * 42), 120, 640)
-  }));
-
-  return {
-    connected: input.connected,
-    source: "mock" as const,
-    propertyId: input.propertyId ?? null,
-    lastSyncedAt: null,
-    summary: currentSummary,
-    comparison: {
-      sessions: percentDelta(currentSummary.sessions, previousSummary.sessions),
-      bounceRate: improvementDelta(currentSummary.bounceRate, previousSummary.bounceRate)
-    },
-    daily,
-    sparkline: daily.map((point) => point.sessions),
-    topPages: topPages.map((page) => ({
-      ...page,
-      page: page.page === "/" ? `/${host}`.replace(`/${host}`, "/") : page.page
-    })),
     devices,
     countries
   } satisfies GaDashboardData;
