@@ -5,6 +5,7 @@ import { CheckCircle2 } from "lucide-react";
 
 import type { ClientDashboardRecommendation } from "@/types";
 import { fetchJson } from "@/lib/api-client";
+import { getRecommendationSpecificWhy } from "@/lib/client-dashboard-audit-copy";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -112,7 +113,7 @@ function toFallbackRecommendation(
     priority: recommendation.priority,
     title: recommendation.title,
     whatToDo: recommendation.action,
-    whyItMatters: recommendation.impact,
+    whyItMatters: getRecommendationSpecificWhy(recommendation),
     estimatedTime: fallbackEstimatedTime(recommendation.priority),
     effort: fallbackEffort(recommendation.priority)
   };
@@ -128,7 +129,7 @@ function mergeRecommendation(
     ...fallback,
     title: rewritten?.title?.trim() || fallback.title,
     whatToDo: rewritten?.whatToDo?.trim() || fallback.whatToDo,
-    whyItMatters: rewritten?.whyItMatters?.trim() || fallback.whyItMatters,
+    whyItMatters: getRecommendationSpecificWhy(recommendation),
     estimatedTime: rewritten?.estimatedTime?.trim() || fallback.estimatedTime,
     effort:
       rewritten?.effort === "Easy" || rewritten?.effort === "Medium" || rewritten?.effort === "Hard"

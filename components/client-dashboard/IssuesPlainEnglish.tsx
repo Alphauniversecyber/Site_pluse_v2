@@ -5,6 +5,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import type { ClientDashboardIssue } from "@/types";
 import { fetchJson } from "@/lib/api-client";
+import { getIssueSpecificNextStep } from "@/lib/client-dashboard-audit-copy";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -98,10 +99,7 @@ function toFallbackIssue(issue: ClientDashboardIssue): DisplayIssue {
     urls: issue.urls,
     title: issue.title,
     description: issue.description,
-    whatToDo:
-      issue.severity === "critical"
-        ? "Ask your web partner to fix this first. It is one of the clearest blockers to a stronger customer experience."
-        : "Add this to the next website update so it does not keep reducing trust, visibility, or conversions.",
+    whatToDo: getIssueSpecificNextStep(issue),
     realWorldImpact:
       issue.severity === "info"
         ? "This is a smaller improvement opportunity that can still make the site easier to understand and trust."
@@ -118,7 +116,7 @@ function mergeIssue(issue: ClientDashboardIssue, rewritten?: Partial<PlainEnglis
     ...fallback,
     title: rewritten?.title?.trim() || fallback.title,
     description: rewritten?.description?.trim() || fallback.description,
-    whatToDo: rewritten?.whatToDo?.trim() || fallback.whatToDo,
+    whatToDo: getIssueSpecificNextStep(issue),
     realWorldImpact: rewritten?.realWorldImpact?.trim() || fallback.realWorldImpact,
     category: rewritten?.category ?? fallback.category,
     icon: rewritten?.icon?.trim() || fallback.icon
