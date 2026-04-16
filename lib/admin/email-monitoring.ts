@@ -8,6 +8,12 @@ import type { ScanFrequency, ScanResult, UserProfile, Website } from "@/types";
 
 type QueueStatus = "pending" | "processing" | "sent" | "failed" | "skipped";
 type MonitoringRowStatus = "pending" | "processing" | "failed" | "skipped";
+type EligibilityStatus =
+  | "ready"
+  | "plan_ineligible"
+  | "user_disabled"
+  | "website_disabled"
+  | "missing_successful_scan";
 
 type ReportEmailQueueRow = {
   id: string;
@@ -97,6 +103,30 @@ export type AdminEmailMonitoringData = {
     sent: number;
     failed: number;
   }>;
+  eligibility: {
+    summary: {
+      totalActiveWebsites: number;
+      ready: number;
+      planIneligible: number;
+      userDisabled: number;
+      websiteDisabled: number;
+      missingSuccessfulScan: number;
+    };
+    rows: Array<{
+      id: string;
+      userId: string;
+      email: string;
+      planLabel: string;
+      websiteId: string;
+      websiteLabel: string;
+      websiteUrl: string;
+      status: EligibilityStatus;
+      reason: string;
+      effectiveFrequency: ScanFrequency;
+      latestSuccessfulScanAt: string | null;
+      recipientCount: number;
+    }>;
+  };
   rows: AdminEmailMonitoringRow[];
   error: string | null;
 };
@@ -254,6 +284,26 @@ function toMonitoringRow(candidate: EmailCandidate, latestCron: CronLogRow | nul
   } satisfies AdminEmailMonitoringRow;
 }
 
+function getEligibilityReason(status: EligibilityStatus) {
+  if (status === "plan_ineligible") {
+    return "This plan does not include scheduled PDF report emails.";
+  }
+
+  if (status === "user_disabled") {
+    return "The user-level scheduled email setting is disabled.";
+  }
+
+  if (status === "website_disabled") {
+    return "The website-level scheduled email setting is disabled.";
+  }
+
+  if (status === "missing_successful_scan") {
+    return "A successful scan is required before SitePulse can generate a scheduled PDF report.";
+  }
+
+  return "This website is ready for scheduled PDF report emails.";
+}
+
 export async function getAdminEmailMonitoringData(input?: {
   user?: string;
   status?: string;
@@ -272,14 +322,11 @@ export async function getAdminEmailMonitoringData(input?: {
     const [usersResult, websitesResult, scansResult, queueResult, cronLogsResult, emailLogsResult] = await Promise.all([
       admin
         .from("users")
-        .select("id,email,plan,email_report_frequency,email_reports_enabled,timezone")
-        .eq("email_reports_enabled", true)
-        .in("plan", ["starter", "agency"]),
+        .select("id,email,plan,email_report_frequency,email_reports_enabled,timezone,extra_report_recipients"),
       admin
         .from("websites")
-        .select("id,user_id,url,label,is_active,email_reports_enabled,email_report_frequency,created_at")
-        .eq("is_active", true)
-        .eq("email_reports_enabled", true),
+        .select("id,user_id,url,label,is_active,email_reports_enabled,email_report_frequency,report_recipients,created_at")
+        .eq("is_active", true),
       admin
         .from("scan_results")
         .select("id,website_id,scan_status,scanned_at")
@@ -314,12 +361,23 @@ export async function getAdminEmailMonitoringData(input?: {
     if (emailLogsResult.error) throw new Error(emailLogsResult.error.message);
 
     const users = (usersResult.data ?? []) as Array<
-      Pick<UserProfile, "id" | "email" | "plan" | "email_report_frequency" | "email_reports_enabled" | "timezone">
+      Pick<
+        UserProfile,
+        "id" | "email" | "plan" | "email_report_frequency" | "email_reports_enabled" | "timezone" | "extra_report_recipients"
+      >
     >;
     const websites = (websitesResult.data ?? []) as Array<
       Pick<
         Website,
-        "id" | "user_id" | "url" | "label" | "is_active" | "email_reports_enabled" | "email_report_frequency" | "created_at"
+        | "id"
+        | "user_id"
+        | "url"
+        | "label"
+        | "is_active"
+        | "email_reports_enabled"
+        | "email_report_frequency"
+        | "report_recipients"
+        | "created_at"
       >
     >;
     const scans = (scansResult.data ?? []) as Array<Pick<ScanResult, "id" | "website_id" | "scan_status" | "scanned_at">>;
@@ -329,9 +387,14 @@ export async function getAdminEmailMonitoringData(input?: {
 
     const usersById = new Map(users.map((user) => [user.id, user]));
     const latestScanByWebsite = new Map<string, Pick<ScanResult, "id" | "scan_status" | "scanned_at">>();
+    const latestSuccessfulScanByWebsite = new Map<string, Pick<ScanResult, "id" | "scan_status" | "scanned_at">>();
     for (const row of scans) {
       if (!latestScanByWebsite.has(row.website_id)) {
         latestScanByWebsite.set(row.website_id, row);
+      }
+
+      if (row.scan_status === "success" && !latestSuccessfulScanByWebsite.has(row.website_id)) {
+        latestSuccessfulScanByWebsite.set(row.website_id, row);
       }
     }
 
@@ -351,7 +414,7 @@ export async function getAdminEmailMonitoringData(input?: {
     const dueCandidates = websites
       .map((website) => {
         const user = usersById.get(website.user_id);
-        if (!user || !PLAN_LIMITS[user.plan]?.emailReports) {
+        if (!user || !PLAN_LIMITS[user.plan]?.emailReports || !user.email_reports_enabled || !website.email_reports_enabled) {
           return null;
         }
 
@@ -392,6 +455,68 @@ export async function getAdminEmailMonitoringData(input?: {
       })
       .filter((row): row is EmailCandidate => Boolean(row));
 
+    const eligibilityRows = websites
+      .map((website) => {
+        const user = usersById.get(website.user_id);
+
+        if (!user) {
+          return null;
+        }
+
+        const effectiveFrequency = website.email_report_frequency ?? user.email_report_frequency;
+        const latestSuccessfulScanAt = latestSuccessfulScanByWebsite.get(website.id)?.scanned_at ?? null;
+        const recipientCount = Array.from(
+          new Set(
+            [
+              user.email,
+              ...(user.extra_report_recipients ?? []),
+              ...(website.report_recipients ?? [])
+            ].filter(Boolean)
+          )
+        ).length;
+
+        let status: EligibilityStatus = "ready";
+        if (!PLAN_LIMITS[user.plan]?.emailReports) {
+          status = "plan_ineligible";
+        } else if (!user.email_reports_enabled) {
+          status = "user_disabled";
+        } else if (!website.email_reports_enabled) {
+          status = "website_disabled";
+        } else if (!latestSuccessfulScanAt) {
+          status = "missing_successful_scan";
+        }
+
+        return {
+          id: `${website.id}:${status}`,
+          userId: user.id,
+          email: user.email,
+          planLabel: getPlanLabel(user.plan),
+          websiteId: website.id,
+          websiteLabel: website.label,
+          websiteUrl: website.url,
+          status,
+          reason: getEligibilityReason(status),
+          effectiveFrequency,
+          latestSuccessfulScanAt,
+          recipientCount
+        };
+      })
+      .filter(
+        (
+          row
+        ): row is NonNullable<typeof row> => Boolean(row)
+      );
+    const filteredEligibilityRows = eligibilityRows.filter((row) => {
+      const matchesUser =
+        !userFilter ||
+        row.email.toLowerCase().includes(userFilter) ||
+        row.userId.toLowerCase().includes(userFilter) ||
+        row.websiteUrl.toLowerCase().includes(userFilter) ||
+        row.websiteLabel.toLowerCase().includes(userFilter);
+
+      return matchesUser && row.status !== "ready";
+    });
+
     const sentToday = dueCandidates.filter((candidate) => candidate.sentToday).length;
     const unsentRows = dueCandidates
       .filter((candidate) => !candidate.sentToday)
@@ -415,6 +540,17 @@ export async function getAdminEmailMonitoringData(input?: {
         lastRunProcessed: latestCron?.items_processed ?? 0
       },
       chart: buildChart(now, queueRows),
+      eligibility: {
+        summary: {
+          totalActiveWebsites: websites.length,
+          ready: eligibilityRows.filter((row) => row.status === "ready").length,
+          planIneligible: eligibilityRows.filter((row) => row.status === "plan_ineligible").length,
+          userDisabled: eligibilityRows.filter((row) => row.status === "user_disabled").length,
+          websiteDisabled: eligibilityRows.filter((row) => row.status === "website_disabled").length,
+          missingSuccessfulScan: eligibilityRows.filter((row) => row.status === "missing_successful_scan").length
+        },
+        rows: filteredEligibilityRows
+      },
       rows: unsentRows.filter((row) => {
         const matchesUser =
           !userFilter ||
@@ -448,6 +584,17 @@ export async function getAdminEmailMonitoringData(input?: {
         lastRunProcessed: 0
       },
       chart: [],
+      eligibility: {
+        summary: {
+          totalActiveWebsites: 0,
+          ready: 0,
+          planIneligible: 0,
+          userDisabled: 0,
+          websiteDisabled: 0,
+          missingSuccessfulScan: 0
+        },
+        rows: []
+      },
       rows: [],
       error: error instanceof Error ? error.message : "Unable to load email monitoring."
     };

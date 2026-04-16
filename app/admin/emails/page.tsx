@@ -10,6 +10,8 @@ import { getAdminEmailMonitoringData } from "@/lib/admin/email-monitoring";
 import { getAdminEmailsData } from "@/lib/admin/data";
 import { formatAdminDate, parsePageParam } from "@/lib/admin/format";
 
+import { runAdminEmailRecoveryAction } from "./actions";
+
 function buildHref(
   page: number,
   filters: {
@@ -55,6 +57,18 @@ function getStatusTone(status: string) {
   return "red" as const;
 }
 
+function getEligibilityTone(status: string) {
+  if (status === "ready") {
+    return "green" as const;
+  }
+
+  if (status === "website_disabled" || status === "user_disabled") {
+    return "amber" as const;
+  }
+
+  return "red" as const;
+}
+
 export default async function AdminEmailsPage({
   searchParams
 }: {
@@ -72,6 +86,15 @@ export default async function AdminEmailsPage({
   const monitorDate = Array.isArray(searchParams?.monitorDate)
     ? searchParams?.monitorDate[0] ?? ""
     : searchParams?.monitorDate ?? "";
+  const actionType = Array.isArray(searchParams?.actionType)
+    ? searchParams?.actionType[0] ?? ""
+    : searchParams?.actionType ?? "";
+  const actionStatus = Array.isArray(searchParams?.actionStatus)
+    ? searchParams?.actionStatus[0] ?? ""
+    : searchParams?.actionStatus ?? "";
+  const actionMessage = Array.isArray(searchParams?.actionMessage)
+    ? searchParams?.actionMessage[0] ?? ""
+    : searchParams?.actionMessage ?? "";
   const data = await getAdminEmailsData({ page });
   const monitoring = await getAdminEmailMonitoringData({
     user: monitorUser,
@@ -88,6 +111,19 @@ export default async function AdminEmailsPage({
 
       <AdminErrorNotice message={data.error} />
       <AdminErrorNotice message={monitoring.error} />
+
+      {actionMessage ? (
+        <div
+          className={`mb-6 rounded-2xl border px-4 py-3 text-sm ${
+            actionStatus === "success"
+              ? "border-[#14532D] bg-[#052E16] text-[#86EFAC]"
+              : "border-[#7F1D1D] bg-[#450A0A] text-[#FCA5A5]"
+          }`}
+        >
+          {actionType ? `${actionType}: ` : null}
+          {actionMessage}
+        </div>
+      ) : null}
 
       <div className="mb-8">
         <div className="mb-4 flex flex-col gap-2">
@@ -206,6 +242,7 @@ export default async function AdminEmailsPage({
                       <th className="px-4 py-3 font-medium">Status</th>
                       <th className="px-4 py-3 font-medium">Reason</th>
                       <th className="px-4 py-3 font-medium">Last Attempt</th>
+                      <th className="px-4 py-3 font-medium">Recovery</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -228,6 +265,38 @@ export default async function AdminEmailsPage({
                           {row.lastError ? <p className="mt-2 text-xs leading-5 text-[#FCA5A5]">{row.lastError}</p> : null}
                         </td>
                         <td className="px-4 py-4 font-mono text-xs text-zinc-500">{formatAdminDate(row.lastAttempt)}</td>
+                        <td className="px-4 py-4">
+                          <div className="flex min-w-[180px] flex-col gap-2">
+                            <form action={runAdminEmailRecoveryAction}>
+                              <input type="hidden" name="actionType" value="send-report" />
+                              <input type="hidden" name="websiteId" value={row.websiteId} />
+                              <input type="hidden" name="page" value={String(page)} />
+                              <input type="hidden" name="monitorUser" value={monitoring.filters.user} />
+                              <input type="hidden" name="monitorStatus" value={monitoring.filters.status} />
+                              <input type="hidden" name="monitorDate" value={monitoring.filters.date} />
+                              <button
+                                type="submit"
+                                className="w-full rounded-full border border-[#1D4ED8] bg-[#172554] px-3 py-2 text-xs font-medium text-[#BFDBFE]"
+                              >
+                                Send Report Now
+                              </button>
+                            </form>
+                            <form action={runAdminEmailRecoveryAction}>
+                              <input type="hidden" name="actionType" value="run-scan" />
+                              <input type="hidden" name="websiteId" value={row.websiteId} />
+                              <input type="hidden" name="page" value={String(page)} />
+                              <input type="hidden" name="monitorUser" value={monitoring.filters.user} />
+                              <input type="hidden" name="monitorStatus" value={monitoring.filters.status} />
+                              <input type="hidden" name="monitorDate" value={monitoring.filters.date} />
+                              <button
+                                type="submit"
+                                className="w-full rounded-full border border-[#27272A] bg-[#111827] px-3 py-2 text-xs font-medium text-white"
+                              >
+                                Run Scan Now
+                              </button>
+                            </form>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -238,6 +307,122 @@ export default async function AdminEmailsPage({
             <AdminEmptyState
               title="No failed or pending report emails"
               description="Every scheduled PDF report email that is due right now has either been sent or there is no backlog matching the selected filters."
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <div className="mb-4 flex flex-col gap-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">Eligibility Audit</p>
+          <h2 className="text-2xl font-semibold text-white">Scheduled email coverage across active websites</h2>
+          <p className="max-w-3xl text-sm leading-6 text-zinc-400">
+            This shows why a website will or will not ever enter the scheduled PDF report pipeline. If it is not ready here, the cron can never send it.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <AdminCard>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Active websites</p>
+            <p className="mt-4 text-3xl font-semibold text-white">{monitoring.eligibility.summary.totalActiveWebsites}</p>
+          </AdminCard>
+          <AdminCard>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Ready</p>
+            <p className="mt-4 text-3xl font-semibold text-[#86EFAC]">{monitoring.eligibility.summary.ready}</p>
+          </AdminCard>
+          <AdminCard>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Plan blocked</p>
+            <p className="mt-4 text-3xl font-semibold text-[#FCA5A5]">{monitoring.eligibility.summary.planIneligible}</p>
+          </AdminCard>
+          <AdminCard>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Disabled</p>
+            <p className="mt-4 text-3xl font-semibold text-[#FBBF24]">
+              {monitoring.eligibility.summary.userDisabled + monitoring.eligibility.summary.websiteDisabled}
+            </p>
+          </AdminCard>
+          <AdminCard>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Missing successful scan</p>
+            <p className="mt-4 text-3xl font-semibold text-[#FCA5A5]">{monitoring.eligibility.summary.missingSuccessfulScan}</p>
+          </AdminCard>
+        </div>
+
+        <div className="mt-6">
+          {monitoring.eligibility.rows.length ? (
+            <AdminCard className="overflow-hidden p-0">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-[#0D0D0D] text-zinc-400">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">User</th>
+                      <th className="px-4 py-3 font-medium">Website</th>
+                      <th className="px-4 py-3 font-medium">Eligibility</th>
+                      <th className="px-4 py-3 font-medium">Reason</th>
+                      <th className="px-4 py-3 font-medium">Latest Successful Scan</th>
+                      <th className="px-4 py-3 font-medium">Recipients</th>
+                      <th className="px-4 py-3 font-medium">Recovery</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monitoring.eligibility.rows.map((row, index) => (
+                      <tr key={row.id} className={`${index % 2 === 0 ? "bg-[#101010]" : "bg-[#141414]"} align-top hover:bg-[#181818]`}>
+                        <td className="px-4 py-4">
+                          <p className="break-all font-medium text-white">{row.email}</p>
+                          <p className="mt-1 font-mono text-xs text-zinc-500">{row.userId}</p>
+                          <p className="mt-2 text-xs uppercase tracking-[0.16em] text-[#86EFAC]">{row.planLabel}</p>
+                        </td>
+                        <td className="px-4 py-4 text-zinc-300">
+                          <p className="font-medium text-white">{row.websiteLabel}</p>
+                          <p className="mt-1 break-all text-xs text-zinc-500">{row.websiteUrl}</p>
+                          <p className="mt-2 text-xs uppercase tracking-[0.16em] text-zinc-500">{row.effectiveFrequency}</p>
+                        </td>
+                        <td className="px-4 py-4">
+                          <AdminBadge label={row.status.replace(/_/g, " ")} tone={getEligibilityTone(row.status)} />
+                        </td>
+                        <td className="px-4 py-4 text-zinc-300">{row.reason}</td>
+                        <td className="px-4 py-4 font-mono text-xs text-zinc-500">{formatAdminDate(row.latestSuccessfulScanAt)}</td>
+                        <td className="px-4 py-4 text-zinc-300">{row.recipientCount}</td>
+                        <td className="px-4 py-4">
+                          <div className="flex min-w-[180px] flex-col gap-2">
+                            <form action={runAdminEmailRecoveryAction}>
+                              <input type="hidden" name="actionType" value="send-report" />
+                              <input type="hidden" name="websiteId" value={row.websiteId} />
+                              <input type="hidden" name="page" value={String(page)} />
+                              <input type="hidden" name="monitorUser" value={monitoring.filters.user} />
+                              <input type="hidden" name="monitorStatus" value={monitoring.filters.status} />
+                              <input type="hidden" name="monitorDate" value={monitoring.filters.date} />
+                              <button
+                                type="submit"
+                                className="w-full rounded-full border border-[#1D4ED8] bg-[#172554] px-3 py-2 text-xs font-medium text-[#BFDBFE]"
+                              >
+                                Send Report Now
+                              </button>
+                            </form>
+                            <form action={runAdminEmailRecoveryAction}>
+                              <input type="hidden" name="actionType" value="run-scan" />
+                              <input type="hidden" name="websiteId" value={row.websiteId} />
+                              <input type="hidden" name="page" value={String(page)} />
+                              <input type="hidden" name="monitorUser" value={monitoring.filters.user} />
+                              <input type="hidden" name="monitorStatus" value={monitoring.filters.status} />
+                              <input type="hidden" name="monitorDate" value={monitoring.filters.date} />
+                              <button
+                                type="submit"
+                                className="w-full rounded-full border border-[#27272A] bg-[#111827] px-3 py-2 text-xs font-medium text-white"
+                              >
+                                Run Scan Now
+                              </button>
+                            </form>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </AdminCard>
+          ) : (
+            <AdminEmptyState
+              title="Every filtered active website is eligible"
+              description="No active website is blocked by plan limits, disabled report settings, or missing successful scans for the current filter."
             />
           )}
         </div>
