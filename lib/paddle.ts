@@ -81,6 +81,7 @@ export type PaddleCheckoutSessionConfig = {
   environment: PaddleEnvironment;
   clientToken: string;
   priceId: string;
+  discountId?: string | null;
   successUrl: string;
   cancelUrl: string;
   plan: PaidPlanKey;
@@ -232,6 +233,17 @@ const DEFAULT_SANDBOX_PRICE_IDS: Record<PaidPlanKey, Record<BillingCycle, string
   }
 };
 
+const DEFAULT_SANDBOX_DISCOUNT_IDS: Record<PaidPlanKey, Record<BillingCycle, string>> = {
+  starter: {
+    monthly: "dsc_01kpaqq0vqnd0k2nmjxv3f947z",
+    yearly: "dsc_01kpaqd880ptk0eknqscpp16ha"
+  },
+  agency: {
+    monthly: "dsc_01kpaqrhh1x12w53accnvk8yxh",
+    yearly: "dsc_01kpaqmym5tx71t9gk5d00rfb9"
+  }
+};
+
 let cachedClientToken: string | null = null;
 const productIdCache = new Map<PaidPlanKey, string>();
 const priceIdCache = new Map<string, string>();
@@ -294,7 +306,12 @@ function readFirstEnvValue(...names: string[]) {
   return null;
 }
 
-function getConfiguredPriceId(plan: PaidPlanKey, billingCycle: BillingCycle) {
+type ConfiguredPriceId = {
+  id: string;
+  source: "env" | "default";
+};
+
+function getConfiguredPriceId(plan: PaidPlanKey, billingCycle: BillingCycle): ConfiguredPriceId | null {
   const configuredByEnv: Record<PaidPlanKey, Record<BillingCycle, string | null>> = {
     starter: {
       monthly: readFirstEnvValue("PADDLE_PRICE_GROWTH_MONTHLY_ID", "PADDLE_PRICE_STARTER_MONTHLY_ID"),
@@ -308,11 +325,47 @@ function getConfiguredPriceId(plan: PaidPlanKey, billingCycle: BillingCycle) {
 
   const explicit = configuredByEnv[plan][billingCycle];
   if (explicit) {
+    return {
+      id: explicit,
+      source: "env"
+    };
+  }
+
+  if (getPaddleEnvironment() === "sandbox") {
+    return {
+      id: DEFAULT_SANDBOX_PRICE_IDS[plan][billingCycle],
+      source: "default"
+    };
+  }
+
+  return null;
+}
+
+function getConfiguredDiscountId(plan: PaidPlanKey, billingCycle: BillingCycle) {
+  const configuredByEnv: Record<PaidPlanKey, Record<BillingCycle, string | null>> = {
+    starter: {
+      monthly: readFirstEnvValue(
+        "PADDLE_DISCOUNT_GROWTH_MONTHLY_ID",
+        "PADDLE_DISCOUNT_STARTER_MONTHLY_ID"
+      ),
+      yearly: readFirstEnvValue(
+        "PADDLE_DISCOUNT_GROWTH_YEARLY_ID",
+        "PADDLE_DISCOUNT_STARTER_YEARLY_ID"
+      )
+    },
+    agency: {
+      monthly: readFirstEnvValue("PADDLE_DISCOUNT_PRO_MONTHLY_ID", "PADDLE_DISCOUNT_AGENCY_MONTHLY_ID"),
+      yearly: readFirstEnvValue("PADDLE_DISCOUNT_PRO_YEARLY_ID", "PADDLE_DISCOUNT_AGENCY_YEARLY_ID")
+    }
+  };
+
+  const explicit = configuredByEnv[plan][billingCycle];
+  if (explicit) {
     return explicit;
   }
 
   if (getPaddleEnvironment() === "sandbox") {
-    return DEFAULT_SANDBOX_PRICE_IDS[plan][billingCycle];
+    return DEFAULT_SANDBOX_DISCOUNT_IDS[plan][billingCycle];
   }
 
   return null;
@@ -609,8 +662,8 @@ async function getOrCreatePriceId(plan: PaidPlanKey, billingCycle: BillingCycle)
 
   const configuredPriceId = getConfiguredPriceId(plan, billingCycle);
   if (configuredPriceId) {
-    priceIdCache.set(cacheKey, configuredPriceId);
-    return configuredPriceId;
+    priceIdCache.set(cacheKey, configuredPriceId.id);
+    return configuredPriceId.id;
   }
 
   const productId = await getOrCreateProductId(plan);
@@ -661,12 +714,22 @@ export async function getPaddleCheckoutConfig(input: {
   userId: string;
 }) {
   const snapshot = getPlanPricing(input.plan, input.billingCycle);
-  const priceId = await getOrCreatePriceId(input.plan, input.billingCycle);
+  const configuredPrice = getConfiguredPriceId(input.plan, input.billingCycle);
+  const discountId = getConfiguredDiscountId(input.plan, input.billingCycle);
+
+  if (discountId && configuredPrice?.source !== "env") {
+    throw new Error(
+      "Discount checkout is configured, but this plan is still using the old sale-price fallback IDs. Set PADDLE_PRICE_GROWTH_*/PADDLE_PRICE_PRO_* env vars to your original Paddle price IDs first."
+    );
+  }
+
+  const priceId = configuredPrice?.id ?? (await getOrCreatePriceId(input.plan, input.billingCycle));
 
   return {
     environment: getPaddleEnvironment(),
     clientToken: await getPaddleClientToken(),
     priceId,
+    discountId,
     successUrl: `${getBaseUrl()}/dashboard/billing?paddle=success`,
     cancelUrl: `${getBaseUrl()}/dashboard/billing?paddle=canceled`,
     plan: input.plan,

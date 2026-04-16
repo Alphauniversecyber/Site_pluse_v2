@@ -27,6 +27,7 @@ interface PaddleJs {
         priceId: string;
         quantity: number;
       }>;
+      discountId?: string;
       customer?: {
         email?: string;
       };
@@ -36,6 +37,8 @@ interface PaddleJs {
         theme?: "light" | "dark";
         locale?: string;
         variant?: "multi-page" | "one-page";
+        allowDiscountRemoval?: boolean;
+        showAddDiscounts?: boolean;
         successUrl?: string;
       };
     }) => void;

@@ -236,6 +236,7 @@ export default function BillingPage() {
         clientToken: string;
         environment: "sandbox" | "production";
         priceId: string;
+        discountId?: string | null;
         successUrl: string;
         customerEmail: string;
         customData: Record<string, unknown>;
@@ -253,6 +254,7 @@ export default function BillingPage() {
             quantity: 1
           }
         ],
+        discountId: data.discountId ?? undefined,
         customer: {
           email: data.customerEmail
         },
@@ -261,7 +263,9 @@ export default function BillingPage() {
           displayMode: "overlay",
           theme: "light",
           locale: "en",
-          variant: "multi-page"
+          variant: "multi-page",
+          allowDiscountRemoval: false,
+          showAddDiscounts: false
         }
       });
     } catch (error) {
