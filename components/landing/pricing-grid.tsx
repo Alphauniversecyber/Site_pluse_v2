@@ -8,34 +8,31 @@ import { BillingCycleToggle } from "@/components/pricing/billing-cycle-toggle";
 import { PriceFade } from "@/components/pricing/price-fade";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatUsdPrice } from "@/lib/billing";
+import {
+  BILLING_PLANS,
+  formatUsdPrice,
+  getDisplayedMonthlyEquivalent,
+  getDisplayedOriginalMonthlyEquivalent,
+  getMonthlySavings,
+  getYearlyBillingCopy,
+  isPaidPlan
+} from "@/lib/billing";
 import { cn } from "@/lib/utils";
-import type { BillingCycle } from "@/types";
+import type { BillingCycle, PlanKey } from "@/types";
 
 const plans: Array<{
-  key: "free" | "starter" | "agency";
-  name: string;
-  monthlyOriginalAmount: number;
-  monthlySaleAmount: number;
-  yearlyOriginalAmount: number;
-  yearlySaleAmount: number;
-  badge: string;
+  key: PlanKey;
+  badge?: string;
   subtitle: string;
   compactSubtitle: string;
   audience: string;
   roiLine: string;
-  yearlyValueCopy?: string;
   features: string[];
   cta: string;
   theme: "light" | "featured" | "dark";
 }> = [
   {
     key: "free",
-    name: "Starter",
-    monthlyOriginalAmount: 0,
-    monthlySaleAmount: 0,
-    yearlyOriginalAmount: 0,
-    yearlySaleAmount: 0,
     badge: "For testing value",
     subtitle: "For freelancers testing whether fast audits can open better client conversations.",
     compactSubtitle: "For freelancers validating whether fast audits can open better client conversations.",
@@ -47,39 +44,36 @@ const plans: Array<{
   },
   {
     key: "starter",
-    name: "Growth",
-    monthlyOriginalAmount: 49,
-    monthlySaleAmount: 19,
-    yearlyOriginalAmount: 468,
-    yearlySaleAmount: 180,
-    badge: "Most popular · Trusted by 500+ agencies",
     subtitle: "For agencies managing multiple clients and turning website reviews into a repeatable sales and retention process.",
     compactSubtitle: "For agencies turning website reviews into a repeatable sales and retention system.",
     audience: "Best for growing agencies with active retainers.",
     roiLine: "Close 1 extra client and this plan pays for itself immediately.",
-    yearlyValueCopy: "Save $120/year — close 1 extra client and it pays for itself",
     features: ["5 websites", "Daily scans", "90-day history", "PDF reports", "Weekly email reports"],
     cta: "Start Growth",
     theme: "featured"
   },
   {
     key: "agency",
-    name: "Pro",
-    monthlyOriginalAmount: 149,
-    monthlySaleAmount: 59,
-    yearlyOriginalAmount: 1428,
-    yearlySaleAmount: 588,
-    badge: "For serious scale",
     subtitle: "For agencies that want SitePulse to feel like a premium client-delivery system inside their own service stack.",
     compactSubtitle: "For agencies that want a premium client-delivery system inside their own service stack.",
     audience: "Best for agencies scaling account coverage and brand authority.",
     roiLine: "One retained client usually covers this plan many times over.",
-    yearlyValueCopy: "Save $360/year — one retained client covers this many times over",
     features: ["30 websites", "Daily scans", "1-year history", "White-label reports", "Priority alerts and team access"],
     cta: "Start Pro",
     theme: "dark"
   }
 ] as const;
+
+const foundingPriceLockCopy = "Cancel anytime · Founding price stays as long as you're subscribed";
+const starterLockCopyCopy = "Upgrade before Jun 30 to lock in founding pricing";
+const foundingSaleUrgencyCopy = "Sale closes Jun 30 — price locked in forever after";
+
+const foundingPriceLockText = "Cancel anytime \u00B7 Founding price stays as long as you're subscribed";
+const starterLockCopyText = "Upgrade before Jun 30 to lock in founding pricing";
+const foundingSaleUrgencyText = "Sale closes Jun 30 \u2014 price locked in forever after";
+const paidTrialText = "Start free for 14 days \u2014 no credit card required";
+
+void [foundingPriceLockCopy, starterLockCopyCopy, foundingSaleUrgencyCopy];
 
 export function PricingGrid({
   compact = false,
@@ -100,19 +94,16 @@ export function PricingGrid({
 
       <div className={cn("grid lg:grid-cols-3", compact ? "gap-4 xl:gap-5" : "gap-5 xl:gap-6")}>
         {plans.map((plan) => {
+          const planDefinition = BILLING_PLANS[plan.key];
           const yearlySelected = billingCycle === "yearly";
-          const displayedAmount =
-            yearlySelected && plan.key !== "free"
-              ? Math.round(plan.yearlySaleAmount / 12)
-              : plan.monthlySaleAmount;
-          const displayedOriginalAmount =
-            yearlySelected && plan.key !== "free"
-              ? Math.round(plan.yearlyOriginalAmount / 12)
-              : plan.monthlyOriginalAmount;
+          const paidPlan = isPaidPlan(plan.key);
+          const displayedAmount = getDisplayedMonthlyEquivalent(plan.key, billingCycle);
+          const displayedOriginalAmount = getDisplayedOriginalMonthlyEquivalent(plan.key, billingCycle);
+          const monthlySavings = getMonthlySavings(plan.key, billingCycle);
 
           return (
             <article
-              key={plan.name}
+              key={planDefinition.displayName}
               className={cn(
                 "group relative flex h-full flex-col overflow-hidden border transition duration-300 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-[0_34px_84px_-40px_rgba(15,23,42,0.42)]",
                 compact ? "rounded-[1.6rem] p-4 lg:p-4 xl:p-5" : "rounded-[1.8rem] p-5 lg:p-5 xl:p-6",
@@ -128,19 +119,37 @@ export function PricingGrid({
               ) : null}
 
               <div className="relative flex h-full flex-col">
-                <Badge
-                  className={cn(
-                    compact
-                      ? "w-fit px-3 py-1 text-xs tracking-normal normal-case"
-                      : "w-fit px-3.5 py-1.5 text-[13px] tracking-normal normal-case",
-                    plan.theme === "light" && "bg-slate-100 text-slate-700",
-                    plan.theme === "featured" && "bg-gradient-to-r from-blue-500 to-blue-600 text-white",
-                    plan.theme === "dark" &&
-                      "bg-slate-100 text-slate-700 dark:border-white/15 dark:bg-white/[0.08] dark:text-white"
-                  )}
-                >
-                  {plan.badge}
-                </Badge>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Badge
+                    className={cn(
+                      compact
+                        ? "w-fit px-3 py-1 text-xs tracking-normal normal-case"
+                        : "w-fit px-3.5 py-1.5 text-[13px] tracking-normal normal-case",
+                      paidPlan &&
+                        "border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200",
+                      !paidPlan && plan.theme === "light" && "bg-slate-100 text-slate-700",
+                      !paidPlan && plan.theme === "featured" && "bg-gradient-to-r from-blue-500 to-blue-600 text-white",
+                      !paidPlan &&
+                        plan.theme === "dark" &&
+                        "bg-slate-100 text-slate-700 dark:border-white/15 dark:bg-white/[0.08] dark:text-white"
+                    )}
+                  >
+                    {paidPlan ? planDefinition.marketingBadge : plan.badge}
+                  </Badge>
+
+                  {yearlySelected && paidPlan && planDefinition.yearlySavingsLabel ? (
+                    <Badge
+                      className={cn(
+                        compact
+                          ? "w-fit px-3 py-1 text-xs tracking-normal normal-case"
+                          : "w-fit px-3.5 py-1.5 text-[13px] tracking-normal normal-case",
+                        "border-transparent bg-emerald-600 text-white"
+                      )}
+                    >
+                      {planDefinition.yearlySavingsLabel}
+                    </Badge>
+                  ) : null}
+                </div>
 
                 <PriceFade trigger={`${plan.key}-${billingCycle}`} className={compact ? "mt-4" : "mt-5"}>
                   <div className="flex items-end gap-2">
@@ -158,11 +167,11 @@ export function PricingGrid({
                         plan.theme === "dark" ? "text-slate-600 dark:text-slate-200" : "text-slate-500"
                       )}
                     >
-                      /month
+                      /mo
                     </span>
                   </div>
 
-                  {plan.key !== "free" ? (
+                  {paidPlan ? (
                     <p
                       className={cn(
                         compact ? "mt-1 text-[13px] leading-6" : "mt-1.5 text-[14px] leading-6",
@@ -170,37 +179,38 @@ export function PricingGrid({
                         plan.theme === "dark" ? "text-slate-600 dark:text-slate-200" : "text-slate-500"
                       )}
                     >
-                      Regularly {formatUsdPrice(displayedOriginalAmount)}/month
+                      {formatUsdPrice(displayedOriginalAmount)}/mo
                     </p>
                   ) : null}
 
-                  {yearlySelected && plan.key !== "free" ? (
+                  {paidPlan ? (
                     <>
-                      <p
-                        className={cn(
-                          compact ? "mt-1 text-[13px] leading-6" : "mt-1.5 text-[14px] leading-6",
-                          plan.theme === "dark" ? "text-slate-600 dark:text-slate-200" : "text-slate-500"
-                        )}
-                      >
-                        Billed {formatUsdPrice(plan.yearlySaleAmount)}/year
+                      <p className="mt-1 text-[12px] leading-5 text-emerald-600 dark:text-emerald-300">
+                        You save {formatUsdPrice(monthlySavings)}/mo
                       </p>
+                      {yearlySelected ? (
+                        <p
+                          className={cn(
+                            compact ? "mt-1 text-[13px] leading-6" : "mt-1.5 text-[14px] leading-6",
+                            plan.theme === "dark" ? "text-slate-600 dark:text-slate-200" : "text-slate-500"
+                          )}
+                        >
+                          {getYearlyBillingCopy(plan.key)}
+                        </p>
+                      ) : null}
                       <p
                         className={cn(
                           compact ? "mt-1 text-[12px] leading-5" : "mt-1 text-[13px] leading-6",
-                          "line-through",
-                          plan.theme === "dark" ? "text-slate-600 dark:text-slate-200" : "text-slate-500"
+                          plan.theme === "dark" ? "text-slate-600 dark:text-slate-300" : "text-slate-500"
                         )}
                       >
-                        Regularly {formatUsdPrice(plan.yearlyOriginalAmount)}/year
-                      </p>
-                      <p className="mt-1 text-[12px] leading-5 text-emerald-600 dark:text-emerald-300">
-                        {plan.yearlyValueCopy}
+                        {foundingSaleUrgencyText}
                       </p>
                     </>
                   ) : null}
                 </PriceFade>
 
-                {plan.name !== "Starter" ? (
+                {false ? (
                   <p
                     className={cn(
                       compact ? "mt-1 text-[12px] leading-5" : "mt-1.5 text-[13px] leading-6",
@@ -211,9 +221,20 @@ export function PricingGrid({
                   </p>
                 ) : null}
 
+                {planDefinition.displayName !== "Starter" ? (
+                  <p
+                    className={cn(
+                      compact ? "mt-1 text-[12px] leading-5" : "mt-1.5 text-[13px] leading-6",
+                      plan.theme === "dark" ? "text-slate-600 dark:text-slate-300" : "text-slate-500"
+                    )}
+                  >
+                    {paidTrialText}
+                  </p>
+                ) : null}
+
                 <div className={compact ? "mt-3" : "mt-3.5"}>
                   <p className={cn("font-semibold leading-tight", compact ? "text-[1.6rem]" : "text-[1.9rem]")}>
-                    {plan.name}
+                    {planDefinition.displayName}
                   </p>
                   <p
                     className={cn(
@@ -327,6 +348,14 @@ export function PricingGrid({
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>
+                <p
+                  className={cn(
+                    compact ? "mt-2 text-center text-[12px] leading-5" : "mt-2.5 text-center text-[13px] leading-6",
+                    plan.theme === "dark" ? "text-slate-600 dark:text-slate-300" : "text-slate-500"
+                  )}
+                >
+                  {paidPlan ? foundingPriceLockText : starterLockCopyText}
+                </p>
               </div>
             </article>
           );

@@ -42,7 +42,7 @@ export function BillingCycleToggle({
           variant="success"
           className="w-fit rounded-full px-3 py-1 text-[13px] font-medium normal-case tracking-normal"
         >
-          Save 20%
+          Save up to 21%
         </Badge>
       ) : null}
     </div>

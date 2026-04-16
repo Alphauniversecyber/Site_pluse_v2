@@ -20,7 +20,8 @@ import {
   BILLING_PLANS,
   formatUsdPrice,
   getDisplayedMonthlyEquivalent,
-  getPlanOriginalAmount,
+  getDisplayedOriginalMonthlyEquivalent,
+  getMonthlySavings,
   getPlanPricing,
   getYearlyBillingCopy,
   isPaidPlan,
@@ -52,7 +53,6 @@ const planMarketingCopy: Record<
   PlanKey,
   {
     subtitle: string;
-    annualCopy?: string;
     badgeVariant?: "default" | "outline" | "success";
   }
 > = {
@@ -62,15 +62,17 @@ const planMarketingCopy: Record<
   },
   starter: {
     subtitle: "For agencies turning website reviews into a repeatable sales and retention system.",
-    annualCopy: "Yearly sale pricing is billed annually at $180.",
-    badgeVariant: "default"
+    badgeVariant: "success"
   },
   agency: {
     subtitle: "For agencies that want a premium client-delivery system inside their own service stack.",
-    annualCopy: "Yearly sale pricing is billed annually at $588.",
-    badgeVariant: "outline"
+    badgeVariant: "success"
   }
 };
+
+const foundingPriceLockCopy = "Cancel anytime \u00B7 Founding price stays as long as you're subscribed";
+const starterLockCopy = "Upgrade before Jun 30 to lock in founding pricing";
+const foundingSaleUrgencyCopy = "Sale closes Jun 30 \u2014 price locked in forever after";
 
 type RefundState = {
   eligible: boolean;
@@ -534,10 +536,8 @@ export default function BillingPage() {
             const plan = BILLING_PLANS[planKey];
             const yearlySelected = billingCycle === "yearly";
             const displayedAmount = getDisplayedMonthlyEquivalent(planKey, billingCycle);
-            const originalAmount =
-              yearlySelected && planKey !== "free"
-                ? Math.round(getPlanOriginalAmount(planKey, billingCycle) / 12)
-                : getPlanOriginalAmount(planKey, billingCycle);
+            const originalAmount = getDisplayedOriginalMonthlyEquivalent(planKey, billingCycle);
+            const monthlySavings = getMonthlySavings(planKey, billingCycle);
             const isCurrentPlan =
               planKey === "free"
                 ? user.plan === "free" && !hasPaidPaddleSubscription
@@ -572,9 +572,16 @@ export default function BillingPage() {
               >
                 <CardHeader className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <Badge variant={planMarketingCopy[planKey].badgeVariant}>
-                      {plan.marketingBadge ?? plan.displayName}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={planMarketingCopy[planKey].badgeVariant}>
+                        {plan.marketingBadge ?? plan.displayName}
+                      </Badge>
+                      {yearlySelected && isPaidPlan(planKey) && plan.yearlySavingsLabel ? (
+                        <Badge className="border-transparent bg-emerald-600 text-white hover:bg-emerald-600">
+                          {plan.yearlySavingsLabel}
+                        </Badge>
+                      ) : null}
+                    </div>
                     {isCurrentPlan ? <Badge variant="success">Current</Badge> : null}
                   </div>
                   <div>
@@ -588,22 +595,22 @@ export default function BillingPage() {
                   <PriceFade trigger={`${planKey}-${billingCycle}`} className="space-y-1">
                     <p className="font-display text-4xl font-semibold">
                       {formatUsdPrice(displayedAmount)}
-                      <span className="ml-2 text-base font-normal text-muted-foreground">/ month</span>
+                      <span className="ml-2 text-base font-normal text-muted-foreground">/ mo</span>
                     </p>
-                    {planKey !== "free" ? (
+                    {isPaidPlan(planKey) ? (
                       <p className="text-sm text-muted-foreground line-through">
-                        Regularly {formatUsdPrice(originalAmount)} / month
+                        {formatUsdPrice(originalAmount)}/mo
                       </p>
                     ) : null}
-                    {yearlySelected && planKey !== "free" ? (
+                    {isPaidPlan(planKey) ? (
                       <>
-                        <p className="text-sm text-muted-foreground">{getYearlyBillingCopy(planKey)}</p>
-                        <p className="text-sm text-muted-foreground line-through">
-                          Regularly {formatUsdPrice(getPlanOriginalAmount(planKey, billingCycle))}/year
-                        </p>
                         <p className="text-sm leading-6 text-emerald-600 dark:text-emerald-300">
-                          {planMarketingCopy[planKey].annualCopy}
+                          You save {formatUsdPrice(monthlySavings)}/mo
                         </p>
+                        {yearlySelected ? (
+                          <p className="text-sm text-muted-foreground">{getYearlyBillingCopy(planKey)}</p>
+                        ) : null}
+                        <p className="text-sm text-muted-foreground">{foundingSaleUrgencyCopy}</p>
                       </>
                     ) : null}
                   </PriceFade>
@@ -656,6 +663,9 @@ export default function BillingPage() {
                       {submittingPlan === `${planKey}:${billingCycle}` ? "Opening Paddle..." : actionLabel}
                     </Button>
                   )}
+                  <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">
+                    {isPaidPlan(planKey) ? foundingPriceLockCopy : starterLockCopy}
+                  </p>
                 </CardContent>
               </Card>
             );

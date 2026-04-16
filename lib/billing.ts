@@ -10,7 +10,6 @@ export interface PlanBillingDefinition {
   yearlyOriginalPrice: number;
   yearlySalePrice: number;
   yearlySavingsLabel?: string;
-  yearlyValueCopy?: string;
   marketingBadge?: string;
   trialDays: number;
   audience: string;
@@ -45,9 +44,8 @@ export const BILLING_PLANS: Record<PlanKey, PlanBillingDefinition> = {
     monthlySalePrice: 19,
     yearlyOriginalPrice: 468,
     yearlySalePrice: 180,
-    yearlySavingsLabel: "Sale pricing",
-    yearlyValueCopy: "Save $120/year — close 1 extra client and it pays for itself",
-    marketingBadge: "Most popular · Trusted by 500+ agencies",
+    yearlySavingsLabel: "Save 21%",
+    marketingBadge: "\uD83D\uDD12 Founding Member Sale",
     trialDays: 14,
     audience: "For agencies managing multiple clients"
   },
@@ -57,10 +55,9 @@ export const BILLING_PLANS: Record<PlanKey, PlanBillingDefinition> = {
     monthlyOriginalPrice: 149,
     monthlySalePrice: 59,
     yearlyOriginalPrice: 1428,
-    yearlySalePrice: 588,
-    yearlySavingsLabel: "Sale pricing",
-    yearlyValueCopy: "Save $360/year — one retained client covers this many times over",
-    marketingBadge: "For serious scale",
+    yearlySalePrice: 564,
+    yearlySavingsLabel: "Save 20%",
+    marketingBadge: "\uD83D\uDD12 Founding Member Sale",
     trialDays: 14,
     audience: "For serious agencies scaling operations"
   }
@@ -103,8 +100,24 @@ export function getDisplayedMonthlyEquivalent(plan: PlanKey, billingCycle: Billi
   return getPlanPricing(plan, billingCycle).monthlyEquivalent;
 }
 
+export function getDisplayedOriginalMonthlyEquivalent(plan: PlanKey, billingCycle: BillingCycle) {
+  if (billingCycle === "monthly") {
+    return BILLING_PLANS[plan].monthlyOriginalPrice;
+  }
+
+  return Math.round(BILLING_PLANS[plan].yearlyOriginalPrice / 12);
+}
+
+export function getMonthlySavings(plan: PlanKey, billingCycle: BillingCycle) {
+  if (plan === "free") {
+    return 0;
+  }
+
+  return getDisplayedOriginalMonthlyEquivalent(plan, billingCycle) - getDisplayedMonthlyEquivalent(plan, billingCycle);
+}
+
 export function getYearlyBillingCopy(plan: PlanKey) {
-  return `Billed ${formatUsdPrice(BILLING_PLANS[plan].yearlySalePrice)}/year`;
+  return `billed as ${formatUsdPrice(BILLING_PLANS[plan].yearlySalePrice)}/yr`;
 }
 
 export function formatUsdPrice(amount: number, options?: { maximumFractionDigits?: number }) {
