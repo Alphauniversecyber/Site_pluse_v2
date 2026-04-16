@@ -77,8 +77,8 @@ export const ADMIN_CRON_DEFINITIONS: Record<
   "process-paddle-webhooks": {
     label: "process-paddle-webhooks",
     path: "/api/cron/process-paddle-webhooks",
-    schedule: "15 * * * *",
-    description: "Processes queued Paddle webhook events asynchronously."
+    schedule: "0 5 * * *",
+    description: "Processes queued Paddle webhook events asynchronously, with immediate kicks from the live webhook endpoint."
   }
 };
 

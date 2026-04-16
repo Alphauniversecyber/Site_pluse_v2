@@ -809,14 +809,47 @@ export async function executeWebsiteScan(
 }
 
 export async function processDueScans(limit = getCronBatchLimit("SCAN_CRON_LIMIT", 20)) {
+  return processDueScansBatch({
+    discoveryLimit: limit,
+    discoveryOffset: 0
+  });
+}
+
+export async function processDueScansBatch(input: {
+  discoveryLimit?: number;
+  discoveryOffset?: number;
+  queueLimit?: number;
+}) {
   const guard = createCronExecutionGuard("process-scans", 240_000);
   const { enqueueDueScanJobs, processQueuedScanJobs } = await import("@/lib/scan-job-queue");
+  const discoveryLimit = input.discoveryLimit ?? getCronBatchLimit("SCAN_CRON_LIMIT", 20);
+  const queueLimit = input.queueLimit ?? getCronBatchLimit("SCAN_QUEUE_BATCH_LIMIT", 20);
+  const discoveryOffset = input.discoveryOffset ?? 0;
 
-  await enqueueDueScanJobs(limit);
+  const enqueueResult = await enqueueDueScanJobs(discoveryLimit, discoveryOffset);
+  const stoppedBeforeQueue = guard.shouldStop({
+    stage: "queue",
+    queue: "scan_job_queue",
+    nextOffset: enqueueResult.nextOffset
+  });
 
-  if (guard.shouldStop({ stage: "queue", queue: "scan_job_queue" })) {
-    return [];
-  }
+  const queueResult = stoppedBeforeQueue
+    ? {
+        executedWebsiteIds: [] as string[],
+        processedCount: 0,
+        inspectedCount: 0,
+        hasMore: true
+      }
+    : await processQueuedScanJobs(queueLimit, guard);
 
-  return processQueuedScanJobs(getCronBatchLimit("SCAN_QUEUE_BATCH_LIMIT", 20), guard);
+  return {
+    processedIds: queueResult.executedWebsiteIds,
+    processedCount: queueResult.processedCount,
+    inspectedCount: enqueueResult.inspectedCount + queueResult.inspectedCount,
+    queuedCount: enqueueResult.queuedCount,
+    nextCursor: enqueueResult.nextOffset,
+    hasMore: enqueueResult.hasMoreCandidates || queueResult.hasMore,
+    discoveryHasMore: enqueueResult.hasMoreCandidates,
+    queueHasMore: queueResult.hasMore
+  };
 }

@@ -39,6 +39,20 @@ type ReportEmailQueueRow = {
   updated_at: string;
 };
 
+export type EnqueueDueReportEmailsResult = {
+  queuedCount: number;
+  inspectedCount: number;
+  nextOffset: number | null;
+  hasMoreCandidates: boolean;
+};
+
+export type ProcessQueuedReportEmailsResult = {
+  sentReportIds: string[];
+  processedCount: number;
+  inspectedCount: number;
+  hasMore: boolean;
+};
+
 function buildReportQueueDedupeKey(websiteId: string, frequency: ScanFrequency, periodKey: string) {
   return `report-queue:${websiteId}:${frequency}:${periodKey}`;
 }
@@ -72,7 +86,7 @@ function classifyEmailFailure(message: string): ReportQueueReason {
   return "queue_failure";
 }
 
-async function loadEligibleProfiles(limit: number) {
+async function loadEligibleProfiles(limit: number, offset: number) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("users")
@@ -80,7 +94,7 @@ async function loadEligibleProfiles(limit: number) {
     .eq("email_reports_enabled", true)
     .in("plan", ["starter", "agency"])
     .order("created_at", { ascending: true })
-    .limit(limit);
+    .range(offset, offset + Math.max(limit - 1, 0));
 
   if (error) {
     throw new Error(error.message);
@@ -215,8 +229,8 @@ async function updateQueueRow(id: string, payload: Partial<ReportEmailQueueRow>)
   }
 }
 
-export async function enqueueDueReportEmails(limit = 200) {
-  const profiles = await loadEligibleProfiles(limit);
+export async function enqueueDueReportEmails(limit = 200, offset = 0): Promise<EnqueueDueReportEmailsResult> {
+  const profiles = await loadEligibleProfiles(limit, offset);
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
   const websites = await loadActiveWebsites(profiles.map((profile) => profile.id));
   const latestScans = await loadLatestScans(websites.map((website) => website.id));
@@ -284,10 +298,20 @@ export async function enqueueDueReportEmails(limit = 200) {
 
   await insertQueueRows(rowsToInsert);
 
-  return rowsToInsert.length;
+  const nextOffset = profiles.length === limit ? offset + profiles.length : null;
+
+  return {
+    queuedCount: rowsToInsert.length,
+    inspectedCount: profiles.length,
+    nextOffset,
+    hasMoreCandidates: nextOffset !== null
+  };
 }
 
-export async function processQueuedReportEmails(limit = 25, guard?: CronExecutionGuard) {
+export async function processQueuedReportEmails(
+  limit = 25,
+  guard?: CronExecutionGuard
+): Promise<ProcessQueuedReportEmailsResult> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("report_email_queue")
@@ -303,6 +327,7 @@ export async function processQueuedReportEmails(limit = 25, guard?: CronExecutio
 
   const rows = (data ?? []) as ReportEmailQueueRow[];
   const sentReportIds: string[] = [];
+  let inspectedCount = 0;
 
   for (const row of rows) {
     if (
@@ -315,6 +340,8 @@ export async function processQueuedReportEmails(limit = 25, guard?: CronExecutio
     ) {
       break;
     }
+
+    inspectedCount += 1;
 
     const startedAt = new Date().toISOString();
 
@@ -422,5 +449,10 @@ export async function processQueuedReportEmails(limit = 25, guard?: CronExecutio
     }
   }
 
-  return sentReportIds;
+  return {
+    sentReportIds,
+    processedCount: sentReportIds.length,
+    inspectedCount,
+    hasMore: inspectedCount < rows.length || rows.length === limit
+  };
 }

@@ -40,6 +40,20 @@ type ScanScheduleRow = {
   last_scan_at: string | null;
 };
 
+export type EnqueueDueScanJobsResult = {
+  queuedCount: number;
+  inspectedCount: number;
+  nextOffset: number | null;
+  hasMoreCandidates: boolean;
+};
+
+export type ProcessQueuedScanJobsResult = {
+  executedWebsiteIds: string[];
+  processedCount: number;
+  inspectedCount: number;
+  hasMore: boolean;
+};
+
 function buildScanQueueDedupeKey(websiteId: string, frequency: ScanFrequency, periodKey: string) {
   return `scan-queue:${websiteId}:${frequency}:${periodKey}`;
 }
@@ -64,12 +78,16 @@ function classifyScanFailure(message: string): ScanFailureReason {
   return "queue_backlog";
 }
 
-async function loadProfiles() {
+async function loadProfiles(userIds: string[]) {
+  if (!userIds.length) {
+    return [] as Array<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>;
+  }
+
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("users")
     .select("id,email,plan,timezone")
-    .order("created_at", { ascending: true });
+    .in("id", userIds);
 
   if (error) {
     throw new Error(error.message);
@@ -78,19 +96,40 @@ async function loadProfiles() {
   return (data ?? []) as Array<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>;
 }
 
-async function loadActiveWebsites() {
+async function loadActiveWebsites(limit: number, offset: number) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("websites")
     .select("id,user_id,url,label,is_active,created_at")
     .eq("is_active", true)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .range(offset, offset + Math.max(limit - 1, 0));
 
   if (error) {
     throw new Error(error.message);
   }
 
   return (data ?? []) as Array<Pick<Website, "id" | "user_id" | "url" | "label" | "is_active" | "created_at">>;
+}
+
+async function loadActiveWebsitesForUsers(userIds: string[]) {
+  if (!userIds.length) {
+    return [] as Array<Pick<Website, "id" | "user_id" | "created_at">>;
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("websites")
+    .select("id,user_id,created_at")
+    .eq("is_active", true)
+    .in("user_id", userIds)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as Array<Pick<Website, "id" | "user_id" | "created_at">>;
 }
 
 async function loadSchedules(websiteIds: string[]) {
@@ -157,16 +196,22 @@ async function updateQueueRow(id: string, payload: Partial<ScanJobQueueRow>) {
   }
 }
 
-export async function enqueueDueScanJobs(limit = 250) {
-  const profiles = await loadProfiles();
+export async function enqueueDueScanJobs(limit = 250, offset = 0): Promise<EnqueueDueScanJobsResult> {
+  const websites = await loadActiveWebsites(limit, offset);
+  const profiles = await loadProfiles(Array.from(new Set(websites.map((website) => website.user_id))));
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
-  const websites = (await loadActiveWebsites()).slice(0, limit);
+  const activeWebsitesForUsers = await loadActiveWebsitesForUsers(
+    Array.from(new Set(websites.map((website) => website.user_id)))
+  );
   const schedules = await loadSchedules(websites.map((website) => website.id));
-  const websitesByUser = websites.reduce<Record<string, typeof websites>>((accumulator, website) => {
+  const websitesByUser = activeWebsitesForUsers.reduce<Record<string, typeof activeWebsitesForUsers>>(
+    (accumulator, website) => {
     accumulator[website.user_id] = accumulator[website.user_id] ?? [];
     accumulator[website.user_id]?.push(website);
     return accumulator;
-  }, {});
+    },
+    {}
+  );
   const now = new Date();
   const candidates: Array<Partial<ScanJobQueueRow>> = [];
 
@@ -224,7 +269,7 @@ export async function enqueueDueScanJobs(limit = 250) {
     if (websiteIndex >= planLimits.websiteLimit) {
       candidates.push({
         ...baseRow,
-        status: "failed",
+        status: "skipped",
         failure_reason: "plan_limit_reached",
         last_error: "This website is over the current plan's website limit, so the scan was not scheduled."
       });
@@ -242,10 +287,20 @@ export async function enqueueDueScanJobs(limit = 250) {
   const existingRows = await loadExistingQueueRows(candidates.map((row) => row.dedupe_key as string));
   const rowsToInsert = candidates.filter((row) => !existingRows.has(row.dedupe_key as string));
   await insertQueueRows(rowsToInsert);
-  return rowsToInsert.length;
+  const nextOffset = websites.length === limit ? offset + websites.length : null;
+
+  return {
+    queuedCount: rowsToInsert.length,
+    inspectedCount: websites.length,
+    nextOffset,
+    hasMoreCandidates: nextOffset !== null
+  };
 }
 
-export async function processQueuedScanJobs(limit = 20, guard?: CronExecutionGuard) {
+export async function processQueuedScanJobs(
+  limit = 20,
+  guard?: CronExecutionGuard
+): Promise<ProcessQueuedScanJobsResult> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("scan_job_queue")
@@ -261,6 +316,7 @@ export async function processQueuedScanJobs(limit = 20, guard?: CronExecutionGua
 
   const rows = (data ?? []) as ScanJobQueueRow[];
   const executedWebsiteIds: string[] = [];
+  let inspectedCount = 0;
 
   for (const row of rows) {
     if (
@@ -274,7 +330,13 @@ export async function processQueuedScanJobs(limit = 20, guard?: CronExecutionGua
       break;
     }
 
+    inspectedCount += 1;
+
     if (row.failure_reason === "plan_limit_reached") {
+      await updateQueueRow(row.id, {
+        status: "skipped",
+        last_attempt_at: new Date().toISOString()
+      });
       continue;
     }
 
@@ -347,5 +409,10 @@ export async function processQueuedScanJobs(limit = 20, guard?: CronExecutionGua
     }
   }
 
-  return executedWebsiteIds;
+  return {
+    executedWebsiteIds,
+    processedCount: executedWebsiteIds.length,
+    inspectedCount,
+    hasMore: inspectedCount < rows.length || rows.length === limit
+  };
 }

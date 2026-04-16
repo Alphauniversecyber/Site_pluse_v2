@@ -5,6 +5,37 @@ import { logAdminError } from "@/lib/admin/logging";
 
 export const runtime = "nodejs";
 
+async function kickPaddleWebhookProcessor(request: Request) {
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  if (!cronSecret) {
+    return;
+  }
+
+  const url = new URL("/api/cron/process-paddle-webhooks", request.url);
+
+  try {
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        authorization: `Bearer ${cronSecret}`,
+        "x-sitepulse-webhook-kick": "1"
+      },
+      signal: AbortSignal.timeout(5_000)
+    });
+
+    if (!response.ok) {
+      console.warn("[paddle:webhook] Unable to kick the webhook processor.", {
+        status: response.status
+      });
+    }
+  } catch (error) {
+    console.warn("[paddle:webhook] Webhook processor kick failed.", {
+      error: error instanceof Error ? error.message : "Unknown webhook processor kick error"
+    });
+  }
+}
+
 export async function POST(request: Request) {
   const rawBody = await request.text();
 
@@ -35,6 +66,11 @@ export async function POST(request: Request) {
 
   try {
     const queued = await queuePaddleWebhook(payload);
+
+    if (queued.queued && !queued.ignored) {
+      await kickPaddleWebhookProcessor(request);
+    }
+
     return apiSuccess({
       received: true,
       queued: queued.queued,

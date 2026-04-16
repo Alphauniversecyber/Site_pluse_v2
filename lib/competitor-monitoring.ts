@@ -232,24 +232,39 @@ export async function runCompetitorScan(input: {
 }
 
 export async function processCompetitorScans(limit = getCronBatchLimit("COMPETITOR_CRON_LIMIT", 20)) {
+  return processCompetitorScansBatch({
+    limit,
+    offset: 0
+  });
+}
+
+export async function processCompetitorScansBatch(input: { limit?: number; offset?: number }) {
   const admin = createSupabaseAdminClient();
   const guard = createCronExecutionGuard("process-competitors", 240_000);
+  const limit = input.limit ?? getCronBatchLimit("COMPETITOR_CRON_LIMIT", 20);
+  const offset = input.offset ?? 0;
   const { data: websites, error } = await admin
     .from("websites")
     .select("*")
     .eq("is_active", true)
-    .limit(limit);
+    .order("created_at", { ascending: true })
+    .range(offset, offset + Math.max(limit - 1, 0));
 
   if (error) {
     throw new Error(error.message);
   }
 
   const processed: string[] = [];
+  let inspectedCount = 0;
+  let stoppedEarly = false;
 
   for (const website of (websites ?? []) as Website[]) {
     if (guard.shouldStop({ processedCount: processed.length, websiteId: website.id })) {
+      stoppedEarly = true;
       break;
     }
+
+    inspectedCount += 1;
 
     const competitors = Array.isArray(website.competitor_urls) ? website.competitor_urls.slice(0, 3) : [];
     if (!competitors.length) {
@@ -268,7 +283,8 @@ export async function processCompetitorScans(limit = getCronBatchLimit("COMPETIT
 
     for (const competitorUrl of competitors) {
       if (guard.shouldStop({ processedCount: processed.length, websiteId: website.id, competitorUrl })) {
-        return processed;
+        stoppedEarly = true;
+        break;
       }
 
       await runCompetitorScan({
@@ -278,8 +294,21 @@ export async function processCompetitorScans(limit = getCronBatchLimit("COMPETIT
       });
     }
 
+    if (stoppedEarly) {
+      break;
+    }
+
     processed.push(website.id);
   }
 
-  return processed;
+  const rows = (websites ?? []) as Website[];
+  const hasMore = stoppedEarly || inspectedCount < rows.length || rows.length === limit;
+
+  return {
+    processedIds: processed,
+    processedCount: processed.length,
+    inspectedCount,
+    nextCursor: hasMore ? offset + inspectedCount : null,
+    hasMore
+  };
 }

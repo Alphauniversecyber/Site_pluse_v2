@@ -487,26 +487,38 @@ async function maybeSendOnboardingEmails(profile: LifecycleProfile, snapshot: Li
 }
 
 export async function processLifecycleEmails(limit = getCronBatchLimit("LIFECYCLE_CRON_USER_LIMIT", 50)) {
+  return processLifecycleEmailsBatch({
+    limit,
+    offset: 0
+  });
+}
+
+export async function processLifecycleEmailsBatch(input: { limit?: number; offset?: number }) {
   const admin = createSupabaseAdminClient();
   const guard = createCronExecutionGuard("process-lifecycle-emails", 240_000);
+  const limit = input.limit ?? getCronBatchLimit("LIFECYCLE_CRON_USER_LIMIT", 50);
+  const offset = input.offset ?? 0;
   const recentSignupIso = new Date(Date.now() - 30 * DAY_IN_MS).toISOString();
   const { data: users, error } = await admin
     .from("users")
     .select("id,email,full_name,trial_ends_at,is_trial,created_at")
     .gte("created_at", recentSignupIso)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .range(offset, offset + Math.max(limit - 1, 0));
 
   if (error) {
     throw new Error(error.message);
   }
 
   const sent: string[] = [];
+  let inspectedCount = 0;
 
   for (const profile of (users ?? []) as LifecycleProfile[]) {
     if (guard.shouldStop({ sentCount: sent.length, userId: profile.id })) {
       break;
     }
+
+    inspectedCount += 1;
 
     try {
       const snapshot = await loadLifecycleSnapshot(profile.id);
@@ -526,5 +538,14 @@ export async function processLifecycleEmails(limit = getCronBatchLimit("LIFECYCL
     }
   }
 
-  return sent;
+  const rows = (users ?? []) as LifecycleProfile[];
+  const hasMore = inspectedCount < rows.length || rows.length === limit;
+
+  return {
+    sentKeys: sent,
+    processedCount: sent.length,
+    inspectedCount,
+    nextCursor: hasMore ? offset + inspectedCount : null,
+    hasMore
+  };
 }

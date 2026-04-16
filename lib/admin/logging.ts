@@ -289,6 +289,11 @@ function countProcessedItems(value: unknown) {
   }
 
   if (value && typeof value === "object") {
+    const maybeProcessedCount = (value as { processedCount?: unknown }).processedCount;
+    if (typeof maybeProcessedCount === "number") {
+      return maybeProcessedCount;
+    }
+
     const maybeCount = (value as { count?: unknown }).count;
     if (typeof maybeCount === "number") {
       return maybeCount;

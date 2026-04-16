@@ -548,14 +548,43 @@ export async function sendStoredReportEmail(input: {
 }
 
 export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_CRON_USER_LIMIT", 20)) {
+  return processDueEmailReportsBatch({
+    discoveryLimit: limit,
+    discoveryOffset: 0
+  });
+}
+
+export async function processDueEmailReportsBatch(input: {
+  discoveryLimit?: number;
+  discoveryOffset?: number;
+  queueLimit?: number;
+}) {
   const guard = createCronExecutionGuard("process-reports", 240_000);
   const { enqueueDueReportEmails, processQueuedReportEmails } = await import("@/lib/report-email-queue");
+  const discoveryLimit = input.discoveryLimit ?? getCronBatchLimit("REPORT_CRON_USER_LIMIT", 20);
+  const queueLimit = input.queueLimit ?? getCronBatchLimit("REPORT_QUEUE_BATCH_LIMIT", 25);
+  const discoveryOffset = input.discoveryOffset ?? 0;
 
-  await enqueueDueReportEmails(limit);
+  const enqueueResult = await enqueueDueReportEmails(discoveryLimit, discoveryOffset);
+  const stoppedBeforeQueue = guard.shouldStop({ stage: "queue", queue: "report_email_queue" });
 
-  if (guard.shouldStop({ stage: "queue", queue: "report_email_queue" })) {
-    return [];
-  }
+  const queueResult = stoppedBeforeQueue
+    ? {
+        sentReportIds: [] as string[],
+        processedCount: 0,
+        inspectedCount: 0,
+        hasMore: true
+      }
+    : await processQueuedReportEmails(queueLimit, guard);
 
-  return processQueuedReportEmails(getCronBatchLimit("REPORT_QUEUE_BATCH_LIMIT", 25), guard);
+  return {
+    sentReportIds: queueResult.sentReportIds,
+    processedCount: queueResult.processedCount,
+    inspectedCount: enqueueResult.inspectedCount + queueResult.inspectedCount,
+    queuedCount: enqueueResult.queuedCount,
+    nextCursor: enqueueResult.nextOffset,
+    hasMore: enqueueResult.hasMoreCandidates || queueResult.hasMore,
+    discoveryHasMore: enqueueResult.hasMoreCandidates,
+    queueHasMore: queueResult.hasMore
+  };
 }

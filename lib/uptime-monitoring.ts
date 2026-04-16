@@ -399,14 +399,23 @@ export async function syncUptimeRobotForUser(input: {
 }
 
 export async function processDailyUptimeChecks(limit = getCronBatchLimit("UPTIME_CRON_LIMIT", 50)) {
+  return processDailyUptimeChecksBatch({
+    limit,
+    offset: 0
+  });
+}
+
+export async function processDailyUptimeChecksBatch(input: { limit?: number; offset?: number }) {
   const admin = createSupabaseAdminClient();
   const guard = createCronExecutionGuard("process-uptime", 240_000);
+  const limit = input.limit ?? getCronBatchLimit("UPTIME_CRON_LIMIT", 50);
+  const offset = input.offset ?? 0;
   const { data: websites, error } = await admin
     .from("websites")
     .select("*")
     .eq("is_active", true)
     .order("created_at", { ascending: true })
-    .limit(limit);
+    .range(offset, offset + Math.max(limit - 1, 0));
 
   if (error) {
     throw new Error(error.message);
@@ -414,11 +423,15 @@ export async function processDailyUptimeChecks(limit = getCronBatchLimit("UPTIME
 
   const processed: string[] = [];
 
+  let inspectedCount = 0;
+
   for (const row of websites ?? []) {
     const website = row as Website;
     if (guard.shouldStop({ processedCount: processed.length, websiteId: website.id })) {
       break;
     }
+
+    inspectedCount += 1;
 
     const { data: profile } = await admin
       .from("users")
@@ -435,28 +448,49 @@ export async function processDailyUptimeChecks(limit = getCronBatchLimit("UPTIME
     processed.push(website.id);
   }
 
-  return processed;
+  const rows = (websites ?? []) as Website[];
+  const hasMore = inspectedCount < rows.length || rows.length === limit;
+
+  return {
+    processedIds: processed,
+    processedCount: processed.length,
+    inspectedCount,
+    nextCursor: hasMore ? offset + inspectedCount : null,
+    hasMore
+  };
 }
 
 export async function processUptimeRobotSync(limit = getCronBatchLimit("UPTIMEROBOT_SYNC_LIMIT", 20)) {
+  return processUptimeRobotSyncBatch({
+    limit,
+    offset: 0
+  });
+}
+
+export async function processUptimeRobotSyncBatch(input: { limit?: number; offset?: number }) {
   const admin = createSupabaseAdminClient();
   const guard = createCronExecutionGuard("sync-uptimerobot", 240_000);
+  const limit = input.limit ?? getCronBatchLimit("UPTIMEROBOT_SYNC_LIMIT", 20);
+  const offset = input.offset ?? 0;
   const { data: profiles, error } = await admin
     .from("users")
     .select("*")
     .not("uptimerobot_api_key", "is", null)
-    .limit(limit);
+    .range(offset, offset + Math.max(limit - 1, 0));
 
   if (error) {
     throw new Error(error.message);
   }
 
   const synced: string[] = [];
+  let inspectedCount = 0;
 
   for (const profile of (profiles ?? []) as UserProfile[]) {
     if (guard.shouldStop({ syncedCount: synced.length, userId: profile.id })) {
       break;
     }
+
+    inspectedCount += 1;
 
     if (!profile.uptimerobot_api_key) {
       continue;
@@ -478,5 +512,14 @@ export async function processUptimeRobotSync(limit = getCronBatchLimit("UPTIMERO
     synced.push(profile.id);
   }
 
-  return synced;
+  const rows = (profiles ?? []) as UserProfile[];
+  const hasMore = inspectedCount < rows.length || rows.length === limit;
+
+  return {
+    processedIds: synced,
+    processedCount: synced.length,
+    inspectedCount,
+    nextCursor: hasMore ? offset + inspectedCount : null,
+    hasMore
+  };
 }

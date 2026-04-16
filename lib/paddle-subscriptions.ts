@@ -1133,11 +1133,14 @@ export async function processQueuedPaddleWebhooks() {
 
   const rows = (data ?? []) as PaddleWebhookEventRecord[];
   let processed = 0;
+  let inspectedCount = 0;
 
   for (const row of rows) {
     if (guard.shouldStop({ processed })) {
       break;
     }
+
+    inspectedCount += 1;
 
     try {
       await markWebhookProcessing(row.id);
@@ -1167,5 +1170,10 @@ export async function processQueuedPaddleWebhooks() {
     }
   }
 
-  return processed;
+  return {
+    processedCount: processed,
+    inspectedCount,
+    hasMore: inspectedCount < rows.length || rows.length === batchSize,
+    nextCursor: null
+  };
 }
