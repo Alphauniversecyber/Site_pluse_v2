@@ -43,8 +43,8 @@ export const BILLING_PLANS: Record<PlanKey, PlanBillingDefinition> = {
     monthlyOriginalPrice: 49,
     monthlySalePrice: 19,
     yearlyOriginalPrice: 468,
-    yearlySalePrice: 180,
-    yearlySavingsLabel: "Save 21%",
+    yearlySalePrice: 187,
+    yearlySavingsLabel: "Save 16%",
     marketingBadge: "\uD83D\uDD12 Founding Member Sale",
     trialDays: 14,
     audience: "For agencies managing multiple clients"

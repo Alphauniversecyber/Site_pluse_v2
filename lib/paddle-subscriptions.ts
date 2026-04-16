@@ -149,6 +149,15 @@ function addRefundWindow(paymentDate: string | null) {
   return new Date(Date.parse(normalized) + REFUND_WINDOW_MS).toISOString();
 }
 
+function isActiveYearlyPaidTrial(profile: Pick<UserProfile, "subscription_status" | "billing_cycle" | "trial_end_date">) {
+  if (profile.subscription_status !== "trialing" || profile.billing_cycle !== "yearly") {
+    return false;
+  }
+
+  const trialEndsAt = toIsoOrNull(profile.trial_end_date);
+  return Boolean(trialEndsAt) && Date.parse(trialEndsAt as string) > Date.now();
+}
+
 function fromMinorUnits(amount: string | null | undefined) {
   if (!amount) {
     return null;
@@ -535,6 +544,22 @@ export async function getPaddleRefundEligibility(profile: UserProfile): Promise<
       message: "No Paddle subscription is linked to this account yet.",
       transactionId: null,
       paddleSubscriptionId: null,
+      lastPaymentDate: null,
+      refundableUntil: null,
+      refundStatus: "none",
+      refundAdjustmentId: null,
+      planName: null,
+      salePrice: null
+    };
+  }
+
+  if (isActiveYearlyPaidTrial(profile)) {
+    return {
+      eligible: false,
+      message:
+        "Refunds stay hidden during the 2-month yearly trial. The refund button will appear after the trial ends and the first annual payment is collected.",
+      transactionId: null,
+      paddleSubscriptionId: profile.paddle_subscription_id ?? null,
       lastPaymentDate: null,
       refundableUntil: null,
       refundStatus: "none",

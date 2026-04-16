@@ -28,7 +28,7 @@ import {
   type PaidPlanKey
 } from "@/lib/billing";
 import { formatDateTime, getPlanDisplayName } from "@/lib/utils";
-import type { BillingCycle, PlanKey } from "@/types";
+import type { BillingCycle, PlanKey, UserProfile } from "@/types";
 
 const paidPlanFeatures: Record<PaidPlanKey, string[]> = {
   starter: [
@@ -100,6 +100,14 @@ function getPlanRank(plan: PlanKey) {
   }
 
   return 0;
+}
+
+function isActiveYearlyPaidTrial(user: Pick<UserProfile, "subscription_status" | "billing_cycle" | "trial_end_date">) {
+  if (user.subscription_status !== "trialing" || user.billing_cycle !== "yearly" || !user.trial_end_date) {
+    return false;
+  }
+
+  return Date.parse(user.trial_end_date) > Date.now();
 }
 
 export default function BillingPage() {
@@ -380,8 +388,11 @@ export default function BillingPage() {
   const currentPlanLabel = user.plan === "free" ? "Starter" : getPlanDisplayName(user.plan);
   const currentPaidSelection =
     user.plan !== "free" && user.billing_cycle ? getPlanPricing(user.plan, user.billing_cycle) : null;
-  const showRefundButton = Boolean(refundState?.eligible);
-  const showRefundPanel = Boolean(refundState && (refundState.lastPaymentDate || refundState.refundStatus !== "none"));
+  const paidYearlyTrialActive = isActiveYearlyPaidTrial(user);
+  const showRefundButton = Boolean(refundState?.eligible) && !paidYearlyTrialActive;
+  const showRefundPanel = Boolean(
+    !paidYearlyTrialActive && refundState && (refundState.lastPaymentDate || refundState.refundStatus !== "none")
+  );
 
   return (
     <div className="space-y-10">
@@ -447,6 +458,9 @@ export default function BillingPage() {
                   {user.next_billing_date ? (
                     <p>Next billing date: {formatDateTime(user.next_billing_date)}</p>
                   ) : null}
+                  {paidYearlyTrialActive ? (
+                    <p>Refunds stay hidden during the yearly trial and unlock after the first paid annual charge.</p>
+                  ) : null}
                 </div>
               </div>
 
@@ -491,7 +505,9 @@ export default function BillingPage() {
 
             {hasPaidPaddleSubscription ? (
               <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-                Manage billing details in Paddle. Use cancel to stop the next renewal, or use refund while the latest payment is still inside the 14-day window.
+                {paidYearlyTrialActive
+                  ? "Manage billing details in Paddle. Use cancel to stop the next renewal. Refunds stay hidden during the 2-month yearly trial and only appear after the first paid annual charge."
+                  : "Manage billing details in Paddle. Use cancel to stop the next renewal, or use refund while the latest payment is still inside the 14-day window."}
               </div>
             ) : null}
 
