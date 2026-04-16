@@ -2,9 +2,9 @@ import "server-only";
 
 import { getPlanLabel } from "@/lib/admin/format";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { getPeriodKey, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
+import { getLocalDayKey, getPeriodKey, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
 import { PLAN_LIMITS } from "@/lib/utils";
-import type { ScanFrequency, ScanSchedule, UserProfile, Website } from "@/types";
+import type { ScanFrequency, ScanResult, ScanSchedule, UserProfile, Website } from "@/types";
 
 type QueueStatus = "pending" | "processing" | "completed" | "failed" | "skipped";
 type MonitoringRowStatus = "pending" | "processing" | "failed" | "skipped";
@@ -49,6 +49,7 @@ type ScanCandidate = {
   overPlanLimit: boolean;
   queueRow: ScanJobQueueRow | null;
   schedule: Pick<ScanSchedule, "website_id" | "frequency" | "last_scan_at" | "next_scan_at"> | null;
+  completedToday: boolean;
 };
 
 export type AdminScanMonitoringRow = {
@@ -148,6 +149,20 @@ function buildChart(reference: Date, queueRows: ScanJobQueueRow[]) {
   });
 }
 
+function findLatestScanBeforeToday(scans: Array<Pick<ScanResult, "scanned_at" | "scan_status">>, timezone: string, todayKey: string) {
+  for (const row of scans) {
+    if (row.scan_status === "failed") {
+      continue;
+    }
+
+    if (getLocalDayKey(row.scanned_at, timezone) < todayKey) {
+      return row.scanned_at;
+    }
+  }
+
+  return null;
+}
+
 function toMonitoringRow(candidate: ScanCandidate, latestCron: CronLogRow | null, cronRanToday: boolean) {
   if (candidate.overPlanLimit) {
     return {
@@ -237,7 +252,7 @@ export async function getAdminScanMonitoringData(input?: {
   const dateFilter = isValidDayKey(input?.date) ? (input?.date as string) : "";
 
   try {
-    const [usersResult, websitesResult, schedulesResult, queueResult, cronLogsResult] = await Promise.all([
+    const [usersResult, websitesResult, schedulesResult, queueResult, cronLogsResult, scanResultsResult] = await Promise.all([
       admin.from("users").select("id,email,plan,timezone"),
       admin
         .from("websites")
@@ -257,7 +272,13 @@ export async function getAdminScanMonitoringData(input?: {
         .eq("cron_name", "process-scans")
         .gte("started_at", queueLookbackIso)
         .order("started_at", { ascending: false })
-        .limit(20)
+        .limit(20),
+      admin
+        .from("scan_results")
+        .select("website_id,scan_status,scanned_at")
+        .gte("scanned_at", queueLookbackIso)
+        .order("scanned_at", { ascending: false })
+        .limit(5000)
     ]);
 
     if (usersResult.error) throw new Error(usersResult.error.message);
@@ -265,6 +286,7 @@ export async function getAdminScanMonitoringData(input?: {
     if (schedulesResult.error) throw new Error(schedulesResult.error.message);
     if (queueResult.error) throw new Error(queueResult.error.message);
     if (cronLogsResult.error) throw new Error(cronLogsResult.error.message);
+    if (scanResultsResult.error) throw new Error(scanResultsResult.error.message);
 
     const users = (usersResult.data ?? []) as Array<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>;
     const websites = (websitesResult.data ?? []) as Array<
@@ -275,6 +297,7 @@ export async function getAdminScanMonitoringData(input?: {
     >;
     const queueRows = (queueResult.data ?? []) as ScanJobQueueRow[];
     const cronRows = (cronLogsResult.data ?? []) as CronLogRow[];
+    const scanResults = (scanResultsResult.data ?? []) as Array<Pick<ScanResult, "website_id" | "scan_status" | "scanned_at">>;
 
     const usersById = new Map(users.map((user) => [user.id, user]));
     const schedulesByWebsite = new Map(schedules.map((schedule) => [schedule.website_id, schedule]));
@@ -282,6 +305,11 @@ export async function getAdminScanMonitoringData(input?: {
     const websitesByUser = websites.reduce<Record<string, typeof websites>>((accumulator, website) => {
       accumulator[website.user_id] = accumulator[website.user_id] ?? [];
       accumulator[website.user_id]?.push(website);
+      return accumulator;
+    }, {});
+    const scansByWebsite = scanResults.reduce<Record<string, typeof scanResults>>((accumulator, row) => {
+      accumulator[row.website_id] = accumulator[row.website_id] ?? [];
+      accumulator[row.website_id]?.push(row);
       return accumulator;
     }, {});
 
@@ -303,14 +331,27 @@ export async function getAdminScanMonitoringData(input?: {
         const overPlanLimit = orderedWebsiteIds.findIndex((row) => row === website.id) >= planLimits.websiteLimit;
         const schedule = schedulesByWebsite.get(website.id) ?? null;
         const timezone = normalizeTimezone(user.timezone);
+        const todayKey = getLocalDayKey(now, timezone);
         const frequency =
           schedule?.frequency && planLimits.scanFrequencies.includes(schedule.frequency)
             ? schedule.frequency
             : planLimits.scanFrequencies[0];
         const dueBySchedule = schedule?.next_scan_at ? new Date(schedule.next_scan_at).getTime() <= now.getTime() : true;
+        const websiteScans = scansByWebsite[website.id] ?? [];
+        const lastScanBeforeToday = findLatestScanBeforeToday(websiteScans, timezone, todayKey);
+        const completedToday =
+          websiteScans.some((row) => row.scan_status !== "failed" && getLocalDayKey(row.scanned_at, timezone) === todayKey) ||
+          Boolean(
+            queueRows.find(
+              (row) =>
+                row.website_id === website.id &&
+                row.status === "completed" &&
+                getLocalDayKey(row.completed_at ?? row.scheduled_for, timezone) === todayKey
+            )
+          );
         const dueByPeriod = isDueForPeriod({
           frequency,
-          lastEventAt: schedule?.last_scan_at,
+          lastEventAt: lastScanBeforeToday,
           timezone,
           reference: now
         });
@@ -331,14 +372,15 @@ export async function getAdminScanMonitoringData(input?: {
           websiteUrl: website.url,
           overPlanLimit,
           queueRow: queueByDedupeKey.get(dedupeKey) ?? null,
-          schedule
+          schedule,
+          completedToday
         } satisfies ScanCandidate;
       })
       .filter((row): row is ScanCandidate => Boolean(row));
 
-    const completedToday = dueCandidates.filter((candidate) => candidate.queueRow?.status === "completed").length;
+    const completedToday = dueCandidates.filter((candidate) => candidate.completedToday).length;
     const failedRows = dueCandidates
-      .filter((candidate) => candidate.queueRow?.status !== "completed")
+      .filter((candidate) => !candidate.completedToday)
       .map((candidate) => toMonitoringRow(candidate, latestCron, cronRanToday));
 
     return {
