@@ -1,0 +1,128 @@
+name: SitePulse Cron Workers
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+    - cron: "5 * * * *"
+    - cron: "15 * * * *"
+    - cron: "20 * * * *"
+    - cron: "0 9 * * *"
+    - cron: "0 11 * * *"
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Optional cron target override"
+        required: false
+        default: "auto"
+
+concurrency:
+  group: sitepulse-cron-workers
+  cancel-in-progress: false
+
+jobs:
+  run-crons:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Validate scheduler secrets
+        env:
+          BASE_URL: ${{ secrets.SITEPULSE_BASE_URL }}
+          CRON_SECRET: ${{ secrets.SITEPULSE_CRON_SECRET }}
+        run: |
+          test -n "$BASE_URL"
+          test -n "$CRON_SECRET"
+
+      - name: Trigger SitePulse cron endpoints
+        env:
+          BASE_URL: ${{ secrets.SITEPULSE_BASE_URL }}
+          CRON_SECRET: ${{ secrets.SITEPULSE_CRON_SECRET }}
+          SCHEDULE: ${{ github.event.schedule }}
+          TARGET: ${{ github.event.inputs.target }}
+        run: |
+          set -euo pipefail
+
+          base_url="${BASE_URL%/}"
+
+          call_cron() {
+            local path="$1"
+            echo "Triggering ${path}"
+            curl --fail --show-error --silent \
+              --header "Authorization: Bearer ${CRON_SECRET}" \
+              --header "x-sitepulse-cron-secret: ${CRON_SECRET}" \
+              "${base_url}${path}"
+            echo
+          }
+
+          run_target() {
+            case "$1" in
+              scans)
+                call_cron "/api/cron/process-scans"
+                call_cron "/api/cron/process-paddle-webhooks"
+                ;;
+              uptime)
+                call_cron "/api/cron/process-uptime"
+                ;;
+              reports)
+                call_cron "/api/cron/process-reports"
+                ;;
+              uptimerobot)
+                call_cron "/api/cron/sync-uptimerobot"
+                ;;
+              competitors)
+                call_cron "/api/cron/process-competitors"
+                ;;
+              expire-trials)
+                call_cron "/api/cron/expire-trials"
+                ;;
+              lifecycle)
+                call_cron "/api/cron/process-lifecycle-emails"
+                ;;
+              all)
+                call_cron "/api/cron/process-scans"
+                call_cron "/api/cron/process-paddle-webhooks"
+                call_cron "/api/cron/process-uptime"
+                call_cron "/api/cron/process-reports"
+                call_cron "/api/cron/sync-uptimerobot"
+                call_cron "/api/cron/process-competitors"
+                call_cron "/api/cron/expire-trials"
+                call_cron "/api/cron/process-lifecycle-emails"
+                ;;
+              *)
+                echo "Unknown target: $1" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          if [ -n "${TARGET:-}" ] && [ "${TARGET}" != "auto" ]; then
+            run_target "${TARGET}"
+            exit 0
+          fi
+
+          case "${SCHEDULE:-}" in
+            "*/15 * * * *")
+              run_target "scans"
+              ;;
+            "5 * * * *")
+              run_target "uptime"
+              ;;
+            "15 * * * *")
+              run_target "reports"
+              ;;
+            "20 * * * *")
+              run_target "uptimerobot"
+              ;;
+            "0 9 * * *")
+              run_target "competitors"
+              ;;
+            "0 11 * * *")
+              run_target "expire-trials"
+              ;;
+            "0 12 * * *")
+              run_target "lifecycle"
+              ;;
+            *)
+              echo "No matching scheduled task for ${SCHEDULE:-manual}"
+              ;;
+          esac

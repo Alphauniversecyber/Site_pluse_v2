@@ -35,26 +35,26 @@ export const ADMIN_CRON_DEFINITIONS: Record<
   "process-scans": {
     label: "process-scans",
     path: "/api/cron/process-scans",
-    schedule: "*/15 * * * *",
-    description: "Runs due website scans in safe queue batches every 15 minutes."
+    schedule: "0 6 * * *",
+    description: "Daily Vercel fallback for due website scans. Frequent batch runs come from the GitHub scheduler on Hobby."
   },
   "process-reports": {
     label: "process-reports",
     path: "/api/cron/process-reports",
-    schedule: "15 * * * *",
-    description: "Sends scheduled report emails in safe hourly queue batches."
+    schedule: "0 10 * * *",
+    description: "Daily Vercel fallback for scheduled report emails. Frequent batch runs come from the GitHub scheduler on Hobby."
   },
   "process-uptime": {
     label: "process-uptime",
     path: "/api/cron/process-uptime",
-    schedule: "5 * * * *",
-    description: "Checks website uptime hourly."
+    schedule: "0 7 * * *",
+    description: "Daily Vercel fallback for uptime checks. Frequent batch runs come from the GitHub scheduler on Hobby."
   },
   "sync-uptimerobot": {
     label: "sync-uptimerobot",
     path: "/api/cron/sync-uptimerobot",
-    schedule: "20 * * * *",
-    description: "Syncs UptimeRobot monitor results hourly."
+    schedule: "0 8 * * *",
+    description: "Daily Vercel fallback for UptimeRobot sync. Frequent batch runs come from the GitHub scheduler on Hobby."
   },
   "process-competitors": {
     label: "process-competitors",
@@ -77,8 +77,8 @@ export const ADMIN_CRON_DEFINITIONS: Record<
   "process-paddle-webhooks": {
     label: "process-paddle-webhooks",
     path: "/api/cron/process-paddle-webhooks",
-    schedule: "*/15 * * * *",
-    description: "Processes queued Paddle webhook events asynchronously, with immediate kicks from the live webhook endpoint."
+    schedule: "0 5 * * *",
+    description: "Daily Vercel fallback for queued Paddle webhooks, with immediate kicks from the live webhook endpoint and the GitHub scheduler on Hobby."
   }
 };
 

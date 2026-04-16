@@ -6,7 +6,7 @@
 
       "path": "/api/cron/process-scans",
 
-      "schedule": "*/15 * * * *"
+      "schedule": "0 6 * * *"
 
     },
 
@@ -14,7 +14,7 @@
 
       "path": "/api/cron/process-uptime",
 
-      "schedule": "5 * * * *"
+      "schedule": "0 7 * * *"
 
     },
 
@@ -22,7 +22,7 @@
 
       "path": "/api/cron/sync-uptimerobot",
 
-      "schedule": "20 * * * *"
+      "schedule": "0 8 * * *"
 
     },
 
@@ -38,7 +38,7 @@
 
       "path": "/api/cron/process-reports",
 
-      "schedule": "15 * * * *"
+      "schedule": "0 10 * * *"
 
     },
 
@@ -62,7 +62,7 @@
 
       "path": "/api/cron/process-paddle-webhooks",
 
-      "schedule": "*/15 * * * *"
+      "schedule": "0 5 * * *"
 
     }
 
