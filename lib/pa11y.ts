@@ -140,6 +140,22 @@ async function runAxeAudit(page: BrowserPage) {
   ]);
 }
 
+async function ensureAxeLoaded(page: BrowserPage) {
+  const hasAxeRunner = await page.evaluate(() => {
+    const axe = (window as typeof window & {
+      axe?: {
+        run?: unknown;
+      };
+    }).axe;
+
+    return typeof axe?.run === "function";
+  });
+
+  if (!hasAxeRunner) {
+    throw new Error("Accessibility scanner could not initialize axe.");
+  }
+}
+
 export async function runAccessibilityScan(url: string) {
   let browser: BrowserInstance | null = null;
 
@@ -156,6 +172,7 @@ export async function runAccessibilityScan(url: string) {
     await page.addScriptTag({
       content: axeCore.source
     });
+    await ensureAxeLoaded(page);
 
     const axeResults = await runAxeAudit(page);
     const axeViolations = (axeResults.violations ?? []).map((violation) => ({

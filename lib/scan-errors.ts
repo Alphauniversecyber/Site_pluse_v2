@@ -28,6 +28,8 @@ const ACCESSIBILITY_SCANNER_UNAVAILABLE_PATTERNS = [
   /cannot find module ['"]puppeteer['"]/i,
   /cannot find module ['"]puppeteer-core['"]/i,
   /cannot find module ['"]@sparticuz\/chromium['"]/i,
+  /accessibility scanner could not initialize axe/i,
+  /cannot read properties of undefined \(reading ['"]run['"]\)/i,
   /cache path is incorrectly configured/i,
   /ENOENT: no such file or directory.*vendor-chunks[\\/]+runner\.js/i,
   /vendor-chunks[\\/]+runner\.js/i

@@ -14,7 +14,8 @@ import type {
   UserProfile,
   Website
 } from "@/types";
-import { renderAiReportPdf } from "@/lib/report-browser-pdf";
+import { renderAiReportPdf as renderBrowserPdf } from "@/lib/report-browser-pdf";
+import { renderAiReportPdf as renderStructuredPdf } from "@/lib/report-pdf-renderer";
 
 export async function generateScanPdf(input: {
   website: Website;
@@ -32,5 +33,15 @@ export async function generateScanPdf(input: {
   uptimeChecks?: UptimeCheckRecord[];
   competitorScans?: CompetitorScanRecord[];
 }) {
-  return renderAiReportPdf(input);
+  try {
+    return await renderBrowserPdf(input);
+  } catch (error) {
+    console.warn("[reports:pdf] Browser PDF renderer failed. Falling back to jsPDF renderer.", {
+      websiteId: input.website.id,
+      scanId: input.scan.id,
+      error: error instanceof Error ? error.message : "Unknown PDF rendering error"
+    });
+
+    return renderStructuredPdf(input);
+  }
 }

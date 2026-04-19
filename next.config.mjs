@@ -1,3 +1,10 @@
+const browserTracingIncludes = [
+  "node_modules/@sparticuz/chromium/**/*",
+  "node_modules/@puppeteer/browsers/**/*",
+  "node_modules/puppeteer-core/**/*",
+  "node_modules/puppeteer/**/*"
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
@@ -16,11 +23,11 @@ const nextConfig = {
       "url-regex-safe"
     ],
     outputFileTracingIncludes: {
-      "/api/cron/process-reports": ["node_modules/@sparticuz/chromium/**/*"],
-      "/api/reports/generate": ["node_modules/@sparticuz/chromium/**/*"],
-      "/api/cron/process-scans": ["node_modules/@sparticuz/chromium/**/*"],
-      "/api/preview-scan": ["node_modules/@sparticuz/chromium/**/*"],
-      "/api/scan/run": ["node_modules/@sparticuz/chromium/**/*"]
+      "/api/cron/process-reports": browserTracingIncludes,
+      "/api/reports/generate": browserTracingIncludes,
+      "/api/cron/process-scans": browserTracingIncludes,
+      "/api/preview-scan": browserTracingIncludes,
+      "/api/scan/run": browserTracingIncludes
     }
   },
   images: {

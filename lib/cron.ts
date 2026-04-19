@@ -81,6 +81,37 @@ export function getCronChainDepth(request: Request) {
   return parseNonNegativeInt(new URL(request.url).searchParams.get("chain"), 0);
 }
 
+function getCronBaseUrl() {
+  const configuredBaseUrl =
+    process.env.APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    null;
+
+  return configuredBaseUrl || null;
+}
+
+function resolveCronContinuationUrl(request: Request) {
+  const requestUrl = new URL(request.url);
+  const configuredBaseUrl = getCronBaseUrl();
+
+  if (configuredBaseUrl) {
+    const url = new URL(requestUrl.pathname, configuredBaseUrl);
+    url.search = requestUrl.search;
+    return url;
+  }
+
+  const forwardedHost = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  if (forwardedHost) {
+    const forwardedProto = request.headers.get("x-forwarded-proto") ?? requestUrl.protocol.replace(/:$/, "");
+    const url = new URL(`${forwardedProto}://${forwardedHost}${requestUrl.pathname}`);
+    url.search = requestUrl.search;
+    return url;
+  }
+
+  return requestUrl;
+}
+
 export async function dispatchCronContinuation(input: {
   request: Request;
   label: string;
@@ -135,7 +166,7 @@ export async function dispatchCronContinuation(input: {
     };
   }
 
-  const url = new URL(input.request.url);
+  const url = resolveCronContinuationUrl(input.request);
   url.searchParams.set("chain", String(nextChainDepth));
   if (nextCursor === null) {
     url.searchParams.delete("cursor");
