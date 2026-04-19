@@ -667,58 +667,9 @@ export async function executeWebsiteScan(
     }
 
     if (profile.email_notifications_enabled && previousSuccessfulScan) {
-      const newIssueKeys = currentHighPriorityIssueKeys.filter(
-        (key) => !previousHighPriorityIssueKeys.includes(key)
-      );
       const fixedIssueKeys = previousHighPriorityIssueKeys.filter(
         (key) => !currentHighPriorityIssueKeys.includes(key)
       );
-
-      if (newIssueKeys.length) {
-        const issueTitles = getIssueTitlesForKeys(currentScan, newIssueKeys);
-
-        await trySendEngagementEmail({
-          templateId: "new_issue_found",
-          dedupeKey: buildEmailDedupeKey("engagement", "new_issue_found", website.id, currentScan.id),
-          campaign: "engagement",
-          to: profile.email,
-          subject: `Action needed: new issues found on ${website.label}`,
-          preheader: `SitePulse found ${newIssueKeys.length} new high-priority issue(s) on ${website.label}.`,
-          eyebrow: "New issue found",
-          title: `${website.label} has new high-priority issues`,
-          summary: "The latest scan surfaced new high-priority items that were not present in the previous successful baseline.",
-          bodyHtml: `
-            <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
-              Review the new high-priority findings first so you can decide what needs immediate attention and what can wait for the next planned improvement pass.
-            </p>
-            ${renderIssueSummaryList(issueTitles)}
-          `,
-          ctaLabel: "Review new issues",
-          ctaUrl: getWebsiteDashboardUrl(website.id),
-          details: [
-            {
-              label: "New issues",
-              value: String(newIssueKeys.length)
-            },
-            {
-              label: "Previous high-priority",
-              value: String(previousHighPriorityIssueKeys.length)
-            },
-            {
-              label: "Current high-priority",
-              value: String(currentHighPriorityIssueKeys.length)
-            }
-          ],
-          metadata: {
-            websiteId: website.id,
-            userId: profile.id,
-            scanId: currentScan.id,
-            issueKeys: newIssueKeys,
-            issueTitles
-          },
-          triggeredAt: currentScan.scanned_at
-        });
-      }
 
       if (fixedIssueKeys.length) {
         const issueTitles = getIssueTitlesForKeys(previousSuccessfulScan, fixedIssueKeys);
