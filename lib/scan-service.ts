@@ -149,7 +149,7 @@ async function maybeSendSslAlert(input: {
     }
   });
 
-  if (input.profile.email_notifications_enabled) {
+  if (input.website.email_notifications ?? true) {
     await trySendCriticalAlertEmail({
       templateId: "alert_ssl_expiry",
       dedupeKey: buildEmailDedupeKey(
@@ -500,7 +500,7 @@ export async function executeWebsiteScan(
       }
     });
 
-    if (profile.email_notifications_enabled) {
+    if (website.email_notifications ?? true) {
       await trySendCriticalAlertEmail({
         templateId: "alert_scan_failure",
         dedupeKey: buildEmailDedupeKey("alert", "scan_failure", website.id, currentScan.id),
@@ -577,7 +577,7 @@ export async function executeWebsiteScan(
         }
       });
 
-      if (profile.email_notifications_enabled) {
+      if (website.email_notifications ?? true) {
         await trySendCriticalAlertEmail({
           templateId: "alert_score_drop",
           dedupeKey: buildEmailDedupeKey("alert", "score_drop", website.id, currentScan.id),
@@ -606,7 +606,7 @@ export async function executeWebsiteScan(
         }
       });
 
-      if (profile.email_notifications_enabled) {
+      if (website.email_notifications ?? true) {
         await trySendCriticalAlertEmail({
           templateId: "alert_critical_score",
           dedupeKey: buildEmailDedupeKey("alert", "critical_score", website.id, currentScan.id),
@@ -619,7 +619,7 @@ export async function executeWebsiteScan(
       }
     }
 
-    if (profile.email_notifications_enabled && delta !== null && delta >= 8) {
+    if ((website.email_notifications ?? true) && delta !== null && delta >= 8) {
       // Disabled to stay within daily send limits.
       // await trySendEngagementEmail({
       //   templateId: "score_improved",
@@ -667,7 +667,7 @@ export async function executeWebsiteScan(
       // });
     }
 
-    if (profile.email_notifications_enabled && previousSuccessfulScan) {
+    if ((website.email_notifications ?? true) && previousSuccessfulScan) {
       const fixedIssueKeys = previousHighPriorityIssueKeys.filter(
         (key) => !currentHighPriorityIssueKeys.includes(key)
       );

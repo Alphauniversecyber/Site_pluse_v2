@@ -1,6 +1,7 @@
 export type PlanKey = "free" | "starter" | "agency";
 export type BillingCycle = "monthly" | "yearly";
 export type ScanFrequency = "daily" | "weekly" | "monthly";
+export type ReportFrequency = ScanFrequency | "never";
 export type Severity = "low" | "medium" | "high";
 export type SubscriptionStatus =
   | "inactive"
@@ -115,9 +116,10 @@ export interface Website {
   url: string;
   label: string;
   is_active: boolean;
-  email_reports_enabled?: boolean;
-  email_report_frequency?: ScanFrequency;
-  report_recipients?: string[];
+  report_frequency?: ReportFrequency;
+  extra_recipients?: string[];
+  auto_email_reports?: boolean;
+  email_notifications?: boolean;
   competitor_urls?: string[];
   created_at: string;
   updated_at?: string;

@@ -19,14 +19,12 @@ import type { Website } from "@/types";
 export default function AddWebsitePage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [recipientText, setRecipientText] = useState("");
   const [competitorText, setCompetitorText] = useState("");
   const form = useForm({
     resolver: zodResolver(websiteSchema),
     defaultValues: {
       url: "",
-      label: "",
-      email_reports_enabled: false
+      label: ""
     }
   });
 
@@ -35,7 +33,7 @@ export default function AddWebsitePage() {
       <PageHeader
         eyebrow="Add website"
         title="Add a client website to SitePulse"
-        description="Paste the URL, give it a name, and choose whether reports should go out automatically for this site."
+        description="Paste the URL, give it a name, and SitePulse will start it with weekly reports and email alerts enabled for that site."
       />
 
       <Card className="max-w-[960px] xl:max-w-[1080px] 2xl:max-w-[1200px] min-[1800px]:max-w-[1320px]">
@@ -49,10 +47,6 @@ export default function AddWebsitePage() {
                   method: "POST",
                   body: JSON.stringify({
                     ...values,
-                    report_recipients: recipientText
-                      .split(",")
-                      .map((item) => item.trim())
-                      .filter(Boolean),
                     competitor_urls: competitorText
                       .split(/[\n,]+/)
                       .map((item) => item.trim())
@@ -81,18 +75,6 @@ export default function AddWebsitePage() {
               <p className="text-sm text-rose-400">{form.formState.errors.label?.message}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="site-recipients">Additional report recipients</Label>
-              <Textarea
-                id="site-recipients"
-                placeholder="client@example.com, marketing@example.com"
-                value={recipientText}
-                onChange={(event) => setRecipientText(event.target.value)}
-              />
-              <p className="text-sm text-muted-foreground">
-                Separate multiple emails with commas. These addresses receive automatic reports for this site.
-              </p>
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="competitor-urls">Competitor URLs</Label>
               <Textarea
                 id="competitor-urls"
@@ -103,16 +85,6 @@ export default function AddWebsitePage() {
               <p className="text-sm text-muted-foreground">
                 Optional. Add up to 3 competitor URLs separated by commas or new lines for daily comparison tracking.
               </p>
-            </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-border bg-background p-4">
-              <input
-                id="site-email-reports"
-                type="checkbox"
-                className="h-4 w-4 rounded border-border bg-background"
-                checked={form.watch("email_reports_enabled")}
-                onChange={(event) => form.setValue("email_reports_enabled", event.target.checked)}
-              />
-              <Label htmlFor="site-email-reports">Enable automatic email reports for this site</Label>
             </div>
             <div className="flex gap-3">
               <Button type="submit" disabled={submitting}>

@@ -47,7 +47,7 @@ type AdminWebsiteRecord = {
   url: string;
   label: string;
   is_active: boolean;
-  email_reports_enabled: boolean;
+  auto_email_reports: boolean;
   magic_token: string | null;
   gsc_property: string | null;
   gsc_connected_at: string | null;
@@ -395,7 +395,7 @@ async function loadWebsitesByIds(ids: string[]) {
   const { data } = await admin
     .from("websites")
     .select(
-      "id,user_id,url,label,is_active,email_reports_enabled,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
+      "id,user_id,url,label,is_active,auto_email_reports,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
     )
     .in("id", ids);
 
@@ -705,10 +705,10 @@ export async function getAdminUsersData(input: {
     const userIds = pagedUsers.map((row) => row.id);
 
     const { data: websitesData } = userIds.length
-      ? await admin
+        ? await admin
           .from("websites")
           .select(
-            "id,user_id,url,label,is_active,email_reports_enabled,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
+            "id,user_id,url,label,is_active,auto_email_reports,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
           )
           .in("user_id", userIds)
       : { data: [] };
@@ -813,7 +813,7 @@ export async function getAdminWebsitesData(input: {
     const { data, error } = await admin
       .from("websites")
       .select(
-        "id,user_id,url,label,is_active,email_reports_enabled,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
+        "id,user_id,url,label,is_active,auto_email_reports,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
       )
       .order("created_at", { ascending: false });
 
@@ -1000,10 +1000,10 @@ export async function getAdminReportsData(input: {
           reportLog?.campaign === "report_daily"
             ? "daily"
             : reportLog?.template_id === "report_monthly" || reportLog?.campaign === "report_monthly"
-              ? "monthly"
+                ? "monthly"
               : reportLog?.template_id === "report_manual" || reportLog?.campaign === "report_manual"
                 ? "manual"
-                : website?.email_reports_enabled
+                : website?.auto_email_reports
                   ? "weekly"
                   : "manual";
         return {

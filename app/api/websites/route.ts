@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 
   const { data: websites, error } = await supabase
     .from("websites")
-    .select("id,user_id,url,label,is_active,created_at,updated_at")
+    .select("id,user_id,url,label,is_active,report_frequency,extra_recipients,auto_email_reports,email_notifications,created_at,updated_at")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -182,17 +182,16 @@ export async function POST(request: Request) {
 
   const normalizedUrl = normalizeUrl(parsed.data.url);
   const defaultFrequency = PLAN_LIMITS[profile.plan].scanFrequencies[0];
-  const reportFrequency = parsed.data.email_report_frequency ?? profile.email_report_frequency ?? "weekly";
-
   const { data: website, error } = await supabase
     .from("websites")
     .insert({
       user_id: profile.id,
       url: normalizedUrl,
       label: parsed.data.label,
-      email_reports_enabled: profile.plan !== "free" ? parsed.data.email_reports_enabled : false,
-      email_report_frequency: reportFrequency,
-      report_recipients: profile.plan !== "free" ? parsed.data.report_recipients : [],
+      report_frequency: parsed.data.report_frequency ?? "weekly",
+      extra_recipients: parsed.data.extra_recipients ?? [],
+      auto_email_reports: parsed.data.auto_email_reports ?? true,
+      email_notifications: parsed.data.email_notifications ?? true,
       competitor_urls: parsed.data.competitor_urls ?? []
     })
     .select("*")

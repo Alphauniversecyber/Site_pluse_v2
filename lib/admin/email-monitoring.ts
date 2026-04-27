@@ -4,7 +4,7 @@ import { getPlanLabel } from "@/lib/admin/format";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getLocalDayKey, getPeriodKey, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
 import { PLAN_LIMITS } from "@/lib/utils";
-import type { ScanFrequency, ScanResult, UserProfile, Website } from "@/types";
+import type { ReportFrequency, ScanFrequency, ScanResult, UserProfile, Website } from "@/types";
 
 type QueueStatus = "pending" | "processing" | "sent" | "failed" | "skipped";
 type MonitoringRowStatus = "pending" | "processing" | "failed" | "skipped";
@@ -116,7 +116,7 @@ export type AdminEmailMonitoringData = {
       websiteUrl: string;
       status: EligibilityStatus;
       reason: string;
-      effectiveFrequency: ScanFrequency;
+      effectiveFrequency: ReportFrequency;
       latestSuccessfulScanAt: string | null;
       recipientCount: number;
     }>;
@@ -262,7 +262,7 @@ function getEligibilityReason(status: EligibilityStatus) {
   }
 
   if (status === "user_disabled") {
-    return "The user-level scheduled email setting is disabled.";
+    return "Scheduled reports are not available from the current configuration.";
   }
 
   if (status === "website_disabled") {
@@ -294,10 +294,10 @@ export async function getAdminEmailMonitoringData(input?: {
     const [usersResult, websitesResult, scansResult, queueResult, cronLogsResult, reportsResult] = await Promise.all([
       admin
         .from("users")
-        .select("id,email,plan,email_report_frequency,email_reports_enabled,timezone,extra_report_recipients"),
+        .select("id,email,plan,timezone"),
       admin
         .from("websites")
-        .select("id,user_id,url,label,is_active,email_reports_enabled,email_report_frequency,report_recipients,created_at")
+        .select("id,user_id,url,label,is_active,auto_email_reports,report_frequency,extra_recipients,created_at")
         .eq("is_active", true),
       admin
         .from("scan_results")
@@ -333,12 +333,7 @@ export async function getAdminEmailMonitoringData(input?: {
     if (cronLogsResult.error) throw new Error(cronLogsResult.error.message);
     if (reportsResult.error) throw new Error(reportsResult.error.message);
 
-    const users = (usersResult.data ?? []) as Array<
-      Pick<
-        UserProfile,
-        "id" | "email" | "plan" | "email_report_frequency" | "email_reports_enabled" | "timezone" | "extra_report_recipients"
-      >
-    >;
+    const users = (usersResult.data ?? []) as Array<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>;
     const websites = (websitesResult.data ?? []) as Array<
       Pick<
         Website,
@@ -347,9 +342,9 @@ export async function getAdminEmailMonitoringData(input?: {
         | "url"
         | "label"
         | "is_active"
-        | "email_reports_enabled"
-        | "email_report_frequency"
-        | "report_recipients"
+        | "auto_email_reports"
+        | "report_frequency"
+        | "extra_recipients"
         | "created_at"
       >
     >;
@@ -385,12 +380,17 @@ export async function getAdminEmailMonitoringData(input?: {
     const dueCandidates = websites
       .map((website) => {
         const user = usersById.get(website.user_id);
-        if (!user || !PLAN_LIMITS[user.plan]?.emailReports || !user.email_reports_enabled || !website.email_reports_enabled) {
+        if (!user || !PLAN_LIMITS[user.plan]?.emailReports || !website.auto_email_reports) {
           return null;
         }
 
         const timezone = normalizeTimezone(user.timezone);
-        const frequency = website.email_report_frequency ?? user.email_report_frequency;
+        const frequencySetting = website.report_frequency ?? "weekly";
+        if (frequencySetting === "never") {
+          return null;
+        }
+
+        const frequency: ScanFrequency = frequencySetting;
         const latestSentAt = latestSentReportByWebsite.get(website.id)?.sent_at ?? null;
         const sentToday = Boolean(
           latestSentAt && getLocalDayKey(latestSentAt, timezone) === getLocalDayKey(now, timezone)
@@ -425,14 +425,13 @@ export async function getAdminEmailMonitoringData(input?: {
           return null;
         }
 
-        const effectiveFrequency = website.email_report_frequency ?? user.email_report_frequency;
+        const effectiveFrequency = website.report_frequency ?? "weekly";
         const latestSuccessfulScanAt = latestSuccessfulScanByWebsite.get(website.id)?.scanned_at ?? null;
         const recipientCount = Array.from(
           new Set(
             [
               user.email,
-              ...(user.extra_report_recipients ?? []),
-              ...(website.report_recipients ?? [])
+              ...(website.extra_recipients ?? [])
             ].filter(Boolean)
           )
         ).length;
@@ -440,9 +439,7 @@ export async function getAdminEmailMonitoringData(input?: {
         let status: EligibilityStatus = "ready";
         if (!PLAN_LIMITS[user.plan]?.emailReports) {
           status = "plan_ineligible";
-        } else if (!user.email_reports_enabled) {
-          status = "user_disabled";
-        } else if (!website.email_reports_enabled) {
+        } else if (!website.auto_email_reports || website.report_frequency === "never") {
           status = "website_disabled";
         } else if (!latestSuccessfulScanAt) {
           status = "missing_successful_scan";
@@ -505,12 +502,12 @@ export async function getAdminEmailMonitoringData(input?: {
       eligibility: {
         summary: {
           totalActiveWebsites: websites.length,
-          ready: eligibilityRows.filter((row) => row.status === "ready").length,
-          planIneligible: eligibilityRows.filter((row) => row.status === "plan_ineligible").length,
-          userDisabled: eligibilityRows.filter((row) => row.status === "user_disabled").length,
-          websiteDisabled: eligibilityRows.filter((row) => row.status === "website_disabled").length,
-          missingSuccessfulScan: eligibilityRows.filter((row) => row.status === "missing_successful_scan").length
-        },
+        ready: eligibilityRows.filter((row) => row.status === "ready").length,
+        planIneligible: eligibilityRows.filter((row) => row.status === "plan_ineligible").length,
+        userDisabled: 0,
+        websiteDisabled: eligibilityRows.filter((row) => row.status === "website_disabled").length,
+        missingSuccessfulScan: eligibilityRows.filter((row) => row.status === "missing_successful_scan").length
+      },
         rows: filteredEligibilityRows
       },
       rows: unsentRows.filter((row) => {

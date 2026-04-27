@@ -9,7 +9,7 @@ async function loadActiveWebsite(websiteId: string) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("websites")
-    .select("id,user_id,url,label,is_active,email_reports_enabled,email_report_frequency,report_recipients")
+    .select("id,user_id,url,label,is_active,auto_email_reports,report_frequency,extra_recipients,email_notifications")
     .eq("id", websiteId)
     .maybeSingle<Website>();
 

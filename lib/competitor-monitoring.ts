@@ -61,7 +61,7 @@ async function createCompetitorAlert(input: {
     metadata: input.metadata
   });
 
-  if (input.profile.email_notifications_enabled) {
+  if (input.website.email_notifications ?? true) {
     const syntheticScan = {
       id: `competitor-${Date.now()}`,
       website_id: input.website.id,

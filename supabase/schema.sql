@@ -176,9 +176,10 @@ create table if not exists public.websites (
   url text not null,
   label text not null,
   is_active boolean not null default true,
-  email_reports_enabled boolean not null default false,
-  email_report_frequency public.scan_frequency not null default 'weekly',
-  report_recipients text[] not null default '{}'::text[],
+  report_frequency text not null default 'weekly' check (report_frequency in ('daily', 'weekly', 'monthly', 'never')),
+  extra_recipients text[] not null default '{}'::text[],
+  auto_email_reports boolean not null default true,
+  email_notifications boolean not null default true,
   competitor_urls jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
@@ -432,6 +433,10 @@ alter table public.users add column if not exists trial_ends_at timestamptz;
 alter table public.users add column if not exists is_trial boolean not null default false;
 alter table public.websites add column if not exists competitor_urls jsonb not null default '[]'::jsonb;
 alter table public.websites add column if not exists email_report_frequency public.scan_frequency not null default 'weekly';
+alter table public.websites add column if not exists report_frequency text;
+alter table public.websites add column if not exists extra_recipients text[];
+alter table public.websites add column if not exists auto_email_reports boolean;
+alter table public.websites add column if not exists email_notifications boolean;
 alter table public.websites add column if not exists magic_token text;
 alter table public.websites add column if not exists gsc_access_token text;
 alter table public.websites add column if not exists gsc_refresh_token text;
@@ -441,6 +446,31 @@ alter table public.websites add column if not exists ga_access_token text;
 alter table public.websites add column if not exists ga_refresh_token text;
 alter table public.websites add column if not exists ga_property_id text;
 alter table public.websites add column if not exists ga_connected_at timestamptz;
+
+update public.websites
+set report_frequency = coalesce(report_frequency, email_report_frequency::text, 'weekly')
+where report_frequency is null;
+
+update public.websites
+set extra_recipients = coalesce(extra_recipients, report_recipients, '{}'::text[])
+where extra_recipients is null;
+
+update public.websites
+set auto_email_reports = coalesce(auto_email_reports, email_reports_enabled, true)
+where auto_email_reports is null;
+
+update public.websites
+set email_notifications = coalesce(email_notifications, true)
+where email_notifications is null;
+
+alter table public.websites alter column report_frequency set default 'weekly';
+alter table public.websites alter column report_frequency set not null;
+alter table public.websites alter column extra_recipients set default '{}'::text[];
+alter table public.websites alter column extra_recipients set not null;
+alter table public.websites alter column auto_email_reports set default true;
+alter table public.websites alter column auto_email_reports set not null;
+alter table public.websites alter column email_notifications set default true;
+alter table public.websites alter column email_notifications set not null;
 alter table public.users alter column subscription_status set default 'inactive';
 alter table public.users drop column if exists stripe_customer_id;
 alter table public.users drop column if exists stripe_subscription_id;

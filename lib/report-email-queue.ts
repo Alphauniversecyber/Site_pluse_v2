@@ -90,8 +90,7 @@ async function loadEligibleProfiles(limit: number, offset: number) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("users")
-    .select("id,email,plan,email_report_frequency,email_reports_enabled,timezone")
-    .eq("email_reports_enabled", true)
+    .select("id,email,plan,timezone")
     .in("plan", ["starter", "agency"])
     .order("created_at", { ascending: true })
     .range(offset, offset + Math.max(limit - 1, 0));
@@ -100,25 +99,24 @@ async function loadEligibleProfiles(limit: number, offset: number) {
     throw new Error(error.message);
   }
 
-  return (data ?? []) as Array<
-    Pick<UserProfile, "id" | "email" | "plan" | "email_report_frequency" | "email_reports_enabled" | "timezone">
-  >;
+  return (data ?? []) as Array<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>;
 }
 
 async function loadActiveWebsites(userIds: string[]) {
   if (!userIds.length) {
     return [] as Array<
-      Pick<Website, "id" | "user_id" | "url" | "label" | "is_active" | "email_reports_enabled" | "email_report_frequency" | "created_at">
+      Pick<Website, "id" | "user_id" | "url" | "label" | "is_active" | "auto_email_reports" | "report_frequency" | "created_at">
     >;
   }
 
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("websites")
-    .select("id,user_id,url,label,is_active,email_reports_enabled,email_report_frequency,created_at")
+    .select("id,user_id,url,label,is_active,auto_email_reports,report_frequency,created_at")
     .in("user_id", userIds)
     .eq("is_active", true)
-    .eq("email_reports_enabled", true)
+    .eq("auto_email_reports", true)
+    .neq("report_frequency", "never")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -126,7 +124,7 @@ async function loadActiveWebsites(userIds: string[]) {
   }
 
   return (data ?? []) as Array<
-    Pick<Website, "id" | "user_id" | "url" | "label" | "is_active" | "email_reports_enabled" | "email_report_frequency" | "created_at">
+    Pick<Website, "id" | "user_id" | "url" | "label" | "is_active" | "auto_email_reports" | "report_frequency" | "created_at">
   >;
 }
 
@@ -269,7 +267,12 @@ export async function enqueueDueReportEmails(limit = 200, offset = 0): Promise<E
       }
 
       const timezone = normalizeTimezone(profile.timezone);
-      const frequency = website.email_report_frequency ?? profile.email_report_frequency;
+      const frequencySetting = website.report_frequency ?? "weekly";
+      if (frequencySetting === "never") {
+        return null;
+      }
+
+      const frequency: ScanFrequency = frequencySetting;
       const periodKey = getPeriodKey(frequency, now, timezone);
       const latestSentAt = latestReports.get(website.id)?.sent_at ?? null;
 
@@ -372,22 +375,36 @@ export async function processQueuedReportEmails(
       const adminNow = createSupabaseAdminClient();
       const { data: website } = await adminNow
         .from("websites")
-        .select("id,user_id,url,label,email_reports_enabled,email_report_frequency")
+        .select("id,user_id,url,label,auto_email_reports,report_frequency")
         .eq("id", row.website_id)
         .maybeSingle<Website>();
       const { data: profile } = await adminNow
         .from("users")
-        .select("id,email,plan,email_reports_enabled,email_report_frequency,timezone")
+        .select("id,email,plan,timezone")
         .eq("id", row.user_id)
-        .maybeSingle<
-          Pick<UserProfile, "id" | "email" | "plan" | "email_reports_enabled" | "email_report_frequency" | "timezone">
-        >();
+        .maybeSingle<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>();
 
-      if (!website || !profile || !website.email_reports_enabled || !profile.email_reports_enabled) {
+      if (
+        !website ||
+        !profile ||
+        !PLAN_LIMITS[profile.plan]?.emailReports ||
+        !website.auto_email_reports ||
+        website.report_frequency === "never"
+      ) {
         await updateQueueRow(row.id, {
           status: "skipped",
           failure_reason: "frequency_mismatch",
-          last_error: "Report emails are no longer enabled for this website or user.",
+          last_error: "Report emails are no longer enabled for this website.",
+          last_attempt_at: startedAt
+        });
+        continue;
+      }
+
+      if ((website.report_frequency ?? "weekly") !== row.frequency) {
+        await updateQueueRow(row.id, {
+          status: "skipped",
+          failure_reason: "frequency_mismatch",
+          last_error: "The website report frequency changed after this queue item was created.",
           last_attempt_at: startedAt
         });
         continue;

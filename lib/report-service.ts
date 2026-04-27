@@ -5,6 +5,7 @@ import type {
   BrokenLinkRecord,
   CompetitorScanRecord,
   CruxDataRecord,
+  ReportFrequency,
   Report,
   ScanResult,
   ScanFrequency,
@@ -163,6 +164,14 @@ async function loadReportContext(websiteId: string, scanId: string) {
   };
 }
 
+function getWebsiteReportFrequency(website: Website): ReportFrequency {
+  return website.report_frequency ?? "weekly";
+}
+
+function toScheduledScanFrequency(frequency: ReportFrequency): ScanFrequency {
+  return frequency === "never" ? "weekly" : frequency;
+}
+
 function getRecipients(profile: UserProfile, website: Website, explicitEmail?: string) {
   if (explicitEmail) {
     return [explicitEmail];
@@ -170,8 +179,7 @@ function getRecipients(profile: UserProfile, website: Website, explicitEmail?: s
 
   const recipients = [
     profile.email,
-    ...(profile.extra_report_recipients ?? []),
-    ...(website.report_recipients ?? [])
+    ...(website.extra_recipients ?? [])
   ].filter(Boolean);
 
   return Array.from(new Set(recipients));
@@ -356,7 +364,8 @@ export async function sendStoredReportEmail(input: {
     website = loadedWebsite;
     profile = loadedProfile;
     const deliveryMode = input.deliveryMode ?? "manual";
-    const reportFrequency = website.email_report_frequency ?? profile.email_report_frequency;
+    const reportFrequency = getWebsiteReportFrequency(website);
+    const emailFrequency = toScheduledScanFrequency(reportFrequency);
 
     const { data: previousRows } = await admin
       .from("scan_results")
@@ -451,7 +460,7 @@ export async function sendStoredReportEmail(input: {
           pdfBuffer,
           dashboardUrl,
           deliveryMode,
-          frequency: reportFrequency,
+          frequency: emailFrequency,
           dedupeKey: buildEmailDedupeKey("report", report.id, recipient),
           triggeredAt: scan.scanned_at
         });

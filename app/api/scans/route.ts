@@ -59,8 +59,10 @@ export async function POST(request: Request) {
         user_id: profile.id,
         url: normalizedUrl,
         label: deriveWebsiteLabel(normalizedUrl),
-        email_reports_enabled: false,
-        report_recipients: [],
+        report_frequency: "weekly",
+        extra_recipients: [],
+        auto_email_reports: true,
+        email_notifications: true,
         competitor_urls: []
       })
       .select("*")

@@ -8,12 +8,10 @@ import {
   Clock3,
   FileDown,
   Mail,
-  Plus,
   Shield,
   ShieldCheck,
   TrendingUp,
   WandSparkles,
-  X,
   type LucideIcon
 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useTrialPaywall } from "@/hooks/useTrialPaywall";
@@ -42,8 +41,8 @@ import type {
   CompetitorScanRecord,
   CruxDataRecord,
   PlainLanguageDifficulty,
+  ReportFrequency,
   ScanResult,
-  ScanFrequency,
   SecurityHeadersRecord,
   Severity,
   SeoAuditRecord,
@@ -60,10 +59,11 @@ type WebsiteDetailResponse = Website & {
   scans: ScanResult[];
 };
 
-const REPORT_FREQUENCY_OPTIONS: Array<{ value: ScanFrequency; label: string }> = [
+const REPORT_FREQUENCY_OPTIONS: Array<{ value: ReportFrequency; label: string }> = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" }
+  { value: "monthly", label: "Monthly" },
+  { value: "never", label: "Never" }
 ];
 
 function latestCompetitorEntries(scans: CompetitorScanRecord[] = []) {
@@ -864,9 +864,10 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const [healthSignalsSyncing, setHealthSignalsSyncing] = useState(false);
   const [healthSignalRetryTick, setHealthSignalRetryTick] = useState(0);
   const [competitorInput, setCompetitorInput] = useState("");
-  const [recipientDraft, setRecipientDraft] = useState("");
-  const [reportRecipients, setReportRecipients] = useState<string[]>([]);
-  const [reportFrequency, setReportFrequency] = useState<ScanFrequency>("weekly");
+  const [extraRecipientsText, setExtraRecipientsText] = useState("");
+  const [reportFrequency, setReportFrequency] = useState<ReportFrequency>("weekly");
+  const [autoEmailReports, setAutoEmailReports] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState(true);
   const [isPending, startTransition] = useTransition();
   const { paywallFeature, isExpired, closePaywall, requireAccess } = useTrialPaywall(user);
   const healthSignalAttemptCountsRef = useRef(new Map<string, number>());
@@ -921,12 +922,20 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   }, [data?.competitor_urls]);
 
   useEffect(() => {
-    setReportRecipients(normalizeRecipientEmails(data?.report_recipients ?? []));
-  }, [data?.report_recipients]);
+    setExtraRecipientsText((data?.extra_recipients ?? []).join(", "));
+  }, [data?.extra_recipients]);
 
   useEffect(() => {
-    setReportFrequency(data?.email_report_frequency ?? "weekly");
-  }, [data?.email_report_frequency]);
+    setReportFrequency(data?.report_frequency ?? "weekly");
+  }, [data?.report_frequency]);
+
+  useEffect(() => {
+    setAutoEmailReports(data?.auto_email_reports ?? true);
+  }, [data?.auto_email_reports]);
+
+  useEffect(() => {
+    setEmailNotifications(data?.email_notifications ?? true);
+  }, [data?.email_notifications]);
 
   const currentScan = data?.scans?.[0] ?? null;
   const previousScan = data?.scans?.[1] ?? null;
@@ -1200,61 +1209,32 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
       }
     });
 
-  const addRecipient = () => {
-    const nextEmail = recipientDraft.trim().toLowerCase();
-
-    if (!nextEmail) {
-      return;
-    }
-
-    if (!isValidRecipientEmail(nextEmail)) {
-      toast.error("Enter a valid email address before adding it.");
-      return;
-    }
-
-    if (reportRecipients.includes(nextEmail)) {
-      toast.error("That recipient is already added for this website.");
-      return;
-    }
-
-    setReportRecipients((current) => [...current, nextEmail]);
-    setRecipientDraft("");
-  };
-
-  const removeRecipient = (email: string) => {
-    setReportRecipients((current) => current.filter((item) => item !== email));
-  };
-
   const saveReportSettings = () =>
     startTransition(async () => {
-      const draft = recipientDraft.trim().toLowerCase();
+      const nextRecipients = normalizeRecipientEmails(extraRecipientsText);
+      const invalidRecipient = nextRecipients.find((item) => !isValidRecipientEmail(item));
 
-      if (draft && !isValidRecipientEmail(draft)) {
-        toast.error("Enter a valid email address before saving.");
+      if (invalidRecipient) {
+        toast.error(`"${invalidRecipient}" is not a valid email address.`);
         return;
       }
-
-      const nextRecipients = normalizeRecipientEmails(draft ? [...reportRecipients, draft] : reportRecipients);
 
       try {
         await fetchJson(`/api/websites/${params.id}`, {
           method: "PATCH",
           body: JSON.stringify({
-            email_report_frequency: reportFrequency,
-            report_recipients: nextRecipients
+            report_frequency: reportFrequency,
+            extra_recipients: nextRecipients,
+            auto_email_reports: autoEmailReports,
+            email_notifications: emailNotifications
           })
         });
 
-        setRecipientDraft("");
-        setReportRecipients(nextRecipients);
-        toast.success(
-          nextRecipients.length
-            ? "Website report settings updated."
-            : "Website report cadence updated and extra recipients removed."
-        );
+        setExtraRecipientsText(nextRecipients.join(", "));
+        toast.success("Website notification settings updated.");
         await refetch({ background: true });
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Unable to update website report settings.");
+        toast.error(error instanceof Error ? error.message : "Unable to update website notification settings.");
       }
     });
 
@@ -1363,22 +1343,22 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
         <CardHeader className="pb-3 sm:pb-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <CardTitle>Report recipients</CardTitle>
+              <CardTitle>Notifications for this site</CardTitle>
               <CardDescription>
-                Manage the extra email addresses and delivery cadence for this website's reports.
+                Control reports and alerts for this website without changing the rest of your account.
               </CardDescription>
             </div>
-            <Badge variant={data.email_reports_enabled ? "success" : "outline"} className="self-start">
-              {data.email_reports_enabled ? "Auto email enabled" : "Manual send only"}
+            <Badge variant={autoEmailReports ? "success" : "outline"} className="self-start">
+              {autoEmailReports ? "Scheduled reports on" : "Scheduled reports off"}
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-5 pt-0">
-          <div className="rounded-2xl border border-border bg-background p-4">
-            <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)_auto] xl:items-end">
+          <div className="rounded-2xl border border-border bg-background p-4 sm:p-5">
+            <div className="grid gap-5 xl:grid-cols-[240px_minmax(0,1fr)]">
               <div className="space-y-2">
                 <Label htmlFor="website-report-frequency">Report frequency</Label>
-                <Select value={reportFrequency} onValueChange={(value) => setReportFrequency(value as ScanFrequency)}>
+                <Select value={reportFrequency} onValueChange={(value) => setReportFrequency(value as ReportFrequency)}>
                   <SelectTrigger
                     id="website-report-frequency"
                     className="h-11 rounded-xl border-border bg-background"
@@ -1395,65 +1375,53 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground">
-                  Choose whether this website should send reports daily, weekly, or monthly.
+                  Choose how often this website should send scheduled reports, or turn them off entirely.
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="website-recipient-email">Add recipient email</Label>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Input
-                    id="website-recipient-email"
-                    value={recipientDraft}
-                    onChange={(event) => setRecipientDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        addRecipient();
-                      }
-                    }}
-                    placeholder="client@example.com"
-                  />
-                  <Button type="button" variant="outline" onClick={addRecipient} className="sm:w-auto">
-                    <Plus className="h-4 w-4" />
-                    Add recipient
-                  </Button>
-                </div>
+                <Label htmlFor="website-recipient-email">Extra report recipients</Label>
+                <Textarea
+                  id="website-recipient-email"
+                  value={extraRecipientsText}
+                  onChange={(event) => setExtraRecipientsText(event.target.value)}
+                  placeholder="client@example.com, owner@example.com"
+                  className="min-h-[112px]"
+                />
                 <p className="text-sm text-muted-foreground">
-                  Your main account email still receives reports. These are extra per-website recipients for manual and automatic sends.
+                  Separate emails with commas. Your account email still receives reports for this site.
                 </p>
               </div>
-              <Button type="button" onClick={saveReportSettings} disabled={isPending} className="shrink-0 xl:self-end">
+            </div>
+
+            <div className="mt-5 grid gap-3">
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-background px-4 py-4">
+                <div>
+                  <p className="font-medium">Automatic email reports</p>
+                  <p className="text-sm text-muted-foreground">
+                    Send scheduled reports automatically for this website.
+                  </p>
+                </div>
+                <Switch checked={autoEmailReports} onCheckedChange={setAutoEmailReports} disabled={isPending} />
+              </div>
+
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-background px-4 py-4">
+                <div>
+                  <p className="font-medium">Email notifications</p>
+                  <p className="text-sm text-muted-foreground">
+                    Alert when scores drop, scans fail, or monitoring detects trouble on this website.
+                  </p>
+                </div>
+                <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} disabled={isPending} />
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <Button type="button" onClick={saveReportSettings} disabled={isPending}>
                 Save settings
               </Button>
             </div>
           </div>
-
-          {reportRecipients.length ? (
-            <div className="flex flex-wrap gap-2">
-              {reportRecipients.map((email) => (
-                <div
-                  key={email}
-                  className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
-                >
-                  <span className="truncate">{email}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeRecipient(email)}
-                    className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                    aria-label={`Remove ${email}`}
-                    title={`Remove ${email}`}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
-              No extra recipients yet. Reports will go to your account email until you add website-specific recipients here.
-            </div>
-          )}
         </CardContent>
       </Card>
 

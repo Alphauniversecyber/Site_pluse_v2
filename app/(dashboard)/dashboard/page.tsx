@@ -281,9 +281,13 @@ export default async function DashboardOverviewPage() {
     }
   ] as const;
 
-  const reportingMode = profile.email_reports_enabled
-    ? "Automated reports enabled"
-    : "Manual report sending";
+  const scheduledReportSites = websites.filter(
+    (website) => website.auto_email_reports && (website.report_frequency ?? "weekly") !== "never"
+  ).length;
+  const reportingMode =
+    scheduledReportSites > 0
+      ? `${scheduledReportSites} site${scheduledReportSites === 1 ? "" : "s"} sending scheduled reports`
+      : "Manual report sending";
 
   return (
     <div className="space-y-8 xl:space-y-10">
@@ -404,8 +408,12 @@ export default async function DashboardOverviewPage() {
               icon={Sparkles}
               label="Reporting"
               value={reportingMode}
-              note={profile.email_reports_enabled ? "Client-ready reports can be delivered automatically." : "Turn on email reports when you're ready."}
-              tone={profile.email_reports_enabled ? "success" : "default"}
+              note={
+                scheduledReportSites > 0
+                  ? "Scheduled delivery is active for at least one monitored website."
+                  : "Enable scheduled reports from each website when you're ready."
+              }
+              tone={scheduledReportSites > 0 ? "success" : "default"}
             />
           </CardContent>
         </Card>

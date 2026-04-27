@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const urlRegex = /^https?:\/\/.+/i;
+const reportFrequencySchema = z.enum(["daily", "weekly", "monthly", "never"]);
 
 export const loginSchema = z.object({
   email: z.string().email("Enter a valid email address."),
@@ -44,9 +45,10 @@ export const websiteSchema = z.object({
       }
     }, "Enter a valid website URL."),
   label: z.string().trim().min(2, "A website label is required."),
-  email_reports_enabled: z.boolean().optional().default(false),
-  email_report_frequency: z.enum(["daily", "weekly", "monthly"]).optional(),
-  report_recipients: z.array(z.string().email("Use valid email addresses.")).optional().default([]),
+  report_frequency: reportFrequencySchema.optional().default("weekly"),
+  extra_recipients: z.array(z.string().email("Use valid email addresses.")).optional().default([]),
+  auto_email_reports: z.boolean().optional().default(true),
+  email_notifications: z.boolean().optional().default(true),
   competitor_urls: z.array(z.string().url("Use valid competitor URLs.")).max(3, "Add up to 3 competitor URLs only.").optional().default([])
 });
 
@@ -54,9 +56,10 @@ export const websiteUpdateSchema = z.object({
   label: z.string().trim().min(2).optional(),
   is_active: z.boolean().optional(),
   frequency: z.enum(["daily", "weekly", "monthly"]).optional(),
-  email_reports_enabled: z.boolean().optional(),
-  email_report_frequency: z.enum(["daily", "weekly", "monthly"]).optional(),
-  report_recipients: z.array(z.string().email()).optional(),
+  report_frequency: reportFrequencySchema.optional(),
+  extra_recipients: z.array(z.string().email()).optional(),
+  auto_email_reports: z.boolean().optional(),
+  email_notifications: z.boolean().optional(),
   competitor_urls: z.array(z.string().url()).max(3).optional()
 });
 
@@ -114,12 +117,8 @@ export const settingsSchema = z.object({
   full_name: z.string().trim().min(2, "Full name is required."),
   email: z.string().email(),
   password: z.string().min(8).optional().or(z.literal("")),
-  email_report_frequency: z.enum(["daily", "weekly", "monthly"]),
-  email_reports_enabled: z.boolean(),
-  email_notifications_enabled: z.boolean(),
   profile_photo_url: z.string().url().optional().or(z.literal("")),
-  uptimerobot_api_key: z.string().trim().optional().or(z.literal("")),
-  extra_report_recipients: z.array(z.string().email()).optional().default([])
+  uptimerobot_api_key: z.string().trim().optional().or(z.literal(""))
 });
 
 export const teamMemberSchema = z.object({

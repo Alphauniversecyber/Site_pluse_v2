@@ -14,8 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { buildStoragePath } from "@/lib/utils";
 import { settingsSchema } from "@/lib/validation";
@@ -35,12 +33,8 @@ export default function SettingsPage() {
       full_name: "",
       email: "",
       password: "",
-      email_report_frequency: "weekly" as const,
-      email_reports_enabled: false,
-      email_notifications_enabled: true,
       profile_photo_url: "",
-      uptimerobot_api_key: "",
-      extra_report_recipients: []
+      uptimerobot_api_key: ""
     }
   });
 
@@ -53,12 +47,8 @@ export default function SettingsPage() {
       full_name: user.full_name ?? "",
       email: user.email,
       password: "",
-      email_report_frequency: user.email_report_frequency,
-      email_reports_enabled: user.email_reports_enabled,
-      email_notifications_enabled: user.email_notifications_enabled,
       profile_photo_url: user.profile_photo_url ?? "",
-      uptimerobot_api_key: user.uptimerobot_api_key ?? "",
-      extra_report_recipients: user.extra_report_recipients ?? []
+      uptimerobot_api_key: user.uptimerobot_api_key ?? ""
     });
   }, [form, user]);
 
@@ -112,7 +102,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Settings"
         title="Account settings"
-        description="Update profile details, report delivery defaults, password, notifications, and account access."
+        description="Update profile details, password, uptime connection, and account access."
       />
 
       <Card>
@@ -124,16 +114,7 @@ export default function SettingsPage() {
               try {
                 await fetchJson("/api/user/settings", {
                   method: "PUT",
-                  body: JSON.stringify({
-                    ...values,
-                    extra_report_recipients:
-                      typeof values.extra_report_recipients === "string"
-                        ? values.extra_report_recipients
-                            .split(",")
-                            .map((item: string) => item.trim())
-                            .filter(Boolean)
-                        : values.extra_report_recipients
-                  })
+                  body: JSON.stringify(values)
                 });
                 toast.success("Settings updated.");
                 await refetch();
@@ -173,70 +154,6 @@ export default function SettingsPage() {
                 {form.formState.errors.password ? (
                   <p className="text-sm text-rose-400">{form.formState.errors.password.message}</p>
                 ) : null}
-              </div>
-              <div className="space-y-2">
-                <Label>Report frequency</Label>
-                <Select
-                  value={form.watch("email_report_frequency")}
-                  onValueChange={(value) => form.setValue("email_report_frequency", value as "daily" | "weekly" | "monthly")}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="extra-recipients">Extra report recipients</Label>
-              <Textarea
-                id="extra-recipients"
-                placeholder="client@example.com, owner@example.com"
-                value={
-                  Array.isArray(form.watch("extra_report_recipients"))
-                    ? form.watch("extra_report_recipients").join(", ")
-                    : ""
-                }
-                onChange={(event) =>
-                  form.setValue(
-                    "extra_report_recipients",
-                    event.target.value
-                      .split(",")
-                      .map((item: string) => item.trim())
-                    .filter(Boolean)
-                  )
-                }
-              />
-              <p className="text-sm text-muted-foreground">
-                Add comma-separated client or stakeholder emails for scheduled reports.
-              </p>
-            </div>
-
-            <div className="space-y-3 rounded-3xl border border-border bg-background p-5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-medium">Automatic email reports</p>
-                  <p className="text-sm text-muted-foreground">Send scheduled reports to you automatically.</p>
-                </div>
-                <Switch
-                  checked={form.watch("email_reports_enabled")}
-                  onCheckedChange={(value) => form.setValue("email_reports_enabled", value)}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-medium">Email notifications</p>
-                  <p className="text-sm text-muted-foreground">Get alerted when scores drop or scans fail.</p>
-                </div>
-                <Switch
-                  checked={form.watch("email_notifications_enabled")}
-                  onCheckedChange={(value) => form.setValue("email_notifications_enabled", value)}
-                />
               </div>
             </div>
 

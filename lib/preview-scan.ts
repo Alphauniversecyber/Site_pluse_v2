@@ -390,8 +390,10 @@ export async function claimPreviewScanSession(input: { sessionId: string; userId
         user_id: input.userId,
         url: session.normalized_url,
         label: session.website_label,
-        email_reports_enabled: profile.plan !== "free",
-        report_recipients: [],
+        report_frequency: "weekly",
+        extra_recipients: [],
+        auto_email_reports: true,
+        email_notifications: true,
         competitor_urls: []
       })
       .select("*")

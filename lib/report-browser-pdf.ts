@@ -61,9 +61,13 @@ function nextReportDate(
   scan: ScanResult,
   website: Website,
   _schedule: ScanSchedule | null | undefined,
-  profile: UserProfile
+  _profile: UserProfile
 ) {
-  const frequency = website.email_report_frequency ?? profile.email_report_frequency ?? "weekly";
+  const frequency = website.report_frequency ?? "weekly";
+  if (frequency === "never") {
+    return "Not scheduled";
+  }
+
   const days = frequency === "daily" ? 1 : frequency === "monthly" ? 30 : 7;
   return formatDateTime(addDays(scan.scanned_at, days));
 }

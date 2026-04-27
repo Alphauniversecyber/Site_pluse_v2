@@ -119,16 +119,17 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (parsed.data.is_active !== undefined) {
     websiteUpdates.is_active = parsed.data.is_active;
   }
-  if (parsed.data.email_reports_enabled !== undefined) {
-    websiteUpdates.email_reports_enabled =
-      profile.plan === "free" ? false : parsed.data.email_reports_enabled;
+  if (parsed.data.report_frequency !== undefined) {
+    websiteUpdates.report_frequency = parsed.data.report_frequency;
   }
-  if (parsed.data.email_report_frequency !== undefined) {
-    websiteUpdates.email_report_frequency = parsed.data.email_report_frequency;
+  if (parsed.data.extra_recipients !== undefined) {
+    websiteUpdates.extra_recipients = parsed.data.extra_recipients;
   }
-  if (parsed.data.report_recipients !== undefined) {
-    websiteUpdates.report_recipients =
-      profile.plan === "free" ? [] : parsed.data.report_recipients;
+  if (parsed.data.auto_email_reports !== undefined) {
+    websiteUpdates.auto_email_reports = parsed.data.auto_email_reports;
+  }
+  if (parsed.data.email_notifications !== undefined) {
+    websiteUpdates.email_notifications = parsed.data.email_notifications;
   }
   if (parsed.data.competitor_urls !== undefined) {
     websiteUpdates.competitor_urls = parsed.data.competitor_urls.slice(0, 3);

@@ -129,7 +129,11 @@ function getReportContact(input: PdfContext) {
 
 function getNextReportDate(input: PdfContext) {
   const anchor = new Date(input.scan.scanned_at);
-  const frequency = input.website.email_report_frequency ?? input.profile.email_report_frequency;
+  const frequency = input.website.report_frequency ?? "weekly";
+
+  if (frequency === "never") {
+    return "Not scheduled";
+  }
 
   if (frequency === "daily") {
     anchor.setDate(anchor.getDate() + 1);
