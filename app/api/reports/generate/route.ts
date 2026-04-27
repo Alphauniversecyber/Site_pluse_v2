@@ -2,6 +2,7 @@ import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { generateAndStoreReport } from "@/lib/report-service";
 import { canAccessFeature } from "@/lib/trial";
 import { reportGenerationSchema } from "@/lib/validation";
+import { resolveWorkspaceContext } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,9 @@ export async function POST(request: Request) {
     return errorResponse;
   }
 
-  if (!canAccessFeature(profile, "download_report")) {
+  const workspace = await resolveWorkspaceContext(profile);
+
+  if (!canAccessFeature(workspace.workspaceProfile, "download_report")) {
     return apiError("Upgrade to keep generating PDF reports.", 403);
   }
 

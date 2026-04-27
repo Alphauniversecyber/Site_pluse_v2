@@ -54,7 +54,6 @@ export default async function DashboardScanDetailPage({ params }: { params: { id
     .from("websites")
     .select("*")
     .eq("id", scan.website_id)
-    .eq("user_id", profile.id)
     .single<Website>();
 
   if (!website) {

@@ -1,6 +1,7 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { isTrialActive } from "@/lib/trial";
 import { brandingSchema } from "@/lib/validation";
+import { resolveWorkspaceContext } from "@/lib/workspace";
 
 export async function GET() {
   const { supabase, profile, errorResponse } = await requireApiUser();
@@ -8,10 +9,12 @@ export async function GET() {
     return errorResponse;
   }
 
+  const workspace = await resolveWorkspaceContext(profile);
+
   const { data: branding, error } = await supabase
     .from("agency_branding")
     .select("*")
-    .eq("user_id", profile.id)
+    .eq("user_id", workspace.workspaceOwnerId)
     .maybeSingle();
 
   if (error) {
@@ -27,7 +30,9 @@ export async function PUT(request: Request) {
     return errorResponse;
   }
 
-  if (profile.plan !== "agency" && !isTrialActive(profile)) {
+  const workspace = await resolveWorkspaceContext(profile);
+
+  if (workspace.workspaceProfile.plan !== "agency" && !isTrialActive(workspace.workspaceProfile)) {
     return apiError("White-label branding is available on the Agency plan.", 403);
   }
 
@@ -42,7 +47,7 @@ export async function PUT(request: Request) {
     .from("agency_branding")
     .upsert(
       {
-        user_id: profile.id,
+        user_id: workspace.workspaceOwnerId,
         ...parsed.data
       },
       {

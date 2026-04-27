@@ -9,6 +9,7 @@ import { ensureSeoAudit } from "@/lib/seo-audit";
 import { ensureSslCheck } from "@/lib/ssl-checker";
 import { buildSiteBusinessImpact } from "@/lib/business-impact";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { resolveWorkspaceContext } from "@/lib/workspace";
 import { PLAN_LIMITS, normalizeUrl } from "@/lib/utils";
 import type {
   PreviewScanIssue,
@@ -362,11 +363,13 @@ export async function claimPreviewScanSession(input: { sessionId: string; userId
     throw new Error("User profile not found.");
   }
 
+  const workspace = await resolveWorkspaceContext(profile);
+
   let websiteId: string;
   const { data: existingWebsite } = await admin
     .from("websites")
     .select("*")
-    .eq("user_id", input.userId)
+    .eq("user_id", workspace.workspaceOwnerId)
     .eq("url", session.normalized_url)
     .maybeSingle<Website>();
 
@@ -376,18 +379,18 @@ export async function claimPreviewScanSession(input: { sessionId: string; userId
     const { count } = await admin
       .from("websites")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", input.userId);
+      .eq("user_id", workspace.workspaceOwnerId);
 
-    if ((count ?? 0) >= PLAN_LIMITS[profile.plan].websiteLimit) {
+    if ((count ?? 0) >= PLAN_LIMITS[workspace.workspaceProfile.plan].websiteLimit) {
       throw new Error(
-        `Your ${PLAN_LIMITS[profile.plan].name} plan is full right now. Upgrade or remove a site to unlock this preview.`
+        `Your ${PLAN_LIMITS[workspace.workspaceProfile.plan].name} plan is full right now. Upgrade or remove a site to unlock this preview.`
       );
     }
 
     const { data: website, error: websiteError } = await admin
       .from("websites")
       .insert({
-        user_id: input.userId,
+        user_id: workspace.workspaceOwnerId,
         url: session.normalized_url,
         label: session.website_label,
         report_frequency: "weekly",
@@ -437,7 +440,7 @@ export async function claimPreviewScanSession(input: { sessionId: string; userId
     throw new Error(scanError?.message ?? "Unable to create a scan from this preview.");
   }
 
-  const defaultFrequency = PLAN_LIMITS[profile.plan].scanFrequencies[0];
+  const defaultFrequency = PLAN_LIMITS[workspace.workspaceProfile.plan].scanFrequencies[0];
   const { data: existingSchedule } = await admin
     .from("scan_schedules")
     .select("*")

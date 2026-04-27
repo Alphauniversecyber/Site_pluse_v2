@@ -1,6 +1,7 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { getSignedReportUrl } from "@/lib/report-service";
 import { canAccessFeature } from "@/lib/trial";
+import { resolveWorkspaceContext } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,9 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     return errorResponse;
   }
 
-  if (!canAccessFeature(profile, "download_report")) {
+  const workspace = await resolveWorkspaceContext(profile);
+
+  if (!canAccessFeature(workspace.workspaceProfile, "download_report")) {
     return apiError("Upgrade to keep downloading PDF reports.", 403);
   }
 

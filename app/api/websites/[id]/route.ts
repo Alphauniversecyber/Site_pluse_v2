@@ -2,6 +2,7 @@ import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { buildHealthScore } from "@/lib/health-score";
 import { PLAN_LIMITS } from "@/lib/utils";
 import { websiteUpdateSchema } from "@/lib/validation";
+import { resolveWorkspaceContext } from "@/lib/workspace";
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   const { supabase, errorResponse } = await requireApiUser();
@@ -98,6 +99,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return errorResponse;
   }
 
+  const workspace = await resolveWorkspaceContext(profile);
+
   const body = await request.json().catch(() => null);
   const parsed = websiteUpdateSchema.safeParse(body);
 
@@ -107,7 +110,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
   if (
     parsed.data.frequency &&
-    !PLAN_LIMITS[profile.plan].scanFrequencies.includes(parsed.data.frequency)
+    !PLAN_LIMITS[workspace.workspaceProfile.plan].scanFrequencies.includes(parsed.data.frequency)
   ) {
     return apiError("That scan frequency is not available on your current plan.", 403);
   }

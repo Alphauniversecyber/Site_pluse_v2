@@ -2,6 +2,7 @@ import { apiError, apiSuccess, requireApiUserFromRequest } from "@/lib/api";
 import { executeWebsiteScan } from "@/lib/scan-service";
 import { PLAN_LIMITS, normalizeUrl } from "@/lib/utils";
 import { authenticatedScanSchema } from "@/lib/validation";
+import { resolveWorkspaceContext } from "@/lib/workspace";
 
 function deriveWebsiteLabel(url: string) {
   try {
@@ -20,6 +21,8 @@ export async function POST(request: Request) {
     return errorResponse;
   }
 
+  const workspace = await resolveWorkspaceContext(profile);
+
   const body = await request.json().catch(() => null);
   const parsed = authenticatedScanSchema.safeParse(body);
 
@@ -32,7 +35,7 @@ export async function POST(request: Request) {
   const { data: existingWebsite } = await supabase
     .from("websites")
     .select("*")
-    .eq("user_id", profile.id)
+    .eq("user_id", workspace.workspaceOwnerId)
     .eq("url", normalizedUrl)
     .maybeSingle();
 
@@ -42,21 +45,21 @@ export async function POST(request: Request) {
     const { count, error: countError } = await supabase
       .from("websites")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", profile.id);
+      .eq("user_id", workspace.workspaceOwnerId);
 
     if (countError) {
       return apiError(countError.message, 500);
     }
 
-    if ((count ?? 0) >= PLAN_LIMITS[profile.plan].websiteLimit) {
-      return apiError(`Your ${PLAN_LIMITS[profile.plan].name} plan limit has been reached.`, 403);
+    if ((count ?? 0) >= PLAN_LIMITS[workspace.workspaceProfile.plan].websiteLimit) {
+      return apiError(`Your ${PLAN_LIMITS[workspace.workspaceProfile.plan].name} plan limit has been reached.`, 403);
     }
 
-    const defaultFrequency = PLAN_LIMITS[profile.plan].scanFrequencies[0];
+    const defaultFrequency = PLAN_LIMITS[workspace.workspaceProfile.plan].scanFrequencies[0];
     const { data: createdWebsite, error: createWebsiteError } = await supabase
       .from("websites")
       .insert({
-        user_id: profile.id,
+        user_id: workspace.workspaceOwnerId,
         url: normalizedUrl,
         label: deriveWebsiteLabel(normalizedUrl),
         report_frequency: "weekly",

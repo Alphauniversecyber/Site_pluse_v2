@@ -2,12 +2,19 @@ import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { buildHealthScore } from "@/lib/health-score";
 import { PLAN_LIMITS, normalizeUrl } from "@/lib/utils";
 import { websiteSchema } from "@/lib/validation";
+import { resolveWorkspaceContext, syncWorkspaceWebsiteOwnership } from "@/lib/workspace";
 
 export async function GET(request: Request) {
-  const { supabase, errorResponse } = await requireApiUser();
-  if (errorResponse) {
+  const { supabase, profile, errorResponse } = await requireApiUser();
+  if (errorResponse || !profile) {
     return errorResponse;
   }
+
+  const workspace = await resolveWorkspaceContext(profile);
+  await syncWorkspaceWebsiteOwnership({
+    workspaceOwnerId: workspace.workspaceOwnerId,
+    actorUserId: profile.id
+  });
 
   const { searchParams } = new URL(request.url);
   const view = searchParams.get("view");
@@ -160,6 +167,8 @@ export async function POST(request: Request) {
     return errorResponse;
   }
 
+  const workspace = await resolveWorkspaceContext(profile);
+
   const body = await request.json().catch(() => null);
   const parsed = websiteSchema.safeParse(body);
 
@@ -170,22 +179,22 @@ export async function POST(request: Request) {
   const { count, error: countError } = await supabase
     .from("websites")
     .select("*", { count: "exact", head: true })
-    .eq("user_id", profile.id);
+    .eq("user_id", workspace.workspaceOwnerId);
 
   if (countError) {
     return apiError(countError.message, 500);
   }
 
-  if ((count ?? 0) >= PLAN_LIMITS[profile.plan].websiteLimit) {
-    return apiError(`Your ${PLAN_LIMITS[profile.plan].name} plan limit has been reached.`, 403);
+  if ((count ?? 0) >= PLAN_LIMITS[workspace.workspaceProfile.plan].websiteLimit) {
+    return apiError(`Your ${PLAN_LIMITS[workspace.workspaceProfile.plan].name} plan limit has been reached.`, 403);
   }
 
   const normalizedUrl = normalizeUrl(parsed.data.url);
-  const defaultFrequency = PLAN_LIMITS[profile.plan].scanFrequencies[0];
+  const defaultFrequency = PLAN_LIMITS[workspace.workspaceProfile.plan].scanFrequencies[0];
   const { data: website, error } = await supabase
     .from("websites")
     .insert({
-      user_id: profile.id,
+      user_id: workspace.workspaceOwnerId,
       url: normalizedUrl,
       label: parsed.data.label,
       report_frequency: parsed.data.report_frequency ?? "weekly",
