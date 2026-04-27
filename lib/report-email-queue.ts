@@ -229,6 +229,29 @@ async function updateQueueRow(id: string, payload: Partial<ReportEmailQueueRow>)
   }
 }
 
+async function claimQueueRow(row: ReportEmailQueueRow, startedAt: string) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("report_email_queue")
+    .update({
+      status: "processing",
+      last_attempt_at: startedAt,
+      attempt_count: (row.attempt_count ?? 0) + 1,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", row.id)
+    .eq("status", row.status)
+    .eq("updated_at", row.updated_at)
+    .select("id")
+    .maybeSingle<{ id: string }>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Boolean(data?.id);
+}
+
 export async function enqueueDueReportEmails(limit = 200, offset = 0): Promise<EnqueueDueReportEmailsResult> {
   const profiles = await loadEligibleProfiles(limit, offset);
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -370,11 +393,10 @@ export async function processQueuedReportEmails(
         continue;
       }
 
-      await updateQueueRow(row.id, {
-        status: "processing",
-        last_attempt_at: startedAt,
-        attempt_count: (row.attempt_count ?? 0) + 1
-      });
+      const claimed = await claimQueueRow(row, startedAt);
+      if (!claimed) {
+        continue;
+      }
 
       let reportId = row.report_id;
       if (!reportId) {

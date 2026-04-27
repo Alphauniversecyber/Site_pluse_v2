@@ -32,6 +32,7 @@ export async function runContinuableCronRoute<T extends ContinuableCronPayload>(
     failureMessage: string;
     run: (cursor: number) => Promise<T>;
     allowContinuation?: boolean;
+    continuationMode?: "self_dispatch" | "scheduled";
   }
 ) {
   if (!isAuthorizedCronRequest(request, input.label)) {
@@ -45,14 +46,27 @@ export async function runContinuableCronRoute<T extends ContinuableCronPayload>(
   try {
     const cursor = getCronCursorOffset(request);
     const result = await runLoggedCron(input.cronName, () => input.run(cursor));
-    const continuation = input.allowContinuation
-      ? await dispatchCronContinuation({
+    const continuationMode =
+      input.allowContinuation === false
+        ? "disabled"
+        : input.continuationMode ?? (input.allowContinuation ? "self_dispatch" : "disabled");
+    const continuation =
+      continuationMode === "self_dispatch"
+        ? await dispatchCronContinuation({
           request,
           label: input.label,
           hasMore: result.hasMore,
           nextCursor: result.nextCursor ?? null
         })
-      : {
+        : continuationMode === "scheduled" && result.hasMore
+          ? {
+              queued: false,
+              reason: "deferred_to_scheduler" as const,
+              nextCursor: result.nextCursor ?? null,
+              nextChainDepth: 0,
+              maxChainDepth: 0
+            }
+          : {
           queued: false,
           reason: "no_more_work" as const,
           nextCursor: result.nextCursor ?? null,
@@ -60,7 +74,12 @@ export async function runContinuableCronRoute<T extends ContinuableCronPayload>(
           maxChainDepth: 0
         };
 
-    if (input.allowContinuation && result.hasMore && !continuation.queued && continuation.reason !== "no_more_work") {
+    if (
+      continuationMode === "self_dispatch" &&
+      result.hasMore &&
+      !continuation.queued &&
+      continuation.reason !== "no_more_work"
+    ) {
       await logAdminError({
         errorType: "cron_failed",
         errorMessage: `Cron continuation was not queued for ${input.label}.`,

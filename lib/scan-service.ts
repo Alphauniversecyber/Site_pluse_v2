@@ -409,7 +409,8 @@ export async function executeWebsiteScan(
       websiteId: website.id,
       scanId: currentScan.id,
       url: website.url,
-      force: forceHealthSignals
+      force: forceHealthSignals,
+      suppressExpectedFailure: true
     }),
     ensureBrokenLinkCheck({
       websiteId: website.id,

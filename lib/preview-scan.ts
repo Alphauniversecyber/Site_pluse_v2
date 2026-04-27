@@ -459,7 +459,8 @@ export async function claimPreviewScanSession(input: { sessionId: string; userId
     ensureSeoAudit({
       websiteId,
       scanId: scan.id,
-      url: session.normalized_url
+      url: session.normalized_url,
+      suppressExpectedFailure: true
     }),
     ensureSslCheck({
       websiteId,

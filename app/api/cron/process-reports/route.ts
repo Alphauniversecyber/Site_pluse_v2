@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     cronName: "process-reports",
     label: "process-reports",
     failureMessage: "Unable to process scheduled reports.",
-    allowContinuation: true,
+    continuationMode: "scheduled",
     run: (cursor) =>
       processDueEmailReportsBatch({
         discoveryOffset: cursor

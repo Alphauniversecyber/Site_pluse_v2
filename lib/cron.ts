@@ -40,7 +40,13 @@ export type CronExecutionGuard = {
 
 export type CronContinuationDispatch = {
   queued: boolean;
-  reason: "queued" | "no_more_work" | "chain_limit_reached" | "missing_secret" | "dispatch_failed";
+  reason:
+    | "queued"
+    | "no_more_work"
+    | "deferred_to_scheduler"
+    | "chain_limit_reached"
+    | "missing_secret"
+    | "dispatch_failed";
   nextCursor: number | null;
   nextChainDepth: number;
   maxChainDepth: number;

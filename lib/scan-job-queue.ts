@@ -196,6 +196,29 @@ async function updateQueueRow(id: string, payload: Partial<ScanJobQueueRow>) {
   }
 }
 
+async function claimQueueRow(row: ScanJobQueueRow, startedAt: string) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("scan_job_queue")
+    .update({
+      status: "processing",
+      attempt_count: (row.attempt_count ?? 0) + 1,
+      last_attempt_at: startedAt,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", row.id)
+    .eq("status", row.status)
+    .eq("updated_at", row.updated_at)
+    .select("id")
+    .maybeSingle<{ id: string }>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Boolean(data?.id);
+}
+
 export async function enqueueDueScanJobs(limit = 250, offset = 0): Promise<EnqueueDueScanJobsResult> {
   const websites = await loadActiveWebsites(limit, offset);
   const profiles = await loadProfiles(Array.from(new Set(websites.map((website) => website.user_id))));
@@ -343,11 +366,10 @@ export async function processQueuedScanJobs(
     const startedAt = new Date().toISOString();
 
     try {
-      await updateQueueRow(row.id, {
-        status: "processing",
-        attempt_count: (row.attempt_count ?? 0) + 1,
-        last_attempt_at: startedAt
-      });
+      const claimed = await claimQueueRow(row, startedAt);
+      if (!claimed) {
+        continue;
+      }
 
       const result = await executeWebsiteScan(row.website_id);
 

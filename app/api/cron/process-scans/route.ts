@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     cronName: "process-scans",
     label: "process-scans",
     failureMessage: "Unable to process scheduled scans.",
-    allowContinuation: true,
+    continuationMode: "scheduled",
     run: (cursor) =>
       processDueScansBatch({
         discoveryOffset: cursor
