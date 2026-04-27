@@ -2,6 +2,11 @@ import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { buildHealthScore } from "@/lib/health-score";
 import { PLAN_LIMITS } from "@/lib/utils";
 import { websiteUpdateSchema } from "@/lib/validation";
+import {
+  buildLegacyWebsiteNotificationPayload,
+  isMissingWebsiteNotificationColumnsError,
+  normalizeWebsiteNotificationFields
+} from "@/lib/website-notification-compat";
 import { resolveWorkspaceContext } from "@/lib/workspace";
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
@@ -73,7 +78,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   }
 
   return apiSuccess({
-    ...website,
+    ...normalizeWebsiteNotificationFields(website),
     schedule: schedule ?? null,
     scans: scans ?? [],
     ssl_check: sslCheck ?? null,
@@ -138,15 +143,42 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     websiteUpdates.competitor_urls = parsed.data.competitor_urls.slice(0, 3);
   }
 
-  const { data: website, error } = await supabase
+  let updateResult = await supabase
     .from("websites")
     .update(websiteUpdates)
     .eq("id", params.id)
     .select("*")
     .single();
 
-  if (error || !website) {
-    return apiError(error?.message ?? "Unable to update website.", 500);
+  if (
+    updateResult.error &&
+    isMissingWebsiteNotificationColumnsError(updateResult.error.message)
+  ) {
+    const legacyUpdates = {
+      ...(parsed.data.label !== undefined ? { label: parsed.data.label } : {}),
+      ...(parsed.data.is_active !== undefined ? { is_active: parsed.data.is_active } : {}),
+      ...buildLegacyWebsiteNotificationPayload({
+        reportFrequency: parsed.data.report_frequency,
+        autoEmailReports: parsed.data.auto_email_reports,
+        extraRecipients: parsed.data.extra_recipients
+      }),
+      ...(parsed.data.competitor_urls !== undefined
+        ? { competitor_urls: parsed.data.competitor_urls.slice(0, 3) }
+        : {})
+    };
+
+    updateResult = await supabase
+      .from("websites")
+      .update(legacyUpdates)
+      .eq("id", params.id)
+      .select("*")
+      .single();
+  }
+
+  const website = updateResult.data ? normalizeWebsiteNotificationFields(updateResult.data) : null;
+
+  if (updateResult.error || !website) {
+    return apiError(updateResult.error?.message ?? "Unable to update website.", 500);
   }
 
   if (parsed.data.frequency) {

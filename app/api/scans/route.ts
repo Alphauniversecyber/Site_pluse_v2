@@ -2,6 +2,10 @@ import { apiError, apiSuccess, requireApiUserFromRequest } from "@/lib/api";
 import { executeWebsiteScan } from "@/lib/scan-service";
 import { PLAN_LIMITS, normalizeUrl } from "@/lib/utils";
 import { authenticatedScanSchema } from "@/lib/validation";
+import {
+  buildLegacyWebsiteNotificationPayload,
+  isMissingWebsiteNotificationColumnsError
+} from "@/lib/website-notification-compat";
 import { resolveWorkspaceContext } from "@/lib/workspace";
 
 function deriveWebsiteLabel(url: string) {
@@ -56,7 +60,7 @@ export async function POST(request: Request) {
     }
 
     const defaultFrequency = PLAN_LIMITS[workspace.workspaceProfile.plan].scanFrequencies[0];
-    const { data: createdWebsite, error: createWebsiteError } = await supabase
+    let createWebsiteResult = await supabase
       .from("websites")
       .insert({
         user_id: workspace.workspaceOwnerId,
@@ -70,6 +74,30 @@ export async function POST(request: Request) {
       })
       .select("*")
       .single();
+
+    if (
+      createWebsiteResult.error &&
+      isMissingWebsiteNotificationColumnsError(createWebsiteResult.error.message)
+    ) {
+      createWebsiteResult = await supabase
+        .from("websites")
+        .insert({
+          user_id: workspace.workspaceOwnerId,
+          url: normalizedUrl,
+          label: deriveWebsiteLabel(normalizedUrl),
+          ...buildLegacyWebsiteNotificationPayload({
+            reportFrequency: "weekly",
+            autoEmailReports: true,
+            extraRecipients: []
+          }),
+          competitor_urls: []
+        })
+        .select("*")
+        .single();
+    }
+
+    const createdWebsite = createWebsiteResult.data;
+    const createWebsiteError = createWebsiteResult.error;
 
     if (createWebsiteError || !createdWebsite) {
       return apiError(createWebsiteError?.message ?? "Unable to create website for scan.", 500);

@@ -9,6 +9,10 @@ import { ensureSeoAudit } from "@/lib/seo-audit";
 import { ensureSslCheck } from "@/lib/ssl-checker";
 import { buildSiteBusinessImpact } from "@/lib/business-impact";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import {
+  buildLegacyWebsiteNotificationPayload,
+  isMissingWebsiteNotificationColumnsError
+} from "@/lib/website-notification-compat";
 import { resolveWorkspaceContext } from "@/lib/workspace";
 import { PLAN_LIMITS, normalizeUrl } from "@/lib/utils";
 import type {
@@ -387,7 +391,7 @@ export async function claimPreviewScanSession(input: { sessionId: string; userId
       );
     }
 
-    const { data: website, error: websiteError } = await admin
+    let websiteInsertResult = await admin
       .from("websites")
       .insert({
         user_id: workspace.workspaceOwnerId,
@@ -401,6 +405,30 @@ export async function claimPreviewScanSession(input: { sessionId: string; userId
       })
       .select("*")
       .single<Website>();
+
+    if (
+      websiteInsertResult.error &&
+      isMissingWebsiteNotificationColumnsError(websiteInsertResult.error.message)
+    ) {
+      websiteInsertResult = await admin
+        .from("websites")
+        .insert({
+          user_id: workspace.workspaceOwnerId,
+          url: session.normalized_url,
+          label: session.website_label,
+          ...buildLegacyWebsiteNotificationPayload({
+            reportFrequency: "weekly",
+            autoEmailReports: true,
+            extraRecipients: []
+          }),
+          competitor_urls: []
+        })
+        .select("*")
+        .single<Website>();
+    }
+
+    const website = websiteInsertResult.data;
+    const websiteError = websiteInsertResult.error;
 
     if (websiteError || !website) {
       throw new Error(websiteError?.message ?? "Unable to create the website from this preview.");

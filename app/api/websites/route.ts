@@ -2,6 +2,11 @@ import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { buildHealthScore } from "@/lib/health-score";
 import { PLAN_LIMITS, normalizeUrl } from "@/lib/utils";
 import { websiteSchema } from "@/lib/validation";
+import {
+  buildLegacyWebsiteNotificationPayload,
+  isMissingWebsiteNotificationColumnsError,
+  normalizeWebsiteNotificationFields
+} from "@/lib/website-notification-compat";
 import { resolveWorkspaceContext, syncWorkspaceWebsiteOwnership } from "@/lib/workspace";
 
 export async function GET(request: Request) {
@@ -19,20 +24,32 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const view = searchParams.get("view");
 
-  const { data: websites, error } = await supabase
+  let websitesQuery: {
+    data: Record<string, unknown>[] | null;
+    error: { message: string } | null;
+  } = await supabase
     .from("websites")
     .select("id,user_id,url,label,is_active,report_frequency,extra_recipients,auto_email_reports,email_notifications,created_at,updated_at")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    return apiError(error.message, 500);
+  if (websitesQuery.error && isMissingWebsiteNotificationColumnsError(websitesQuery.error.message)) {
+    websitesQuery = await supabase
+      .from("websites")
+      .select("id,user_id,url,label,is_active,email_reports_enabled,email_report_frequency,report_recipients,created_at,updated_at")
+      .order("created_at", { ascending: false });
   }
+
+  if (websitesQuery.error) {
+    return apiError(websitesQuery.error.message, 500);
+  }
+
+  const websites = (websitesQuery.data ?? []).map((website) => normalizeWebsiteNotificationFields(website));
 
   if (view === "summary") {
-    return apiSuccess(websites ?? []);
+    return apiSuccess(websites);
   }
 
-  const websiteIds = (websites ?? []).map((website) => website.id);
+  const websiteIds = websites.map((website) => website.id as string);
 
   const [
     { data: schedules },
@@ -143,19 +160,19 @@ export async function GET(request: Request) {
   }
 
   return apiSuccess(
-    (websites ?? []).map((website) => ({
+    websites.map((website) => ({
       ...website,
-      latest_scan: latestScanMap.get(website.id) ?? null,
-      schedule: scheduleMap.get(website.id) ?? null,
-      ssl_check: latestSslMap.get(website.id) ?? null,
-      security_headers: latestSecurityHeadersMap.get(website.id) ?? null,
-      broken_links: latestBrokenLinksMap.get(website.id) ?? null,
+      latest_scan: latestScanMap.get(website.id as string) ?? null,
+      schedule: scheduleMap.get(website.id as string) ?? null,
+      ssl_check: latestSslMap.get(website.id as string) ?? null,
+      security_headers: latestSecurityHeadersMap.get(website.id as string) ?? null,
+      broken_links: latestBrokenLinksMap.get(website.id as string) ?? null,
       health_score: buildHealthScore({
-        scan: latestScanMap.get(website.id) ?? null,
-        seoAudit: latestSeoAuditMap.get(website.id) ?? null,
-        sslCheck: latestSslMap.get(website.id) ?? null,
-        securityHeaders: latestSecurityHeadersMap.get(website.id) ?? null,
-        uptimeChecks: uptimeMap.get(website.id) ?? []
+        scan: latestScanMap.get(website.id as string) ?? null,
+        seoAudit: latestSeoAuditMap.get(website.id as string) ?? null,
+        sslCheck: latestSslMap.get(website.id as string) ?? null,
+        securityHeaders: latestSecurityHeadersMap.get(website.id as string) ?? null,
+        uptimeChecks: uptimeMap.get(website.id as string) ?? []
       })
     }))
   );
@@ -191,7 +208,7 @@ export async function POST(request: Request) {
 
   const normalizedUrl = normalizeUrl(parsed.data.url);
   const defaultFrequency = PLAN_LIMITS[workspace.workspaceProfile.plan].scanFrequencies[0];
-  const { data: website, error } = await supabase
+  let insertResult = await supabase
     .from("websites")
     .insert({
       user_id: workspace.workspaceOwnerId,
@@ -206,8 +223,31 @@ export async function POST(request: Request) {
     .select("*")
     .single();
 
-  if (error || !website) {
-    return apiError(error?.message ?? "Unable to create website.", 500);
+  if (
+    insertResult.error &&
+    isMissingWebsiteNotificationColumnsError(insertResult.error.message)
+  ) {
+    insertResult = await supabase
+      .from("websites")
+      .insert({
+        user_id: workspace.workspaceOwnerId,
+        url: normalizedUrl,
+        label: parsed.data.label,
+        ...buildLegacyWebsiteNotificationPayload({
+          reportFrequency: parsed.data.report_frequency,
+          autoEmailReports: parsed.data.auto_email_reports,
+          extraRecipients: parsed.data.extra_recipients
+        }),
+        competitor_urls: parsed.data.competitor_urls ?? []
+      })
+      .select("*")
+      .single();
+  }
+
+  const website = insertResult.data ? normalizeWebsiteNotificationFields(insertResult.data) : null;
+
+  if (insertResult.error || !website) {
+    return apiError(insertResult.error?.message ?? "Unable to create website.", 500);
   }
 
   const { error: scheduleError } = await supabase.from("scan_schedules").insert({

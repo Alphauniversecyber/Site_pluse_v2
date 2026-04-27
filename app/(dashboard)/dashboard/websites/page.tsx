@@ -24,7 +24,7 @@ import { useWebsites } from "@/hooks/useWebsites";
 import type { ScanResult } from "@/types";
 
 export default function WebsitesPage() {
-  const { websites, loading, refetch } = useWebsites();
+  const { websites, loading, error, refetch } = useWebsites();
   const [search, setSearch] = useState("");
   const [scanningWebsiteId, setScanningWebsiteId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -134,6 +134,16 @@ export default function WebsitesPage() {
             </Card>
           ))}
         </div>
+      ) : error ? (
+        <EmptyState
+          title="Unable to load websites"
+          description={error}
+          action={
+            <Button type="button" onClick={() => void refetch()}>
+              Try again
+            </Button>
+          }
+        />
       ) : filtered.length ? (
         <div className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr))] min-[1800px]:[grid-template-columns:repeat(auto-fit,minmax(28rem,1fr))]">
           {filtered.map((website) => {
