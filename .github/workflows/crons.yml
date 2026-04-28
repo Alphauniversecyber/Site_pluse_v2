@@ -11,6 +11,22 @@ on:
     - cron: "0 11 * * *"
     - cron: "0 12 * * *"
   workflow_dispatch:
+    inputs:
+      job:
+        description: "Cron job to run manually"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - process-paddle-webhooks
+          - process-scans
+          - process-uptime
+          - sync-uptimerobot
+          - process-competitors
+          - process-reports
+          - expire-trials
+          - process-lifecycle-emails
 
 concurrency:
   group: sitepulse-crons
@@ -23,77 +39,108 @@ jobs:
   trigger-crons:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      SITE_URL: ${{ secrets.SITE_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
       - name: Validate scheduler secrets
-        env:
-          SITE_URL: ${{ secrets.SITE_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
           test -n "$SITE_URL"
           test -n "$CRON_SECRET"
 
-      - name: Trigger cron routes
-        env:
-          SITE_URL: ${{ secrets.SITE_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          EVENT_NAME: ${{ github.event_name }}
-          SCHEDULE: ${{ github.event.schedule }}
+      - name: Trigger process-paddle-webhooks
+        if: ${{ github.event.schedule == '0 5 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-paddle-webhooks')) }}
         run: |
           set -euo pipefail
-
           base_url="${SITE_URL%/}"
+          echo "Triggering /api/cron/process-paddle-webhooks"
+          curl --fail --show-error --silent \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${base_url}/api/cron/process-paddle-webhooks"
+          echo
 
-          trigger_route() {
-            local path="$1"
+      - name: Trigger process-scans
+        if: ${{ github.event.schedule == '0 6 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-scans')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+          echo "Triggering /api/cron/process-scans"
+          curl --fail --show-error --silent \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${base_url}/api/cron/process-scans"
+          echo
 
-            echo "Triggering ${path}"
-            curl --fail --show-error --silent \
-              --request GET \
-              --header "Authorization: Bearer ${CRON_SECRET}" \
-              "${base_url}${path}"
-            echo
-          }
+      - name: Trigger process-uptime
+        if: ${{ github.event.schedule == '0 7 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-uptime')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+          echo "Triggering /api/cron/process-uptime"
+          curl --fail --show-error --silent \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${base_url}/api/cron/process-uptime"
+          echo
 
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
-            trigger_route "/api/cron/process-paddle-webhooks"
-            trigger_route "/api/cron/process-scans"
-            trigger_route "/api/cron/process-uptime"
-            trigger_route "/api/cron/sync-uptimerobot"
-            trigger_route "/api/cron/process-competitors"
-            trigger_route "/api/cron/process-reports"
-            trigger_route "/api/cron/expire-trials"
-            trigger_route "/api/cron/process-lifecycle-emails"
-            exit 0
-          fi
+      - name: Trigger sync-uptimerobot
+        if: ${{ github.event.schedule == '0 8 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'sync-uptimerobot')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+          echo "Triggering /api/cron/sync-uptimerobot"
+          curl --fail --show-error --silent \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${base_url}/api/cron/sync-uptimerobot"
+          echo
 
-          case "${SCHEDULE}" in
-            "0 5 * * *")
-              trigger_route "/api/cron/process-paddle-webhooks"
-              ;;
-            "0 6 * * *")
-              trigger_route "/api/cron/process-scans"
-              ;;
-            "0 7 * * *")
-              trigger_route "/api/cron/process-uptime"
-              ;;
-            "0 8 * * *")
-              trigger_route "/api/cron/sync-uptimerobot"
-              ;;
-            "0 9 * * *")
-              trigger_route "/api/cron/process-competitors"
-              ;;
-            "0 10 * * *")
-              trigger_route "/api/cron/process-reports"
-              ;;
-            "0 11 * * *")
-              trigger_route "/api/cron/expire-trials"
-              ;;
-            "0 12 * * *")
-              trigger_route "/api/cron/process-lifecycle-emails"
-              ;;
-            *)
-              echo "No cron route mapped for schedule: ${SCHEDULE}" >&2
-              exit 1
-              ;;
-          esac
+      - name: Trigger process-competitors
+        if: ${{ github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-competitors')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+          echo "Triggering /api/cron/process-competitors"
+          curl --fail --show-error --silent \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${base_url}/api/cron/process-competitors"
+          echo
+
+      - name: Trigger process-reports
+        if: ${{ github.event.schedule == '0 10 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-reports')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+          echo "Triggering /api/cron/process-reports"
+          curl --fail --show-error --silent \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${base_url}/api/cron/process-reports"
+          echo
+
+      - name: Trigger expire-trials
+        if: ${{ github.event.schedule == '0 11 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'expire-trials')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+          echo "Triggering /api/cron/expire-trials"
+          curl --fail --show-error --silent \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${base_url}/api/cron/expire-trials"
+          echo
+
+      - name: Trigger process-lifecycle-emails
+        if: ${{ github.event.schedule == '0 12 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-lifecycle-emails')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+          echo "Triggering /api/cron/process-lifecycle-emails"
+          curl --fail --show-error --silent \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${base_url}/api/cron/process-lifecycle-emails"
+          echo
