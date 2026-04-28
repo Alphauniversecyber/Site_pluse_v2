@@ -286,9 +286,14 @@ export default async function AdminCronsPage({
                             : "red"
                     }
                   />
-                  <AdminBadge label={`${row.itemsProcessed} items`} tone="neutral" mono />
+                  <AdminBadge label={`${row.itemsProcessed} ${row.itemLabel}`} tone="neutral" mono />
                 </div>
                 <p className="mt-2 text-xs font-mono text-zinc-500">{row.lastRunDuration}</p>
+                {row.queueBacked ? (
+                  <p className="mt-2 text-xs leading-5 text-zinc-500">
+                    Queue-backed cron: this history shows trigger and drain runs, while the downstream work completes in the worker queue.
+                  </p>
+                ) : null}
               </div>
             </div>
 
@@ -299,7 +304,7 @@ export default async function AdminCronsPage({
                     <th className="px-3 py-2 font-medium">Started</th>
                     <th className="px-3 py-2 font-medium">Status</th>
                     <th className="px-3 py-2 font-medium">Duration</th>
-                    <th className="px-3 py-2 font-medium">Items</th>
+                    <th className="px-3 py-2 font-medium">{row.queueBacked ? "Queue Jobs" : "Items"}</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -223,6 +223,8 @@ export type AdminCronsPageData = {
     schedule: string;
     path: string;
     description: string;
+    queueBacked: boolean;
+    itemLabel: string;
     lastRunAt: string | null;
     lastRunStatus: "running" | "success" | "failed" | "timeout" | "never";
     lastRunDuration: string;
@@ -1077,6 +1079,8 @@ export async function getAdminCronsData(): Promise<AdminCronsPageData> {
           schedule: definition.schedule,
           path: definition.path,
           description: definition.description,
+          queueBacked: Boolean(definition.queueBacked),
+          itemLabel: definition.queueBacked ? "queue jobs" : "items",
           lastRunAt: latest?.started_at ?? null,
           lastRunStatus: latest?.status ?? "never",
           lastRunDuration:
@@ -1101,6 +1105,8 @@ export async function getAdminCronsData(): Promise<AdminCronsPageData> {
           schedule: definition.schedule,
           path: definition.path,
           description: definition.description,
+          queueBacked: Boolean(definition.queueBacked),
+          itemLabel: definition.queueBacked ? "queue jobs" : "items",
           lastRunAt: null,
           lastRunStatus: "never",
           lastRunDuration: "N/A",
@@ -1374,18 +1380,19 @@ function getAdminCronSuccessMessage(cronName: AdminCronName, data: Record<string
     const result = data.executed as
       | {
           processedCount?: number;
-          queuedCount?: number;
-          hasMore?: boolean;
+          queued?: boolean;
+          remaining?: number;
+          done?: boolean;
         }
       | undefined;
 
     if (result) {
       const processedCount = result.processedCount ?? 0;
-      const queuedCount = result.queuedCount ?? 0;
+      const queuedState = result.queued ? "queued a new worker job" : "reused the existing open worker job";
 
-      return result.hasMore
-        ? `process-scans ran ${processedCount} scan(s), queued ${queuedCount} job(s), and there is still backlog left for the next run.`
-        : `process-scans ran ${processedCount} scan(s), queued ${queuedCount} job(s), and cleared the current due backlog.`;
+      return result.done
+        ? `process-scans ${queuedState}, processed ${processedCount} scan queue job(s), and drained the current backlog.`
+        : `process-scans ${queuedState}, processed ${processedCount} scan queue job(s), and still has ${result.remaining ?? 0} worker job(s) remaining.`;
     }
   }
 
@@ -1393,18 +1400,19 @@ function getAdminCronSuccessMessage(cronName: AdminCronName, data: Record<string
     const result = data.sent as
       | {
           processedCount?: number;
-          queuedCount?: number;
-          hasMore?: boolean;
+          queued?: boolean;
+          remaining?: number;
+          done?: boolean;
         }
       | undefined;
 
     if (result) {
       const processedCount = result.processedCount ?? 0;
-      const queuedCount = result.queuedCount ?? 0;
+      const queuedState = result.queued ? "queued a new worker job" : "reused the existing open worker job";
 
-      return result.hasMore
-        ? `process-reports sent ${processedCount} report(s), queued ${queuedCount} job(s), and there is still backlog left for the next run.`
-        : `process-reports sent ${processedCount} report(s), queued ${queuedCount} job(s), and cleared the current due backlog.`;
+      return result.done
+        ? `process-reports ${queuedState}, processed ${processedCount} report queue job(s), and drained the current backlog.`
+        : `process-reports ${queuedState}, processed ${processedCount} report queue job(s), and still has ${result.remaining ?? 0} worker job(s) remaining.`;
     }
   }
 

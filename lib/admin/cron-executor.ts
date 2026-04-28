@@ -2,13 +2,12 @@ import "server-only";
 
 import type { AdminCronName } from "@/lib/admin/constants";
 import { runLoggedCron } from "@/lib/admin/logging";
-import { processCompetitorScans } from "@/lib/competitor-monitoring";
+import { enqueueJob } from "@/lib/job-queue";
+import { drainQueue } from "@/lib/job-queue-worker";
 import { processLifecycleEmails } from "@/lib/lifecycle-email-service";
 import { processQueuedPaddleWebhooks } from "@/lib/paddle-subscriptions";
-import { processDueEmailReports } from "@/lib/report-service";
-import { processDueScans } from "@/lib/scan-service";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { processDailyUptimeChecks, processUptimeRobotSync } from "@/lib/uptime-monitoring";
+import { processUptimeRobotSync } from "@/lib/uptime-monitoring";
 
 async function expireTrials() {
   const admin = createSupabaseAdminClient();
@@ -35,18 +34,72 @@ async function expireTrials() {
   });
 }
 
+async function queueAndDrainCron(input: {
+  cronName: Extract<
+    AdminCronName,
+    "process-scans" | "process-reports" | "process-uptime" | "process-competitors"
+  >;
+  payload: {
+    mode?: "discover" | "process-queue";
+    discoveryOffset?: number;
+    offset?: number;
+    requestedAt: string;
+    source: string;
+  };
+}) {
+  return runLoggedCron(input.cronName, async () => {
+    const queued = await enqueueJob(input.cronName, input.payload, {
+      skipIfOpen: true
+    });
+    const drained = await drainQueue(20);
+
+    return {
+      processedCount: drained.processed,
+      queued: queued.queued,
+      jobId: queued.job.id,
+      remaining: drained.remaining,
+      done: drained.done,
+      iterations: drained.iterations
+    };
+  });
+}
+
 export async function executeAdminCron(cronName: AdminCronName): Promise<Record<string, unknown>> {
   switch (cronName) {
     case "process-scans": {
-      const executed = await runLoggedCron("process-scans", () => processDueScans());
+      const executed = await queueAndDrainCron({
+        cronName: "process-scans",
+        payload: {
+          mode: "discover",
+          discoveryOffset: 0,
+          requestedAt: new Date().toISOString(),
+          source: "admin"
+        }
+      });
       return { executed };
     }
     case "process-reports": {
-      const sent = await runLoggedCron("process-reports", () => processDueEmailReports());
+      const sent = await queueAndDrainCron({
+        cronName: "process-reports",
+        payload: {
+          mode: "discover",
+          discoveryOffset: 0,
+          requestedAt: new Date().toISOString(),
+          source: "admin"
+        }
+      });
       return { sent };
     }
     case "process-uptime": {
-      const processed = await runLoggedCron("process-uptime", () => processDailyUptimeChecks());
+      const processed = await queueAndDrainCron({
+        cronName: "process-uptime",
+        payload: {
+          mode: "process-queue",
+          offset: 0,
+          requestedAt: new Date().toISOString(),
+          source: "admin"
+        }
+      });
       return { processed };
     }
     case "sync-uptimerobot": {
@@ -54,7 +107,15 @@ export async function executeAdminCron(cronName: AdminCronName): Promise<Record<
       return { synced };
     }
     case "process-competitors": {
-      const processed = await runLoggedCron("process-competitors", () => processCompetitorScans());
+      const processed = await queueAndDrainCron({
+        cronName: "process-competitors",
+        payload: {
+          mode: "discover",
+          discoveryOffset: 0,
+          requestedAt: new Date().toISOString(),
+          source: "admin"
+        }
+      });
       return { processed };
     }
     case "expire-trials": {

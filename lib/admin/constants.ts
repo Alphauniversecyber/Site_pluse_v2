@@ -30,25 +30,31 @@ export const ADMIN_CRON_DEFINITIONS: Record<
     path: string;
     schedule: string;
     description: string;
+    queueBacked?: boolean;
   }
 > = {
   "process-scans": {
     label: "process-scans",
     path: "/api/cron/process-scans",
     schedule: "0 6 * * *",
-    description: "Daily GitHub Actions job for due website scans. You can also run it manually from the admin panel when you need to recover backlog."
+    description:
+      "Daily GitHub Actions job for due website scans. This cron enqueues work and the worker drains the queue separately, so scan completion is tracked in Scan Monitoring above.",
+    queueBacked: true
   },
   "process-reports": {
     label: "process-reports",
     path: "/api/cron/process-reports",
     schedule: "0 10 * * *",
-    description: "Daily GitHub Actions job for scheduled report emails, with manual re-runs available from the admin panel."
+    description:
+      "Daily GitHub Actions job for scheduled report emails. This cron enqueues work and the worker drains the queue separately.",
+    queueBacked: true
   },
   "process-uptime": {
     label: "process-uptime",
     path: "/api/cron/process-uptime",
     schedule: "0 7 * * *",
-    description: "Daily GitHub Actions job for uptime checks."
+    description: "Daily GitHub Actions job for uptime checks. This cron enqueues work and the worker drains the queue separately.",
+    queueBacked: true
   },
   "sync-uptimerobot": {
     label: "sync-uptimerobot",
@@ -60,7 +66,8 @@ export const ADMIN_CRON_DEFINITIONS: Record<
     label: "process-competitors",
     path: "/api/cron/process-competitors",
     schedule: "0 9 * * *",
-    description: "Checks competitor score movement."
+    description: "Checks competitor score movement through the queue worker.",
+    queueBacked: true
   },
   "expire-trials": {
     label: "expire-trials",
