@@ -3,6 +3,7 @@ import "server-only";
 import type { ScanResult, UserProfile, Website } from "@/types";
 import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
 import { buildEmailDedupeKey } from "@/lib/email-utils";
+import { enqueueJob } from "@/lib/job-queue";
 import { runPageSpeedScan } from "@/lib/pagespeed";
 import { trySendCriticalAlertEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -236,6 +237,101 @@ export async function processCompetitorScans(limit = getCronBatchLimit("COMPETIT
     limit,
     offset: 0
   });
+}
+
+export async function enqueueCompetitorScanJobsBatch(input: { limit?: number; offset?: number }) {
+  const admin = createSupabaseAdminClient();
+  const limit = input.limit ?? getCronBatchLimit("COMPETITOR_CRON_LIMIT", 20);
+  const offset = input.offset ?? 0;
+  const { data: websites, error } = await admin
+    .from("websites")
+    .select("id, competitor_urls")
+    .eq("is_active", true)
+    .order("created_at", { ascending: true })
+    .range(offset, offset + Math.max(limit - 1, 0));
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  let inspectedCount = 0;
+  let queuedCount = 0;
+  const rows = (websites ?? []) as Pick<Website, "id" | "competitor_urls">[];
+
+  for (const website of rows) {
+    inspectedCount += 1;
+
+    const competitors = Array.isArray(website.competitor_urls) ? website.competitor_urls.slice(0, 3) : [];
+    for (const competitorUrl of competitors) {
+      await enqueueJob("process-competitors", {
+        mode: "process-queue",
+        websiteId: website.id,
+        competitorUrl,
+        requestedAt: new Date().toISOString(),
+        source: "worker-discovery"
+      });
+      queuedCount += 1;
+    }
+  }
+
+  const hasMore = rows.length === limit;
+
+  return {
+    queuedCount,
+    inspectedCount,
+    nextOffset: hasMore ? offset + inspectedCount : null,
+    hasMore
+  };
+}
+
+export async function processQueuedCompetitorScanJob(input: {
+  websiteId: string;
+  competitorUrl: string;
+}) {
+  const admin = createSupabaseAdminClient();
+  const { data: website } = await admin
+    .from("websites")
+    .select("*")
+    .eq("id", input.websiteId)
+    .eq("is_active", true)
+    .maybeSingle<Website>();
+
+  if (!website) {
+    return {
+      status: "skipped",
+      reason: "website_not_found",
+      websiteId: input.websiteId,
+      competitorUrl: input.competitorUrl
+    };
+  }
+
+  const { data: profile } = await admin
+    .from("users")
+    .select("*")
+    .eq("id", website.user_id)
+    .maybeSingle<UserProfile>();
+
+  if (!profile) {
+    return {
+      status: "skipped",
+      reason: "profile_not_found",
+      websiteId: website.id,
+      competitorUrl: input.competitorUrl
+    };
+  }
+
+  const result = await runCompetitorScan({
+    website,
+    profile,
+    competitorUrl: input.competitorUrl
+  });
+
+  return {
+    status: "processed",
+    websiteId: website.id,
+    competitorUrl: input.competitorUrl,
+    scanStatus: result.scan_status
+  };
 }
 
 export async function processCompetitorScansBatch(input: { limit?: number; offset?: number }) {

@@ -5,7 +5,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 export const SLOW_CRON_JOB_TYPES = [
   "process-scans",
   "process-reports",
-  "process-uptime"
+  "process-uptime",
+  "process-competitors"
 ] as const;
 
 export type SlowCronJobType = (typeof SLOW_CRON_JOB_TYPES)[number];
@@ -15,6 +16,8 @@ export type JobQueuePayload = {
   mode?: "discover" | "process-queue";
   discoveryOffset?: number;
   offset?: number;
+  websiteId?: string;
+  competitorUrl?: string;
   requestedAt?: string;
   source?: string;
   result?: Record<string, unknown>;

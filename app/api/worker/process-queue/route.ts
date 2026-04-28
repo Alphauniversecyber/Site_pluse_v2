@@ -1,6 +1,10 @@
 import { apiError, apiSuccess } from "@/lib/api";
 import { logAdminError } from "@/lib/admin/logging";
 import {
+  enqueueCompetitorScanJobsBatch,
+  processQueuedCompetitorScanJob
+} from "@/lib/competitor-monitoring";
+import {
   claimPendingJobs,
   enqueueJob,
   getPendingJobCount,
@@ -22,6 +26,7 @@ const SCAN_QUEUE_LIMIT = 1;
 const REPORT_DISCOVERY_LIMIT = 25;
 const REPORT_QUEUE_LIMIT = 1;
 const UPTIME_LIMIT = 5;
+const COMPETITOR_DISCOVERY_LIMIT = 10;
 
 function getNumber(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
@@ -153,6 +158,52 @@ async function processUptimeJob(job: JobQueueRow) {
   };
 }
 
+async function processCompetitorJob(job: JobQueueRow) {
+  const payload = job.payload ?? {};
+  const mode = payload.mode === "process-queue" ? "process-queue" : "discover";
+  const discoveryOffset = getNumber(payload.discoveryOffset, 0);
+
+  if (mode === "discover") {
+    const enqueueResult = await enqueueCompetitorScanJobsBatch({
+      limit: COMPETITOR_DISCOVERY_LIMIT,
+      offset: discoveryOffset
+    });
+
+    if (enqueueResult.hasMore) {
+      await enqueueJob("process-competitors", {
+        mode: "discover",
+        discoveryOffset: enqueueResult.nextOffset ?? 0,
+        requestedAt: new Date().toISOString(),
+        source: "worker-continuation"
+      });
+    }
+
+    return {
+      phase: "discover",
+      queuedCount: enqueueResult.queuedCount,
+      discoveredCount: enqueueResult.inspectedCount,
+      hasMore: enqueueResult.hasMore,
+      nextOffset: enqueueResult.nextOffset
+    };
+  }
+
+  if (!payload.websiteId || !payload.competitorUrl) {
+    throw new Error("Competitor queue job is missing websiteId or competitorUrl.");
+  }
+
+  const result = await processQueuedCompetitorScanJob({
+    websiteId: payload.websiteId,
+    competitorUrl: payload.competitorUrl
+  });
+
+  return {
+    phase: "process-queue",
+    ...result,
+    hasMore: false,
+    nextOffset: null
+  };
+}
+
 async function processJob(job: JobQueueRow) {
   if (job.job_type === "process-scans") {
     return processScanJob(job);
@@ -160,6 +211,10 @@ async function processJob(job: JobQueueRow) {
 
   if (job.job_type === "process-reports") {
     return processReportJob(job);
+  }
+
+  if (job.job_type === "process-competitors") {
+    return processCompetitorJob(job);
   }
 
   return processUptimeJob(job);

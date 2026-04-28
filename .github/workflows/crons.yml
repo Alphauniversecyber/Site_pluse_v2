@@ -38,7 +38,7 @@ permissions:
 jobs:
   trigger-crons:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     env:
       SITE_URL: ${{ secrets.SITE_URL }}
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -170,12 +170,12 @@ jobs:
           echo
 
       - name: Drain queued slow jobs
-        if: ${{ github.event.schedule == '0 6 * * *' || github.event.schedule == '0 7 * * *' || github.event.schedule == '0 10 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-scans' || github.event.inputs.job == 'process-uptime' || github.event.inputs.job == 'process-reports')) }}
+        if: ${{ github.event.schedule == '0 6 * * *' || github.event.schedule == '0 7 * * *' || github.event.schedule == '0 9 * * *' || github.event.schedule == '0 10 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-scans' || github.event.inputs.job == 'process-uptime' || github.event.inputs.job == 'process-competitors' || github.event.inputs.job == 'process-reports')) }}
         run: |
           set -euo pipefail
           base_url="${SITE_URL%/}"
 
-          for iteration in $(seq 1 20); do
+          for iteration in $(seq 1 60); do
             echo "Processing worker queue batch ${iteration}"
             response_file="$(mktemp)"
             headers_file="$(mktemp)"
@@ -208,5 +208,5 @@ jobs:
             fi
           done
 
-          echo "Worker queue still has pending jobs after 20 batches." >&2
+          echo "Worker queue still has pending jobs after 60 batches." >&2
           exit 1
