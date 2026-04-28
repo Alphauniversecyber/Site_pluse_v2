@@ -254,6 +254,15 @@ create table if not exists public.scan_schedules (
   last_scan_at timestamptz
 );
 
+create table if not exists public.job_queue (
+  id uuid primary key default gen_random_uuid(),
+  job_type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  status text not null default 'pending' check (status in ('pending', 'processing', 'done', 'failed')),
+  created_at timestamptz not null default timezone('utc', now()),
+  processed_at timestamptz
+);
+
 create table if not exists public.report_email_queue (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users (id) on delete cascade,
@@ -533,6 +542,8 @@ create index if not exists idx_paddle_webhook_events_status_retry
   on public.paddle_webhook_events (status, next_retry_at asc, created_at asc);
 create index if not exists idx_report_email_queue_status_scheduled
   on public.report_email_queue (status, next_attempt_at asc);
+create index if not exists idx_job_queue_status_created_at
+  on public.job_queue (status, created_at asc);
 create index if not exists idx_report_email_queue_user_period
   on public.report_email_queue (user_id, website_id, period_key);
 create index if not exists idx_report_email_queue_sent_at

@@ -144,3 +144,28 @@ jobs:
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/process-lifecycle-emails"
           echo
+
+      - name: Drain queued slow jobs
+        if: ${{ github.event.schedule == '0 6 * * *' || github.event.schedule == '0 7 * * *' || github.event.schedule == '0 10 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-scans' || github.event.inputs.job == 'process-uptime' || github.event.inputs.job == 'process-reports')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+
+          for iteration in $(seq 1 20); do
+            echo "Processing worker queue batch ${iteration}"
+            response="$(curl --fail --show-error --silent \
+              --request GET \
+              --header "Authorization: Bearer ${CRON_SECRET}" \
+              "${base_url}/api/worker/process-queue")"
+
+            echo "$response"
+
+            has_more="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Boolean(payload?.data?.hasMore)));" )"
+
+            if [ "$has_more" != "true" ]; then
+              exit 0
+            fi
+          done
+
+          echo "Worker queue still has pending jobs after 20 batches." >&2
+          exit 1

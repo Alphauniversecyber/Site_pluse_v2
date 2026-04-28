@@ -1,18 +1,42 @@
-import { runContinuableCronRoute } from "@/lib/cron-route";
-import { processDueEmailReportsBatch } from "@/lib/report-service";
+import { runLoggedCron } from "@/lib/admin/logging";
+import { apiError, apiSuccess } from "@/lib/api";
+import { enqueueJob, isAuthorizedCronRequest } from "@/lib/job-queue";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function GET(request: Request) {
-  return runContinuableCronRoute(request, {
-    cronName: "process-reports",
-    label: "process-reports",
-    failureMessage: "Unable to process scheduled reports.",
-    continuationMode: "scheduled",
-    run: (cursor) =>
-      processDueEmailReportsBatch({
-        discoveryOffset: cursor
-      })
-  });
+  if (!isAuthorizedCronRequest(request)) {
+    return apiError("Unauthorized", 401);
+  }
+
+  try {
+    const result = await runLoggedCron("process-reports", async () => {
+      const queued = await enqueueJob(
+        "process-reports",
+        {
+          mode: "discover-and-process",
+          discoveryOffset: 0,
+          requestedAt: new Date().toISOString(),
+          source: "cron"
+        },
+        {
+          skipIfOpen: true
+        }
+      );
+
+      return {
+        processedCount: queued.queued ? 1 : 0,
+        queued: queued.queued,
+        jobId: queued.job.id
+      };
+    });
+
+    return apiSuccess(result);
+  } catch (error) {
+    return apiError(
+      error instanceof Error ? error.message : "Unable to queue scheduled reports.",
+      500
+    );
+  }
 }
