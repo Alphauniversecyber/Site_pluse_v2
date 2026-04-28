@@ -9,6 +9,13 @@ import { processQueuedPaddleWebhooks } from "@/lib/paddle-subscriptions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { processUptimeRobotSync } from "@/lib/uptime-monitoring";
 
+const ADMIN_DRAIN_ITERATION_LIMITS = {
+  "process-scans": 120,
+  "process-reports": 120,
+  "process-uptime": 60,
+  "process-competitors": 120
+} as const;
+
 async function expireTrials() {
   const admin = createSupabaseAdminClient();
 
@@ -51,7 +58,10 @@ async function queueAndDrainCron(input: {
     const queued = await enqueueJob(input.cronName, input.payload, {
       skipIfOpen: true
     });
-    const drained = await drainQueue(20);
+    const drained = await drainQueue(
+      input.cronName,
+      ADMIN_DRAIN_ITERATION_LIMITS[input.cronName]
+    );
 
     return {
       processedCount: drained.processed,

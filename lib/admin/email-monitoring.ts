@@ -3,6 +3,7 @@ import "server-only";
 import { getPlanLabel } from "@/lib/admin/format";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getLocalDayKey, getPeriodKey, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
+import { hasScheduledAutomationAccess } from "@/lib/trial";
 import { PLAN_LIMITS } from "@/lib/utils";
 import type { ReportFrequency, ScanFrequency, ScanResult, UserProfile, Website } from "@/types";
 
@@ -157,6 +158,7 @@ function formatReason(reason: string | null | undefined) {
   if (reason === "frequency_mismatch") return "Frequency mismatch";
   if (reason === "already_sent") return "Already sent (duplicate prevention)";
   if (reason === "missing_pdf_generation") return "Missing PDF generation";
+  if (reason === "account_ineligible") return "Account no longer eligible";
   if (reason === "queue_failure") return "Queue failure";
   return "Queue backlog";
 }
@@ -294,7 +296,7 @@ export async function getAdminEmailMonitoringData(input?: {
     const [usersResult, websitesResult, scansResult, queueResult, cronLogsResult, reportsResult] = await Promise.all([
       admin
         .from("users")
-        .select("id,email,plan,timezone"),
+        .select("id,email,plan,timezone,subscription_status,is_trial,trial_ends_at"),
       admin
         .from("websites")
         .select("id,user_id,url,label,is_active,auto_email_reports,report_frequency,extra_recipients,created_at")
@@ -333,7 +335,12 @@ export async function getAdminEmailMonitoringData(input?: {
     if (cronLogsResult.error) throw new Error(cronLogsResult.error.message);
     if (reportsResult.error) throw new Error(reportsResult.error.message);
 
-    const users = (usersResult.data ?? []) as Array<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>;
+    const users = (usersResult.data ?? []) as Array<
+      Pick<
+        UserProfile,
+        "id" | "email" | "plan" | "timezone" | "subscription_status" | "is_trial" | "trial_ends_at"
+      >
+    >;
     const websites = (websitesResult.data ?? []) as Array<
       Pick<
         Website,
@@ -380,7 +387,12 @@ export async function getAdminEmailMonitoringData(input?: {
     const dueCandidates = websites
       .map((website) => {
         const user = usersById.get(website.user_id);
-        if (!user || !PLAN_LIMITS[user.plan]?.emailReports || !website.auto_email_reports) {
+        if (
+          !user ||
+          !PLAN_LIMITS[user.plan]?.emailReports ||
+          !hasScheduledAutomationAccess(user) ||
+          !website.auto_email_reports
+        ) {
           return null;
         }
 
@@ -439,6 +451,8 @@ export async function getAdminEmailMonitoringData(input?: {
         let status: EligibilityStatus = "ready";
         if (!PLAN_LIMITS[user.plan]?.emailReports) {
           status = "plan_ineligible";
+        } else if (!hasScheduledAutomationAccess(user)) {
+          status = "user_disabled";
         } else if (!website.auto_email_reports || website.report_frequency === "never") {
           status = "website_disabled";
         } else if (!latestSuccessfulScanAt) {
@@ -502,12 +516,12 @@ export async function getAdminEmailMonitoringData(input?: {
       eligibility: {
         summary: {
           totalActiveWebsites: websites.length,
-        ready: eligibilityRows.filter((row) => row.status === "ready").length,
-        planIneligible: eligibilityRows.filter((row) => row.status === "plan_ineligible").length,
-        userDisabled: 0,
-        websiteDisabled: eligibilityRows.filter((row) => row.status === "website_disabled").length,
-        missingSuccessfulScan: eligibilityRows.filter((row) => row.status === "missing_successful_scan").length
-      },
+          ready: eligibilityRows.filter((row) => row.status === "ready").length,
+          planIneligible: eligibilityRows.filter((row) => row.status === "plan_ineligible").length,
+          userDisabled: eligibilityRows.filter((row) => row.status === "user_disabled").length,
+          websiteDisabled: eligibilityRows.filter((row) => row.status === "website_disabled").length,
+          missingSuccessfulScan: eligibilityRows.filter((row) => row.status === "missing_successful_scan").length
+        },
         rows: filteredEligibilityRows
       },
       rows: unsentRows.filter((row) => {

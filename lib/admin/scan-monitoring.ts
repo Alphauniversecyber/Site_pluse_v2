@@ -3,12 +3,18 @@ import "server-only";
 import { getPlanLabel } from "@/lib/admin/format";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getLocalDayKey, getPeriodKey, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
+import { hasScheduledAutomationAccess } from "@/lib/trial";
 import { PLAN_LIMITS } from "@/lib/utils";
 import type { ScanFrequency, ScanResult, ScanSchedule, UserProfile, Website } from "@/types";
 
 type QueueStatus = "pending" | "processing" | "completed" | "failed" | "skipped";
 type MonitoringRowStatus = "pending" | "processing" | "failed" | "skipped";
-type ScanFailureReason = "timeout" | "api_error" | "plan_limit_reached" | "queue_backlog";
+type ScanFailureReason =
+  | "timeout"
+  | "api_error"
+  | "plan_limit_reached"
+  | "queue_backlog"
+  | "account_ineligible";
 
 type ScanJobQueueRow = {
   id: string;
@@ -127,6 +133,7 @@ function formatReason(reason: ScanFailureReason | null | undefined) {
   if (reason === "timeout") return "Timeout";
   if (reason === "api_error") return "API error (Lighthouse / PageSpeed)";
   if (reason === "plan_limit_reached") return "Plan limit reached";
+  if (reason === "account_ineligible") return "Account no longer eligible";
   return "Queue backlog";
 }
 
@@ -253,7 +260,7 @@ export async function getAdminScanMonitoringData(input?: {
 
   try {
     const [usersResult, websitesResult, schedulesResult, queueResult, cronLogsResult, scanResultsResult] = await Promise.all([
-      admin.from("users").select("id,email,plan,timezone"),
+      admin.from("users").select("id,email,plan,timezone,subscription_status,is_trial,trial_ends_at"),
       admin
         .from("websites")
         .select("id,user_id,url,label,is_active,created_at")
@@ -288,7 +295,12 @@ export async function getAdminScanMonitoringData(input?: {
     if (cronLogsResult.error) throw new Error(cronLogsResult.error.message);
     if (scanResultsResult.error) throw new Error(scanResultsResult.error.message);
 
-    const users = (usersResult.data ?? []) as Array<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>;
+    const users = (usersResult.data ?? []) as Array<
+      Pick<
+        UserProfile,
+        "id" | "email" | "plan" | "timezone" | "subscription_status" | "is_trial" | "trial_ends_at"
+      >
+    >;
     const websites = (websitesResult.data ?? []) as Array<
       Pick<Website, "id" | "user_id" | "url" | "label" | "is_active" | "created_at">
     >;
@@ -320,6 +332,10 @@ export async function getAdminScanMonitoringData(input?: {
       .map((website) => {
         const user = usersById.get(website.user_id);
         if (!user) {
+          return null;
+        }
+
+        if (!hasScheduledAutomationAccess(user)) {
           return null;
         }
 

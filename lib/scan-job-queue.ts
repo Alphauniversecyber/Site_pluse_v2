@@ -6,10 +6,16 @@ import type { CronExecutionGuard } from "@/lib/cron";
 import { executeWebsiteScan } from "@/lib/scan-service";
 import { getPeriodKey, getRetryAt, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { hasScheduledAutomationAccess } from "@/lib/trial";
 import { PLAN_LIMITS } from "@/lib/utils";
 
 type QueueStatus = "pending" | "processing" | "completed" | "failed" | "skipped";
-type ScanFailureReason = "timeout" | "api_error" | "plan_limit_reached" | "queue_backlog";
+type ScanFailureReason =
+  | "timeout"
+  | "api_error"
+  | "plan_limit_reached"
+  | "queue_backlog"
+  | "account_ineligible";
 
 type ScanJobQueueRow = {
   id: string;
@@ -80,20 +86,30 @@ function classifyScanFailure(message: string): ScanFailureReason {
 
 async function loadProfiles(userIds: string[]) {
   if (!userIds.length) {
-    return [] as Array<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>;
+    return [] as Array<
+      Pick<
+        UserProfile,
+        "id" | "email" | "plan" | "timezone" | "subscription_status" | "is_trial" | "trial_ends_at"
+      >
+    >;
   }
 
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("users")
-    .select("id,email,plan,timezone")
+    .select("id,email,plan,timezone,subscription_status,is_trial,trial_ends_at")
     .in("id", userIds);
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return (data ?? []) as Array<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>;
+  return (data ?? []) as Array<
+    Pick<
+      UserProfile,
+      "id" | "email" | "plan" | "timezone" | "subscription_status" | "is_trial" | "trial_ends_at"
+    >
+  >;
 }
 
 async function loadActiveWebsites(limit: number, offset: number) {
@@ -245,6 +261,10 @@ export async function enqueueDueScanJobs(limit = 250, offset = 0): Promise<Enque
       continue;
     }
 
+    if (!hasScheduledAutomationAccess(profile)) {
+      continue;
+    }
+
     const planLimits = PLAN_LIMITS[profile.plan];
     const ownedWebsites = websitesByUser[website.user_id] ?? [];
     const orderedWebsites = ownedWebsites
@@ -368,6 +388,24 @@ export async function processQueuedScanJobs(
     try {
       const claimed = await claimQueueRow(row, startedAt);
       if (!claimed) {
+        continue;
+      }
+
+      const { data: currentProfile } = await admin
+        .from("users")
+        .select("id,plan,subscription_status,is_trial,trial_ends_at")
+        .eq("id", row.user_id)
+        .maybeSingle<
+          Pick<UserProfile, "id" | "plan" | "subscription_status" | "is_trial" | "trial_ends_at">
+        >();
+
+      if (!currentProfile || !hasScheduledAutomationAccess(currentProfile)) {
+        await updateQueueRow(row.id, {
+          status: "skipped",
+          failure_reason: "account_ineligible",
+          last_error: "Scheduled scans are no longer enabled for this account.",
+          last_attempt_at: startedAt
+        });
         continue;
       }
 

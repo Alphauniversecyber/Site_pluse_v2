@@ -289,6 +289,12 @@ export default async function AdminCronsPage({
                   <AdminBadge label={`${row.itemsProcessed} ${row.itemLabel}`} tone="neutral" mono />
                 </div>
                 <p className="mt-2 text-xs font-mono text-zinc-500">{row.lastRunDuration}</p>
+                {row.queueMetrics ? (
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-400">
+                    <span>{row.queueMetrics.completedCount} {row.queueMetrics.completedLabel}</span>
+                    <span>{row.queueMetrics.remainingCount} {row.queueMetrics.remainingLabel}</span>
+                  </div>
+                ) : null}
                 {row.queueBacked ? (
                   <p className="mt-2 text-xs leading-5 text-zinc-500">
                     Queue-backed cron: this history shows trigger and drain runs, while the downstream work completes in the worker queue.

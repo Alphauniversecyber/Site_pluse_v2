@@ -225,6 +225,12 @@ export type AdminCronsPageData = {
     description: string;
     queueBacked: boolean;
     itemLabel: string;
+    queueMetrics: {
+      completedLabel: string;
+      completedCount: number;
+      remainingLabel: string;
+      remainingCount: number;
+    } | null;
     lastRunAt: string | null;
     lastRunStatus: "running" | "success" | "failed" | "timeout" | "never";
     lastRunDuration: string;
@@ -234,6 +240,27 @@ export type AdminCronsPageData = {
   }>;
   error: string | null;
 };
+
+function getQueueMetricLabels(cronName: AdminCronName) {
+  if (cronName === "process-scans") {
+    return {
+      completedLabel: "completed today",
+      remainingLabel: "scan backlog"
+    };
+  }
+
+  if (cronName === "process-reports") {
+    return {
+      completedLabel: "sent today",
+      remainingLabel: "report backlog"
+    };
+  }
+
+  return {
+    completedLabel: "completed today",
+    remainingLabel: "worker backlog"
+  };
+}
 
 export type AdminEmailsPageData = {
   rows: Array<{
@@ -1054,25 +1081,109 @@ export async function getAdminReportsData(input: {
 
 export async function getAdminCronsData(): Promise<AdminCronsPageData> {
   const admin = createSupabaseAdminClient();
+  const todayIso = startOfDayIso();
 
   try {
-    const { data, error } = await admin
-      .from("cron_logs")
-      .select("id,cron_name,started_at,finished_at,status,items_processed,error_message,created_at")
-      .order("started_at", { ascending: false })
-      .limit(200);
+    const [
+      { data, error },
+      { count: scanCompletedTodayCount, error: scanCompletedError },
+      { count: scanRemainingCount, error: scanRemainingError },
+      { count: reportCompletedTodayCount, error: reportCompletedError },
+      { count: reportRemainingCount, error: reportRemainingError },
+      { count: uptimeCompletedTodayCount, error: uptimeCompletedError },
+      { count: uptimeRemainingCount, error: uptimeRemainingError },
+      { count: competitorCompletedTodayCount, error: competitorCompletedError },
+      { count: competitorRemainingCount, error: competitorRemainingError }
+    ] = await Promise.all([
+      admin
+        .from("cron_logs")
+        .select("id,cron_name,started_at,finished_at,status,items_processed,error_message,created_at")
+        .order("started_at", { ascending: false })
+        .limit(200),
+      admin
+        .from("scan_job_queue")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "completed")
+        .gte("completed_at", todayIso),
+      admin
+        .from("scan_job_queue")
+        .select("*", { count: "exact", head: true })
+        .in("status", ["pending", "processing", "failed"]),
+      admin
+        .from("report_email_queue")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "sent")
+        .gte("sent_at", todayIso),
+      admin
+        .from("report_email_queue")
+        .select("*", { count: "exact", head: true })
+        .in("status", ["pending", "processing", "failed"]),
+      admin
+        .from("job_queue")
+        .select("*", { count: "exact", head: true })
+        .eq("job_type", "process-uptime")
+        .eq("status", "done")
+        .gte("processed_at", todayIso),
+      admin
+        .from("job_queue")
+        .select("*", { count: "exact", head: true })
+        .eq("job_type", "process-uptime")
+        .in("status", ["pending", "processing"]),
+      admin
+        .from("job_queue")
+        .select("*", { count: "exact", head: true })
+        .eq("job_type", "process-competitors")
+        .eq("status", "done")
+        .gte("processed_at", todayIso),
+      admin
+        .from("job_queue")
+        .select("*", { count: "exact", head: true })
+        .eq("job_type", "process-competitors")
+        .in("status", ["pending", "processing"])
+    ]);
 
     if (error) {
       throw new Error(error.message);
     }
 
+    if (scanCompletedError) throw new Error(scanCompletedError.message);
+    if (scanRemainingError) throw new Error(scanRemainingError.message);
+    if (reportCompletedError) throw new Error(reportCompletedError.message);
+    if (reportRemainingError) throw new Error(reportRemainingError.message);
+    if (uptimeCompletedError) throw new Error(uptimeCompletedError.message);
+    if (uptimeRemainingError) throw new Error(uptimeRemainingError.message);
+    if (competitorCompletedError) throw new Error(competitorCompletedError.message);
+    if (competitorRemainingError) throw new Error(competitorRemainingError.message);
+
     const logs = (data ?? []) as AdminCronLogRecord[];
+    const queueMetricCounts: Partial<
+      Record<AdminCronName, { completedCount: number; remainingCount: number }>
+    > = {
+      "process-scans": {
+        completedCount: scanCompletedTodayCount ?? 0,
+        remainingCount: scanRemainingCount ?? 0
+      },
+      "process-reports": {
+        completedCount: reportCompletedTodayCount ?? 0,
+        remainingCount: reportRemainingCount ?? 0
+      },
+      "process-uptime": {
+        completedCount: uptimeCompletedTodayCount ?? 0,
+        remainingCount: uptimeRemainingCount ?? 0
+      },
+      "process-competitors": {
+        completedCount: competitorCompletedTodayCount ?? 0,
+        remainingCount: competitorRemainingCount ?? 0
+      }
+    };
 
     return {
       rows: ADMIN_CRON_NAMES.map((cronName) => {
         const history = logs.filter((row) => row.cron_name === cronName).slice(0, 10);
         const latest = history[0] ?? null;
         const definition = ADMIN_CRON_DEFINITIONS[cronName];
+        const queueMetricCount = queueMetricCounts[cronName];
+        const queueMetricLabels = getQueueMetricLabels(cronName);
 
         return {
           name: cronName,
@@ -1081,6 +1192,15 @@ export async function getAdminCronsData(): Promise<AdminCronsPageData> {
           description: definition.description,
           queueBacked: Boolean(definition.queueBacked),
           itemLabel: definition.queueBacked ? "queue jobs" : "items",
+          queueMetrics:
+            definition.queueBacked && queueMetricCount
+              ? {
+                  completedLabel: queueMetricLabels.completedLabel,
+                  completedCount: queueMetricCount.completedCount,
+                  remainingLabel: queueMetricLabels.remainingLabel,
+                  remainingCount: queueMetricCount.remainingCount
+                }
+              : null,
           lastRunAt: latest?.started_at ?? null,
           lastRunStatus: latest?.status ?? "never",
           lastRunDuration:
@@ -1107,6 +1227,7 @@ export async function getAdminCronsData(): Promise<AdminCronsPageData> {
           description: definition.description,
           queueBacked: Boolean(definition.queueBacked),
           itemLabel: definition.queueBacked ? "queue jobs" : "items",
+          queueMetrics: null,
           lastRunAt: null,
           lastRunStatus: "never",
           lastRunDuration: "N/A",

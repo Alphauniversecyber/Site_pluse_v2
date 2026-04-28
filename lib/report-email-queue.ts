@@ -6,6 +6,7 @@ import type { CronExecutionGuard } from "@/lib/cron";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { generateAndStoreReport, sendStoredReportEmail } from "@/lib/report-service";
 import { getPeriodKey, getRetryAt, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
+import { hasScheduledAutomationAccess } from "@/lib/trial";
 import { PLAN_LIMITS } from "@/lib/utils";
 
 type QueueStatus = "pending" | "processing" | "sent" | "failed" | "skipped";
@@ -15,7 +16,8 @@ type ReportQueueReason =
   | "frequency_mismatch"
   | "already_sent"
   | "queue_failure"
-  | "missing_pdf_generation";
+  | "missing_pdf_generation"
+  | "account_ineligible";
 
 type ReportEmailQueueRow = {
   id: string;
@@ -90,7 +92,7 @@ async function loadEligibleProfiles(limit: number, offset: number) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("users")
-    .select("id,email,plan,timezone")
+    .select("id,email,plan,timezone,subscription_status,is_trial,trial_ends_at")
     .in("plan", ["starter", "agency"])
     .order("created_at", { ascending: true })
     .range(offset, offset + Math.max(limit - 1, 0));
@@ -99,7 +101,12 @@ async function loadEligibleProfiles(limit: number, offset: number) {
     throw new Error(error.message);
   }
 
-  return (data ?? []) as Array<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>;
+  return (data ?? []) as Array<
+    Pick<
+      UserProfile,
+      "id" | "email" | "plan" | "timezone" | "subscription_status" | "is_trial" | "trial_ends_at"
+    >
+  >;
 }
 
 async function loadActiveWebsites(userIds: string[]) {
@@ -262,7 +269,7 @@ export async function enqueueDueReportEmails(limit = 200, offset = 0): Promise<E
     .map((website) => {
       const profile = profileById.get(website.user_id);
 
-      if (!profile || !PLAN_LIMITS[profile.plan].emailReports) {
+      if (!profile || !PLAN_LIMITS[profile.plan].emailReports || !hasScheduledAutomationAccess(profile)) {
         return null;
       }
 
@@ -380,21 +387,30 @@ export async function processQueuedReportEmails(
         .maybeSingle<Website>();
       const { data: profile } = await adminNow
         .from("users")
-        .select("id,email,plan,timezone")
+        .select("id,email,plan,timezone,subscription_status,is_trial,trial_ends_at")
         .eq("id", row.user_id)
-        .maybeSingle<Pick<UserProfile, "id" | "email" | "plan" | "timezone">>();
+        .maybeSingle<
+          Pick<
+            UserProfile,
+            "id" | "email" | "plan" | "timezone" | "subscription_status" | "is_trial" | "trial_ends_at"
+          >
+        >();
 
       if (
         !website ||
         !profile ||
         !PLAN_LIMITS[profile.plan]?.emailReports ||
+        !hasScheduledAutomationAccess(profile) ||
         !website.auto_email_reports ||
         website.report_frequency === "never"
       ) {
         await updateQueueRow(row.id, {
           status: "skipped",
-          failure_reason: "frequency_mismatch",
-          last_error: "Report emails are no longer enabled for this website.",
+          failure_reason: !profile || !hasScheduledAutomationAccess(profile) ? "account_ineligible" : "frequency_mismatch",
+          last_error:
+            !profile || !hasScheduledAutomationAccess(profile)
+              ? "Scheduled reports are no longer enabled for this account."
+              : "Report emails are no longer enabled for this website.",
           last_attempt_at: startedAt
         });
         continue;

@@ -15,6 +15,7 @@ const FREE_WEBSITE_LIMIT = 1;
 type TrialWindowProfile = Pick<UserProfile, "trial_ends_at" | "is_trial">;
 type PaidAccessProfile = Pick<UserProfile, "plan" | "subscription_status">;
 type FeatureAccessProfile = TrialWindowProfile & PaidAccessProfile;
+type ScheduledAutomationProfile = TrialWindowProfile & PaidAccessProfile;
 
 export function getTrialDaysRemaining(profile: Pick<UserProfile, "trial_ends_at">): number {
   if (!profile.trial_ends_at) return 0;
@@ -51,6 +52,14 @@ export function hasActivePaidPlan(profile: PaidAccessProfile): boolean {
     isPaidSubscriptionStatus(profile.subscription_status) &&
     (profile.plan === "starter" || profile.plan === "agency")
   );
+}
+
+export function hasScheduledAutomationAccess(profile: ScheduledAutomationProfile): boolean {
+  if (profile.plan === "free") {
+    return false;
+  }
+
+  return hasActivePaidPlan(profile) || isTrialActive(profile);
 }
 
 export function canAccessFeature(

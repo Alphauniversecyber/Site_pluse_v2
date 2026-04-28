@@ -46,7 +46,7 @@ export function isAuthorizedCronRequest(request: Request) {
   return authHeader === `Bearer ${cronSecret}` || headerSecret === cronSecret;
 }
 
-function isSlowCronJobType(value: string): value is SlowCronJobType {
+export function isSlowCronJobType(value: string): value is SlowCronJobType {
   return SLOW_CRON_JOB_TYPES.includes(value as SlowCronJobType);
 }
 
@@ -106,14 +106,20 @@ export async function enqueueJob(
   };
 }
 
-export async function claimPendingJobs(limit = 5) {
+export async function claimPendingJobs(limit = 5, jobType?: SlowCronJobType) {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("job_queue")
     .select("*")
     .eq("status", "pending")
     .order("created_at", { ascending: true })
     .limit(limit);
+
+  if (jobType) {
+    query = query.eq("job_type", jobType);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);
@@ -180,12 +186,38 @@ export async function markJobFailed(jobId: string, payload: JobQueuePayload) {
   }
 }
 
-export async function getPendingJobCount() {
+export async function getPendingJobCount(jobType?: SlowCronJobType) {
   const admin = createSupabaseAdminClient();
-  const { count, error } = await admin
+  let query = admin
     .from("job_queue")
     .select("*", { count: "exact", head: true })
     .eq("status", "pending");
+
+  if (jobType) {
+    query = query.eq("job_type", jobType);
+  }
+
+  const { count, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return count ?? 0;
+}
+
+export async function getOpenJobCount(jobType?: SlowCronJobType) {
+  const admin = createSupabaseAdminClient();
+  let query = admin
+    .from("job_queue")
+    .select("*", { count: "exact", head: true })
+    .in("status", ["pending", "processing"]);
+
+  if (jobType) {
+    query = query.eq("job_type", jobType);
+  }
+
+  const { count, error } = await query;
 
   if (error) {
     throw new Error(error.message);

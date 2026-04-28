@@ -11,6 +11,7 @@ import {
   getPendingJobCount,
   markJobDone,
   markJobFailed,
+  type SlowCronJobType,
   type JobQueuePayload,
   type JobQueueRow
 } from "@/lib/job-queue";
@@ -202,8 +203,8 @@ async function processJob(job: JobQueueRow) {
   return processUptimeJob(job);
 }
 
-export async function processQueueBatch() {
-  const jobs = await claimPendingJobs(1);
+export async function processQueueBatch(jobType?: SlowCronJobType) {
+  const jobs = await claimPendingJobs(1, jobType);
   const results: Array<Record<string, unknown>> = [];
 
   for (const job of jobs) {
@@ -251,9 +252,10 @@ export async function processQueueBatch() {
     }
   }
 
-  const pendingCount = await getPendingJobCount();
+  const pendingCount = await getPendingJobCount(jobType);
 
   return {
+    jobType: jobType ?? "all",
     processed: jobs.length,
     remaining: pendingCount,
     done: pendingCount === 0,
@@ -261,7 +263,7 @@ export async function processQueueBatch() {
   };
 }
 
-export async function drainQueue(maxIterations = 20) {
+export async function drainQueue(jobType?: SlowCronJobType, maxIterations = 20) {
   let totalProcessed = 0;
   let remaining = 0;
   let iterations = 0;
@@ -269,7 +271,7 @@ export async function drainQueue(maxIterations = 20) {
   const results: Array<Record<string, unknown>> = [];
 
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
-    const batch = await processQueueBatch();
+    const batch = await processQueueBatch(jobType);
     iterations = iteration;
     totalProcessed += batch.processed;
     remaining = batch.remaining;
@@ -282,6 +284,7 @@ export async function drainQueue(maxIterations = 20) {
   }
 
   return {
+    jobType: jobType ?? "all",
     processed: totalProcessed,
     remaining,
     done,
