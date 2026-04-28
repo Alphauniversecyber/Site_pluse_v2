@@ -57,7 +57,9 @@ jobs:
           echo "Triggering /api/cron/process-paddle-webhooks"
           curl --fail --show-error --silent \
             --location \
+            --location-trusted \
             --request GET \
+            --header "Accept: application/json" \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/process-paddle-webhooks"
           echo
@@ -70,7 +72,9 @@ jobs:
           echo "Triggering /api/cron/process-scans"
           curl --fail --show-error --silent \
             --location \
+            --location-trusted \
             --request GET \
+            --header "Accept: application/json" \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/process-scans"
           echo
@@ -83,7 +87,9 @@ jobs:
           echo "Triggering /api/cron/process-uptime"
           curl --fail --show-error --silent \
             --location \
+            --location-trusted \
             --request GET \
+            --header "Accept: application/json" \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/process-uptime"
           echo
@@ -96,7 +102,9 @@ jobs:
           echo "Triggering /api/cron/sync-uptimerobot"
           curl --fail --show-error --silent \
             --location \
+            --location-trusted \
             --request GET \
+            --header "Accept: application/json" \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/sync-uptimerobot"
           echo
@@ -109,7 +117,9 @@ jobs:
           echo "Triggering /api/cron/process-competitors"
           curl --fail --show-error --silent \
             --location \
+            --location-trusted \
             --request GET \
+            --header "Accept: application/json" \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/process-competitors"
           echo
@@ -122,7 +132,9 @@ jobs:
           echo "Triggering /api/cron/process-reports"
           curl --fail --show-error --silent \
             --location \
+            --location-trusted \
             --request GET \
+            --header "Accept: application/json" \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/process-reports"
           echo
@@ -135,7 +147,9 @@ jobs:
           echo "Triggering /api/cron/expire-trials"
           curl --fail --show-error --silent \
             --location \
+            --location-trusted \
             --request GET \
+            --header "Accept: application/json" \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/expire-trials"
           echo
@@ -148,7 +162,9 @@ jobs:
           echo "Triggering /api/cron/process-lifecycle-emails"
           curl --fail --show-error --silent \
             --location \
+            --location-trusted \
             --request GET \
+            --header "Accept: application/json" \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/process-lifecycle-emails"
           echo
@@ -161,15 +177,31 @@ jobs:
 
           for iteration in $(seq 1 20); do
             echo "Processing worker queue batch ${iteration}"
-            response="$(curl --fail --show-error --silent \
+            response_file="$(mktemp)"
+            headers_file="$(mktemp)"
+            curl --fail --show-error --silent \
               --location \
+              --location-trusted \
               --request GET \
+              --header "Accept: application/json" \
               --header "Authorization: Bearer ${CRON_SECRET}" \
-              "${base_url}/api/worker/process-queue")"
+              --dump-header "$headers_file" \
+              --output "$response_file" \
+              "${base_url}/api/worker/process-queue"
 
+            response="$(cat "$response_file")"
             echo "$response"
 
+            if ! printf '%s' "$response" | node -e "const fs = require('fs'); const raw = fs.readFileSync(0, 'utf8').trim(); if (!raw.startsWith('{')) process.exit(1); JSON.parse(raw);" >/dev/null 2>&1; then
+              echo "Worker response was not valid JSON." >&2
+              echo "Response headers:" >&2
+              cat "$headers_file" >&2
+              rm -f "$response_file" "$headers_file"
+              exit 1
+            fi
+
             has_more="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Boolean(payload?.data?.hasMore)));" )"
+            rm -f "$response_file" "$headers_file"
 
             if [ "$has_more" != "true" ]; then
               exit 0
