@@ -79,6 +79,36 @@ jobs:
             "${base_url}/api/cron/process-scans"
           echo
 
+      - name: Drain queued slow jobs
+        if: ${{ github.event.schedule == '0 6 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-scans')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+
+          for iteration in $(seq 1 20); do
+            echo "Processing worker queue batch ${iteration}"
+            response="$(curl --fail --show-error --silent \
+              --location \
+              --location-trusted \
+              --request GET \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer ${CRON_SECRET}" \
+              "${base_url}/api/worker/process-queue")"
+            echo "$response"
+
+            done_flag="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Boolean(payload?.done)));" )"
+            remaining="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Number(payload?.remaining ?? NaN)));" )"
+
+            if [ "$done_flag" = "true" ] || [ "$remaining" = "0" ]; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          echo "Worker queue still has pending jobs after 20 batches." >&2
+          exit 1
+
       - name: Trigger process-uptime
         if: ${{ github.event.schedule == '0 7 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-uptime')) }}
         run: |
@@ -93,6 +123,36 @@ jobs:
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/process-uptime"
           echo
+
+      - name: Drain queued slow jobs
+        if: ${{ github.event.schedule == '0 7 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-uptime')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+
+          for iteration in $(seq 1 20); do
+            echo "Processing worker queue batch ${iteration}"
+            response="$(curl --fail --show-error --silent \
+              --location \
+              --location-trusted \
+              --request GET \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer ${CRON_SECRET}" \
+              "${base_url}/api/worker/process-queue")"
+            echo "$response"
+
+            done_flag="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Boolean(payload?.done)));" )"
+            remaining="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Number(payload?.remaining ?? NaN)));" )"
+
+            if [ "$done_flag" = "true" ] || [ "$remaining" = "0" ]; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          echo "Worker queue still has pending jobs after 20 batches." >&2
+          exit 1
 
       - name: Trigger sync-uptimerobot
         if: ${{ github.event.schedule == '0 8 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'sync-uptimerobot')) }}
@@ -124,6 +184,36 @@ jobs:
             "${base_url}/api/cron/process-competitors"
           echo
 
+      - name: Drain queued slow jobs
+        if: ${{ github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-competitors')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+
+          for iteration in $(seq 1 20); do
+            echo "Processing worker queue batch ${iteration}"
+            response="$(curl --fail --show-error --silent \
+              --location \
+              --location-trusted \
+              --request GET \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer ${CRON_SECRET}" \
+              "${base_url}/api/worker/process-queue")"
+            echo "$response"
+
+            done_flag="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Boolean(payload?.done)));" )"
+            remaining="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Number(payload?.remaining ?? NaN)));" )"
+
+            if [ "$done_flag" = "true" ] || [ "$remaining" = "0" ]; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          echo "Worker queue still has pending jobs after 20 batches." >&2
+          exit 1
+
       - name: Trigger process-reports
         if: ${{ github.event.schedule == '0 10 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-reports')) }}
         run: |
@@ -138,6 +228,36 @@ jobs:
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/process-reports"
           echo
+
+      - name: Drain queued slow jobs
+        if: ${{ github.event.schedule == '0 10 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-reports')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+
+          for iteration in $(seq 1 20); do
+            echo "Processing worker queue batch ${iteration}"
+            response="$(curl --fail --show-error --silent \
+              --location \
+              --location-trusted \
+              --request GET \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer ${CRON_SECRET}" \
+              "${base_url}/api/worker/process-queue")"
+            echo "$response"
+
+            done_flag="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Boolean(payload?.done)));" )"
+            remaining="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Number(payload?.remaining ?? NaN)));" )"
+
+            if [ "$done_flag" = "true" ] || [ "$remaining" = "0" ]; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          echo "Worker queue still has pending jobs after 20 batches." >&2
+          exit 1
 
       - name: Trigger expire-trials
         if: ${{ github.event.schedule == '0 11 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'expire-trials')) }}
@@ -168,45 +288,3 @@ jobs:
             --header "Authorization: Bearer ${CRON_SECRET}" \
             "${base_url}/api/cron/process-lifecycle-emails"
           echo
-
-      - name: Drain queued slow jobs
-        if: ${{ github.event.schedule == '0 6 * * *' || github.event.schedule == '0 7 * * *' || github.event.schedule == '0 9 * * *' || github.event.schedule == '0 10 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-scans' || github.event.inputs.job == 'process-uptime' || github.event.inputs.job == 'process-competitors' || github.event.inputs.job == 'process-reports')) }}
-        run: |
-          set -euo pipefail
-          base_url="${SITE_URL%/}"
-
-          for iteration in $(seq 1 60); do
-            echo "Processing worker queue batch ${iteration}"
-            response_file="$(mktemp)"
-            headers_file="$(mktemp)"
-            curl --fail --show-error --silent \
-              --location \
-              --location-trusted \
-              --request GET \
-              --header "Accept: application/json" \
-              --header "Authorization: Bearer ${CRON_SECRET}" \
-              --dump-header "$headers_file" \
-              --output "$response_file" \
-              "${base_url}/api/worker/process-queue"
-
-            response="$(cat "$response_file")"
-            echo "$response"
-
-            if ! printf '%s' "$response" | node -e "const fs = require('fs'); const raw = fs.readFileSync(0, 'utf8').trim(); if (!raw.startsWith('{')) process.exit(1); JSON.parse(raw);" >/dev/null 2>&1; then
-              echo "Worker response was not valid JSON." >&2
-              echo "Response headers:" >&2
-              cat "$headers_file" >&2
-              rm -f "$response_file" "$headers_file"
-              exit 1
-            fi
-
-            has_more="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Boolean(payload?.data?.hasMore)));" )"
-            rm -f "$response_file" "$headers_file"
-
-            if [ "$has_more" != "true" ]; then
-              exit 0
-            fi
-          done
-
-          echo "Worker queue still has pending jobs after 60 batches." >&2
-          exit 1

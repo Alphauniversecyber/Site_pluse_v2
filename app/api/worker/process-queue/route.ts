@@ -1,4 +1,6 @@
-import { apiError, apiSuccess } from "@/lib/api";
+import { NextResponse } from "next/server";
+
+import { apiError } from "@/lib/api";
 import { logAdminError } from "@/lib/admin/logging";
 import {
   enqueueCompetitorScanJobsBatch,
@@ -20,6 +22,12 @@ import { processDailyUptimeChecksBatch } from "@/lib/uptime-monitoring";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+const noStoreHeaders = {
+  "Cache-Control": "no-store, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0"
+};
 
 const SCAN_DISCOVERY_LIMIT = 25;
 const SCAN_QUEUE_LIMIT = 1;
@@ -276,12 +284,18 @@ export async function GET(request: Request) {
 
     const pendingCount = await getPendingJobCount();
 
-    return apiSuccess({
-      processedCount: jobs.length,
-      results,
-      pendingCount,
-      hasMore: pendingCount > 0
-    });
+    return NextResponse.json(
+      {
+        processed: jobs.length,
+        remaining: pendingCount,
+        done: pendingCount === 0,
+        results
+      },
+      {
+        status: 200,
+        headers: noStoreHeaders
+      }
+    );
   } catch (error) {
     return apiError(
       error instanceof Error ? error.message : "Unable to process the job queue.",
