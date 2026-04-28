@@ -1,0 +1,99 @@
+name: SitePulse Crons
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+    - cron: "0 6 * * *"
+    - cron: "0 7 * * *"
+    - cron: "0 8 * * *"
+    - cron: "0 9 * * *"
+    - cron: "0 10 * * *"
+    - cron: "0 11 * * *"
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: sitepulse-crons
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-crons:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Validate scheduler secrets
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$SITE_URL"
+          test -n "$CRON_SECRET"
+
+      - name: Trigger cron routes
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+
+          base_url="${SITE_URL%/}"
+
+          trigger_route() {
+            local path="$1"
+
+            echo "Triggering ${path}"
+            curl --fail --show-error --silent \
+              --request GET \
+              --header "Authorization: Bearer ${CRON_SECRET}" \
+              "${base_url}${path}"
+            echo
+          }
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            trigger_route "/api/cron/process-paddle-webhooks"
+            trigger_route "/api/cron/process-scans"
+            trigger_route "/api/cron/process-uptime"
+            trigger_route "/api/cron/sync-uptimerobot"
+            trigger_route "/api/cron/process-competitors"
+            trigger_route "/api/cron/process-reports"
+            trigger_route "/api/cron/expire-trials"
+            trigger_route "/api/cron/process-lifecycle-emails"
+            exit 0
+          fi
+
+          case "${SCHEDULE}" in
+            "0 5 * * *")
+              trigger_route "/api/cron/process-paddle-webhooks"
+              ;;
+            "0 6 * * *")
+              trigger_route "/api/cron/process-scans"
+              ;;
+            "0 7 * * *")
+              trigger_route "/api/cron/process-uptime"
+              ;;
+            "0 8 * * *")
+              trigger_route "/api/cron/sync-uptimerobot"
+              ;;
+            "0 9 * * *")
+              trigger_route "/api/cron/process-competitors"
+              ;;
+            "0 10 * * *")
+              trigger_route "/api/cron/process-reports"
+              ;;
+            "0 11 * * *")
+              trigger_route "/api/cron/expire-trials"
+              ;;
+            "0 12 * * *")
+              trigger_route "/api/cron/process-lifecycle-emails"
+              ;;
+            *)
+              echo "No cron route mapped for schedule: ${SCHEDULE}" >&2
+              exit 1
+              ;;
+          esac

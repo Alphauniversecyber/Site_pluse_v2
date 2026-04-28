@@ -36,25 +36,25 @@ export const ADMIN_CRON_DEFINITIONS: Record<
     label: "process-scans",
     path: "/api/cron/process-scans",
     schedule: "0 6 * * *",
-    description: "Daily Vercel fallback for due website scans. Frequent batch runs come from the GitHub scheduler on Hobby."
+    description: "Daily GitHub Actions job for due website scans. You can also run it manually from the admin panel when you need to recover backlog."
   },
   "process-reports": {
     label: "process-reports",
     path: "/api/cron/process-reports",
     schedule: "0 10 * * *",
-    description: "Daily Vercel fallback for scheduled report emails. Frequent batch runs come from the GitHub scheduler on Hobby."
+    description: "Daily GitHub Actions job for scheduled report emails, with manual re-runs available from the admin panel."
   },
   "process-uptime": {
     label: "process-uptime",
     path: "/api/cron/process-uptime",
     schedule: "0 7 * * *",
-    description: "Daily Vercel fallback for uptime checks. Frequent batch runs come from the GitHub scheduler on Hobby."
+    description: "Daily GitHub Actions job for uptime checks."
   },
   "sync-uptimerobot": {
     label: "sync-uptimerobot",
     path: "/api/cron/sync-uptimerobot",
     schedule: "0 8 * * *",
-    description: "Daily Vercel fallback for UptimeRobot sync. Frequent batch runs come from the GitHub scheduler on Hobby."
+    description: "Daily GitHub Actions job for syncing UptimeRobot monitors."
   },
   "process-competitors": {
     label: "process-competitors",
@@ -78,7 +78,7 @@ export const ADMIN_CRON_DEFINITIONS: Record<
     label: "process-paddle-webhooks",
     path: "/api/cron/process-paddle-webhooks",
     schedule: "0 5 * * *",
-    description: "Daily Vercel fallback for queued Paddle webhooks, with immediate kicks from the live webhook endpoint and the GitHub scheduler on Hobby."
+    description: "Daily GitHub Actions job for queued Paddle webhooks, alongside immediate kicks from the live webhook endpoint."
   }
 };
 

@@ -23,5 +23,6 @@ Production-ready SaaS platform for website performance, SEO, accessibility, and 
 
 - Target hosting: Vercel
 - Required env vars: see `.env.example`
-- Optional scheduled jobs: configure the included cron routes in `vercel.json`
+- Scheduled jobs: GitHub Actions triggers the cron routes defined in `.github/workflows/crons.yml`
+- GitHub Actions secrets required for cron runs: `SITE_URL` and `CRON_SECRET`
 "# Site_pluse" 

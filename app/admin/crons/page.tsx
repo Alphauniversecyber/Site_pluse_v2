@@ -52,7 +52,7 @@ export default async function AdminCronsPage({
     <div>
       <AdminPageHeader
         title="Crons"
-        description="Monitor schedules, see how many website scans were required vs completed today, and manually kick off a job when you need to recover backlog or debug production behavior."
+        description="Monitor GitHub Actions schedules, see how many website scans were required vs completed today, and manually kick off a job when you need to recover backlog or debug production behavior."
       />
 
       <AdminErrorNotice message={data.error} />
