@@ -8,6 +8,7 @@ import {
 import {
   claimPendingJobs,
   enqueueJob,
+  getOpenJobCount,
   getPendingJobCount,
   markJobDone,
   markJobFailed,
@@ -253,12 +254,14 @@ export async function processQueueBatch(jobType?: SlowCronJobType) {
   }
 
   const pendingCount = await getPendingJobCount(jobType);
+  const openCount = await getOpenJobCount(jobType);
 
   return {
     jobType: jobType ?? "all",
     processed: jobs.length,
-    remaining: pendingCount,
-    done: pendingCount === 0,
+    remaining: openCount,
+    pending: pendingCount,
+    done: openCount === 0,
     results
   };
 }

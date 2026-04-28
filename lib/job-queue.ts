@@ -33,6 +33,8 @@ export type JobQueueRow = {
   processed_at: string | null;
 };
 
+const STALE_PROCESSING_MINUTES = 15;
+
 export function isAuthorizedCronRequest(request: Request) {
   const authHeader = request.headers.get("authorization");
   const headerSecret = request.headers.get("x-sitepulse-cron-secret");
@@ -48,6 +50,32 @@ export function isAuthorizedCronRequest(request: Request) {
 
 export function isSlowCronJobType(value: string): value is SlowCronJobType {
   return SLOW_CRON_JOB_TYPES.includes(value as SlowCronJobType);
+}
+
+export async function releaseStaleProcessingJobs(jobType?: SlowCronJobType) {
+  const admin = createSupabaseAdminClient();
+  const staleBefore = new Date(Date.now() - STALE_PROCESSING_MINUTES * 60_000).toISOString();
+  let query = admin
+    .from("job_queue")
+    .update({
+      status: "pending"
+    })
+    .eq("status", "processing")
+    .lt("created_at", staleBefore)
+    .is("processed_at", null)
+    .select("*");
+
+  if (jobType) {
+    query = query.eq("job_type", jobType);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as JobQueueRow[];
 }
 
 export async function findOpenJob(jobType: SlowCronJobType) {
@@ -76,6 +104,7 @@ export async function enqueueJob(
   }
 ) {
   if (options?.skipIfOpen) {
+    await releaseStaleProcessingJobs(jobType);
     const existing = await findOpenJob(jobType);
     if (existing) {
       return {
@@ -107,6 +136,7 @@ export async function enqueueJob(
 }
 
 export async function claimPendingJobs(limit = 5, jobType?: SlowCronJobType) {
+  await releaseStaleProcessingJobs(jobType);
   const admin = createSupabaseAdminClient();
   let query = admin
     .from("job_queue")
