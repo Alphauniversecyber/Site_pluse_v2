@@ -15,6 +15,7 @@ export async function GET(request: Request) {
       const queued = await enqueueJob(
         "process-uptime",
         {
+          mode: "process-queue",
           offset: 0,
           requestedAt: new Date().toISOString(),
           source: "cron"

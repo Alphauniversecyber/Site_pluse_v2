@@ -12,7 +12,7 @@ export type SlowCronJobType = (typeof SLOW_CRON_JOB_TYPES)[number];
 export type JobQueueStatus = "pending" | "processing" | "done" | "failed";
 
 export type JobQueuePayload = {
-  mode?: "discover-and-process" | "process-only";
+  mode?: "discover" | "process-queue";
   discoveryOffset?: number;
   offset?: number;
   requestedAt?: string;

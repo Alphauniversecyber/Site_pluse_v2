@@ -15,7 +15,7 @@ export async function GET(request: Request) {
       const queued = await enqueueJob(
         "process-reports",
         {
-          mode: "discover-and-process",
+          mode: "discover",
           discoveryOffset: 0,
           requestedAt: new Date().toISOString(),
           source: "cron"

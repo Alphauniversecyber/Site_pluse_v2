@@ -29,35 +29,38 @@ function getNumber(value: unknown, fallback = 0) {
 
 async function processScanJob(job: JobQueueRow) {
   const payload = job.payload ?? {};
-  const mode = payload.mode === "process-only" ? "process-only" : "discover-and-process";
+  const mode = payload.mode === "process-queue" ? "process-queue" : "discover";
   const discoveryOffset = getNumber(payload.discoveryOffset, 0);
 
-  const enqueueResult =
-    mode === "process-only"
-      ? {
-          queuedCount: 0,
-          inspectedCount: 0,
-          nextOffset: null,
-          hasMoreCandidates: false
-        }
-      : await enqueueDueScanJobs(SCAN_DISCOVERY_LIMIT, discoveryOffset);
-  const queueResult = await processQueuedScanJobs(SCAN_QUEUE_LIMIT);
+  if (mode === "discover") {
+    const enqueueResult = await enqueueDueScanJobs(SCAN_DISCOVERY_LIMIT, discoveryOffset);
 
-  if (enqueueResult.hasMoreCandidates) {
     await enqueueJob(
       "process-scans",
       {
-        mode: "discover-and-process",
-        discoveryOffset: enqueueResult.nextOffset ?? 0,
+        mode: enqueueResult.hasMoreCandidates ? "discover" : "process-queue",
+        discoveryOffset: enqueueResult.hasMoreCandidates ? enqueueResult.nextOffset ?? 0 : 0,
         requestedAt: new Date().toISOString(),
         source: "worker-continuation"
       }
     );
-  } else if (queueResult.hasMore) {
+
+    return {
+      phase: "discover",
+      queuedCount: enqueueResult.queuedCount,
+      discoveredCount: enqueueResult.inspectedCount,
+      hasMore: true,
+      nextOffset: enqueueResult.nextOffset
+    };
+  }
+
+  const queueResult = await processQueuedScanJobs(SCAN_QUEUE_LIMIT);
+
+  if (queueResult.hasMore) {
     await enqueueJob(
       "process-scans",
       {
-        mode: "process-only",
+        mode: "process-queue",
         requestedAt: new Date().toISOString(),
         source: "worker-continuation"
       }
@@ -65,46 +68,48 @@ async function processScanJob(job: JobQueueRow) {
   }
 
   return {
-    queuedCount: enqueueResult.queuedCount,
-    discoveredCount: enqueueResult.inspectedCount,
+    phase: "process-queue",
     processedCount: queueResult.processedCount,
     queueInspectedCount: queueResult.inspectedCount,
-    hasMore: enqueueResult.hasMoreCandidates || queueResult.hasMore,
-    nextOffset: enqueueResult.nextOffset
+    hasMore: queueResult.hasMore,
+    nextOffset: null
   };
 }
 
 async function processReportJob(job: JobQueueRow) {
   const payload = job.payload ?? {};
-  const mode = payload.mode === "process-only" ? "process-only" : "discover-and-process";
+  const mode = payload.mode === "process-queue" ? "process-queue" : "discover";
   const discoveryOffset = getNumber(payload.discoveryOffset, 0);
 
-  const enqueueResult =
-    mode === "process-only"
-      ? {
-          queuedCount: 0,
-          inspectedCount: 0,
-          nextOffset: null,
-          hasMoreCandidates: false
-        }
-      : await enqueueDueReportEmails(REPORT_DISCOVERY_LIMIT, discoveryOffset);
-  const queueResult = await processQueuedReportEmails(REPORT_QUEUE_LIMIT);
+  if (mode === "discover") {
+    const enqueueResult = await enqueueDueReportEmails(REPORT_DISCOVERY_LIMIT, discoveryOffset);
 
-  if (enqueueResult.hasMoreCandidates) {
     await enqueueJob(
       "process-reports",
       {
-        mode: "discover-and-process",
-        discoveryOffset: enqueueResult.nextOffset ?? 0,
+        mode: enqueueResult.hasMoreCandidates ? "discover" : "process-queue",
+        discoveryOffset: enqueueResult.hasMoreCandidates ? enqueueResult.nextOffset ?? 0 : 0,
         requestedAt: new Date().toISOString(),
         source: "worker-continuation"
       }
     );
-  } else if (queueResult.hasMore) {
+
+    return {
+      phase: "discover",
+      queuedCount: enqueueResult.queuedCount,
+      discoveredCount: enqueueResult.inspectedCount,
+      hasMore: true,
+      nextOffset: enqueueResult.nextOffset
+    };
+  }
+
+  const queueResult = await processQueuedReportEmails(REPORT_QUEUE_LIMIT);
+
+  if (queueResult.hasMore) {
     await enqueueJob(
       "process-reports",
       {
-        mode: "process-only",
+        mode: "process-queue",
         requestedAt: new Date().toISOString(),
         source: "worker-continuation"
       }
@@ -112,12 +117,11 @@ async function processReportJob(job: JobQueueRow) {
   }
 
   return {
-    queuedCount: enqueueResult.queuedCount,
-    discoveredCount: enqueueResult.inspectedCount,
+    phase: "process-queue",
     processedCount: queueResult.processedCount,
     queueInspectedCount: queueResult.inspectedCount,
-    hasMore: enqueueResult.hasMoreCandidates || queueResult.hasMore,
-    nextOffset: enqueueResult.nextOffset
+    hasMore: queueResult.hasMore,
+    nextOffset: null
   };
 }
 
@@ -133,6 +137,7 @@ async function processUptimeJob(job: JobQueueRow) {
     await enqueueJob(
       "process-uptime",
       {
+        mode: "process-queue",
         offset: result.nextCursor ?? 0,
         requestedAt: new Date().toISOString(),
         source: "worker-continuation"
@@ -166,7 +171,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const jobs = await claimPendingJobs(5);
+    const jobs = await claimPendingJobs(1);
     const results: Array<Record<string, unknown>> = [];
 
     for (const job of jobs) {
