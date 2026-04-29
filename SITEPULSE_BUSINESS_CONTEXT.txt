@@ -1,0 +1,283 @@
+SitePulse business context
+Repo-derived summary written on 2026-04-29
+
+Important note:
+This file is based on the current codebase, schema, routes, copy, and logs. It is a strong implementation summary, not a founder-confirmed business memo. I did not verify live production behavior, and I did not run a full build.
+
+1. Current state
+
+What looks fully implemented in code right now:
+- Public marketing site for SitePulse with positioning, pricing, roadmap, changelog, auth pages, legal pages, and a free scan funnel.
+- Authenticated dashboard with overview, websites, reports, billing, branding, and settings.
+- Website CRUD, manual scan runs, scan history, scheduling, notifications, and plan enforcement.
+- Scan pipeline for performance, SEO, accessibility, best practices, SSL, security headers, broken links, CrUX, uptime, and competitor monitoring.
+- PDF report generation, Supabase Storage upload, signed download links, and email sending through Resend.
+- Paddle billing flow with checkout config, transaction confirmation, webhook queueing, webhook processing, customer portal, cancellation, and refund logic.
+- Team access and white-label branding for higher-tier accounts.
+- Client-share dashboard via magic token links at `/d/[token]`.
+- Google Analytics and Google Search Console connector routes for client dashboard data.
+- Internal admin area for billing, reports, users, cron jobs, emails, errors, and website monitoring.
+
+What looks incomplete, fragile, or not fully verified:
+- Some lifecycle and engagement emails are intentionally disabled in code to stay within daily send limits.
+- The app depends heavily on external env vars and services. Missing Supabase, Paddle, Resend, Groq, Gemini, or Google OAuth credentials will break parts of the product.
+- PDF is treated as an area that can fail sometimes: the app uses a browser/Puppeteer renderer first, then falls back to a jsPDF renderer if needed.
+- Local build/start reliability is not a safe signal here. I was explicitly told not to rely on build for this environment.
+- TypeScript currently passes with `npm run typecheck`.
+
+2. Pricing
+
+Current pricing defined in code:
+- Free plan, marketed as Starter:
+  $0/month
+  1 website
+  Weekly scans
+  30-day history
+  No PDF reports
+  No scheduled email reports
+
+- Paid internal `starter` plan, marketed as Growth:
+  Monthly original price: $49
+  Monthly sale price: $19
+  Yearly original price: $468
+  Yearly sale price: $187
+  Yearly savings label: Save 16%
+  Includes 5 websites, daily scans, 90-day history, PDF reports, weekly email reports
+
+- Paid internal `agency` plan, marketed as Pro:
+  Monthly original price: $149
+  Monthly sale price: $59
+  Yearly original price: $1428
+  Yearly sale price: $571
+  Yearly savings label: Save 19%
+  Includes 30 websites, daily scans, 1-year history, white-label reports, team access, priority alerts
+
+Sale/launch positioning currently in UI copy:
+- "Founding Member Sale"
+- Sale urgency copy references June 30, 2026
+- Cancel anytime
+- Founding price lock while subscribed
+
+Important pricing nuance from the schema:
+- New signups are auto-created as `plan='starter'`, `subscription_status='trialing'`, with a 14-day trial.
+- Even so, non-paid access is still partially restricted in app logic. For example, unpaid/trial users are effectively limited to 1 website until they convert.
+
+3. Pages and routes
+
+Public pages:
+- `/`
+- `/features`
+- `/pricing`
+- `/roadmap`
+- `/changelog`
+- `/contact`
+- `/privacy`
+- `/terms`
+- `/refund`
+- `/login`
+- `/signup`
+- `/reset-password`
+- `/unlock-preview/[id]`
+
+Authenticated dashboard pages:
+- `/dashboard`
+- `/dashboard/websites`
+- `/dashboard/websites/add`
+- `/dashboard/websites/[id]`
+- `/dashboard/websites/[id]/scans`
+- `/dashboard/reports`
+- `/dashboard/billing`
+- `/dashboard/branding`
+- `/dashboard/settings`
+
+Client-facing shared page:
+- `/d/[token]`
+
+Admin pages:
+- `/admin`
+- `/admin/login`
+- `/admin/billing`
+- `/admin/crons`
+- `/admin/emails`
+- `/admin/errors`
+- `/admin/reports`
+- `/admin/users`
+- `/admin/websites`
+
+Major API groups:
+- `/api/preview-scan`
+- `/api/scan/*`
+- `/api/scans/*`
+- `/api/reports/*`
+- `/api/websites/*`
+- `/api/user/settings`
+- `/api/team/*`
+- `/api/branding`
+- `/api/paddle/*`
+- `/api/notifications`
+- `/api/cron/*`
+- `/api/d/*` for client dashboard data and Google connections
+- `/api/admin/*`
+
+4. Auth
+
+Auth appears to be:
+- Supabase Auth
+- Email/password signup
+- Email/password login
+- Email confirmation flow
+- Password reset flow
+- Middleware-protected dashboard routes
+
+What auth is not:
+- I do not see Google OAuth for account login.
+
+What Google OAuth is used for:
+- Google Analytics connection
+- Google Search Console connection
+- Those are product data integrations, not primary account auth.
+
+5. Payments
+
+Payments are implemented with Paddle, not Stripe.
+
+Implemented billing behavior in code:
+- Paddle overlay checkout
+- Checkout config route
+- Checkout completion confirmation route
+- Webhook signature verification
+- Webhook queue table plus cron-based processing
+- Paddle customer portal access
+- Subscription cancellation
+- 14-day refund request logic for the latest payment
+- Special yearly-trial handling where refund UI is hidden until the first paid annual charge
+
+Business meaning:
+- Billing is not "still pending" in the codebase. It is a real integration with lifecycle handling.
+- The product is clearly built around paid subscription conversion after the trial/free funnel.
+
+6. PDF reports
+
+Current PDF state:
+- Implemented and central to the product.
+- Report generation loads website, scan, branding, history, SEO audit, SSL, security headers, CrUX, broken links, uptime, and competitor data.
+- PDFs are uploaded into a private Supabase Storage bucket.
+- Reports can be downloaded through signed URLs and emailed through Resend.
+
+Renderer setup:
+- First choice: browser-rendered HTML PDF
+- Fallback: structured jsPDF renderer
+
+Interpretation:
+- This is more mature than a prototype.
+- It is not safe to call it "bug-free" because the fallback path and admin error logging both imply this area has had reliability issues before.
+- The changelog says template-based PDF reports were improved in April 2026 for more stable rendering.
+
+7. Known bugs and rough edges
+
+Concrete issues visible from the repo:
+- Text encoding artifacts exist in some UI copy. There are strings showing broken characters like `â€”`, `Â·`, and emoji corruption.
+- `app/(public)/pricing/page.tsx` has unreachable legacy JSX after `return <AgencyPricingPage />;`.
+- Several lifecycle/engagement emails are commented out with notes saying they were disabled to stay within daily send limits.
+- `error.txt` shows a prior GitHub push was blocked by secret scanning because a Groq API key existed in `.env.example`. That suggests secret hygiene problems existed in repo history.
+- Dev/start logs show the app can fail hard when Supabase env vars are missing.
+- Start logs also show local environment/path issues around `.next` and prior working directories, so local runtime health should be treated carefully.
+
+Operational caveats:
+- A lot of the product only works if cron jobs are configured correctly.
+- A lot of value also depends on third-party APIs remaining configured and reachable.
+
+8. Next features / roadmap
+
+Public roadmap currently says the next focus is:
+- Client-ready benchmarking
+  Expanded competitor comparisons, benchmark narratives, and proof points for agencies selling retainers.
+
+- Agency delivery automation
+  More report scheduling, approval workflows, and white-label delivery controls for multi-client teams.
+
+- Retention intelligence
+  Renewal-risk indicators, client health summaries, and stronger action prompts to help agencies defend recurring revenue.
+
+My read of the near-term product direction:
+- Make SitePulse feel less like a generic monitoring app and more like an agency operating system for retention and client communication.
+- Go deeper on automation, benchmarking, and retention-proof storytelling.
+
+9. Business model
+
+The business model in code and copy looks like this:
+- Free top-of-funnel website scan preview
+- Free or quasi-free lightweight workspace entry point
+- Paid subscription conversion for ongoing monitoring, reports, and delivery workflows
+- Strong emphasis on agencies, not general consumers
+
+The actual funnel feels like:
+- Run a free scan
+- Use it in a pitch or review conversation
+- Create account or log in to unlock/save the result
+- Move into trial
+- Convert to Growth or Pro for multi-site monitoring, reports, and brandable client delivery
+
+Plan/value structure:
+- Free plan validates demand and starts the conversation
+- Growth standardizes agency delivery
+- Pro turns SitePulse into a premium white-labeled client system
+
+Important enforcement details in code:
+- Free plan: 1 website, weekly scans, 30-day history, no PDF/email reports
+- Growth: 5 websites, daily/weekly/monthly scans, 90-day history, PDF + email reports
+- Pro: 30 websites, same scan frequencies, 365-day history, white-label, 3 team members, CSV export
+
+10. Other context an AI should always know about SitePulse
+
+Core positioning:
+- SitePulse is repeatedly framed as an agency growth, retention, and proof-of-value system.
+- It does not want to feel like a commodity SEO tool.
+- The copy strongly prefers business impact over raw technical jargon.
+
+Tone and product philosophy:
+- Premium
+- Agency-first
+- ROI-first
+- Plain English where possible
+- Client-ready outputs
+- White-label delivery matters
+
+What the product is trying to help agencies do:
+- Close more clients
+- Retain them longer
+- Show measurable value without building manual audit decks every week
+- Look proactive before clients ask what changed
+
+Important strategic identity:
+- Free scan preview is not a side feature. It is a major acquisition mechanic.
+- Reports are not just exports. They are part of the retention and sales workflow.
+- Shared dashboards, branded delivery, and business-impact framing are central to the product identity.
+
+Useful caution for future AI work:
+- Keep copy aligned to agencies, retainers, proof, risk reduction, and premium delivery.
+- Do not drift the product into broad "all-in-one SEO platform" messaging.
+- Do not assume Stripe. Billing is Paddle.
+- Do not assume Google login. Auth is Supabase email/password.
+- Do not assume PDF is optional. It is a core deliverable.
+
+11. Verification notes
+
+Verified directly from repo:
+- Routes and pages
+- Schema and plan structure
+- Trial logic
+- Billing logic
+- Report generation flow
+- Marketing and roadmap copy
+- Team, branding, and client dashboard support
+
+Verified by command:
+- `npm run typecheck` passed on 2026-04-29
+
+Not verified live:
+- Real Paddle checkout in production
+- Real email sending
+- Real cron processing
+- Real PDF output quality in this environment
+- Full production build

@@ -235,6 +235,21 @@ async function claimQueueRow(row: ScanJobQueueRow, startedAt: string) {
   return Boolean(data?.id);
 }
 
+async function countDueQueuedScanJobs() {
+  const admin = createSupabaseAdminClient();
+  const { count, error } = await admin
+    .from("scan_job_queue")
+    .select("*", { count: "exact", head: true })
+    .in("status", ["pending", "failed"])
+    .lte("next_attempt_at", new Date().toISOString());
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return count ?? 0;
+}
+
 export async function enqueueDueScanJobs(limit = 250, offset = 0): Promise<EnqueueDueScanJobsResult> {
   const websites = await loadActiveWebsites(limit, offset);
   const profiles = await loadProfiles(Array.from(new Set(websites.map((website) => website.user_id))));
@@ -469,10 +484,12 @@ export async function processQueuedScanJobs(
     }
   }
 
+  const dueQueuedCount = await countDueQueuedScanJobs();
+
   return {
     executedWebsiteIds,
     processedCount: executedWebsiteIds.length,
     inspectedCount,
-    hasMore: inspectedCount < rows.length || rows.length === limit
+    hasMore: inspectedCount < rows.length || dueQueuedCount > 0
   };
 }

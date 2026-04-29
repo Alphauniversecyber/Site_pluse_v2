@@ -33,7 +33,7 @@ export type JobQueueRow = {
   processed_at: string | null;
 };
 
-const STALE_PROCESSING_MINUTES = 15;
+const STALE_PROCESSING_MINUTES = 5;
 
 export function isAuthorizedCronRequest(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -58,11 +58,11 @@ export async function releaseStaleProcessingJobs(jobType?: SlowCronJobType) {
   let query = admin
     .from("job_queue")
     .update({
-      status: "pending"
+      status: "pending",
+      processed_at: null
     })
     .eq("status", "processing")
-    .lt("created_at", staleBefore)
-    .is("processed_at", null)
+    .or(`processed_at.lt.${staleBefore},and(processed_at.is.null,created_at.lt.${staleBefore})`)
     .select("*");
 
   if (jobType) {
@@ -165,7 +165,8 @@ export async function claimPendingJobs(limit = 5, jobType?: SlowCronJobType) {
     const { data: updated, error: claimError } = await admin
       .from("job_queue")
       .update({
-        status: "processing"
+        status: "processing",
+        processed_at: new Date().toISOString()
       })
       .eq("id", row.id)
       .eq("status", "pending")
