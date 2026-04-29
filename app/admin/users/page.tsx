@@ -15,6 +15,8 @@ import {
   parseTextParam
 } from "@/lib/admin/format";
 
+import { runAdminUserAction } from "./actions";
+
 function buildHref(params: URLSearchParams, page: number) {
   const next = new URLSearchParams(params);
   next.set("page", String(page));
@@ -32,6 +34,8 @@ export default async function AdminUsersPage({
   const filter = parseTextParam(searchParams?.filter) || "all";
   const sort = parseTextParam(searchParams?.sort) || "newest";
   const page = parsePageParam(searchParams?.page, 1);
+  const actionStatus = parseTextParam(searchParams?.actionStatus);
+  const actionMessage = parseTextParam(searchParams?.actionMessage);
   const data = await getAdminUsersData({ search, filter, sort, page });
   const params = new URLSearchParams();
   if (search) params.set("search", search);
@@ -54,6 +58,18 @@ export default async function AdminUsersPage({
       />
 
       <AdminErrorNotice message={data.error} />
+
+      {actionMessage ? (
+        <div
+          className={`mb-6 rounded-2xl border px-4 py-3 text-sm ${
+            actionStatus === "success"
+              ? "border-[#14532D] bg-[#052E16] text-[#86EFAC]"
+              : "border-[#7F1D1D] bg-[#450A0A] text-[#FCA5A5]"
+          }`}
+        >
+          {actionMessage}
+        </div>
+      ) : null}
 
       <AdminCard>
         <form className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr_auto]">
@@ -201,6 +217,48 @@ export default async function AdminUsersPage({
                                 </div>
                               </div>
                               <div className="text-xs text-zinc-500">Impersonate (future)</div>
+                              <div className="border-t border-[#232323] pt-3">
+                                <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Account Controls</p>
+                                <div className="mt-3 grid gap-3">
+                                  <form action={runAdminUserAction}>
+                                    <input type="hidden" name="actionType" value="disable" />
+                                    <input type="hidden" name="userId" value={row.id} />
+                                    <input type="hidden" name="page" value={String(page)} />
+                                    <input type="hidden" name="search" value={search} />
+                                    <input type="hidden" name="filter" value={filter} />
+                                    <input type="hidden" name="sort" value={sort} />
+                                    <button
+                                      type="submit"
+                                      className="w-full rounded-xl border border-[#92400E] bg-[#451A03] px-3 py-2 text-xs font-semibold text-[#FCD34D]"
+                                    >
+                                      Disable User
+                                    </button>
+                                  </form>
+                                  <form action={runAdminUserAction} className="rounded-xl border border-[#7F1D1D] bg-[#1A0A0A] p-3">
+                                    <input type="hidden" name="actionType" value="delete" />
+                                    <input type="hidden" name="userId" value={row.id} />
+                                    <input type="hidden" name="page" value={String(page)} />
+                                    <input type="hidden" name="search" value={search} />
+                                    <input type="hidden" name="filter" value={filter} />
+                                    <input type="hidden" name="sort" value={sort} />
+                                    <label className="text-xs font-medium text-[#FCA5A5]" htmlFor={`confirm-delete-${row.id}`}>
+                                      Type DELETE to remove this user and all database records.
+                                    </label>
+                                    <input
+                                      id={`confirm-delete-${row.id}`}
+                                      name="confirmation"
+                                      className="mt-2 w-full rounded-lg border border-[#7F1D1D] bg-[#0D0D0D] px-3 py-2 text-xs text-white outline-none"
+                                      placeholder="DELETE"
+                                    />
+                                    <button
+                                      type="submit"
+                                      className="mt-2 w-full rounded-xl border border-[#991B1B] bg-[#7F1D1D] px-3 py-2 text-xs font-semibold text-white"
+                                    >
+                                      Delete User Data
+                                    </button>
+                                  </form>
+                                </div>
+                              </div>
                             </div>
                           </details>
                         </td>
