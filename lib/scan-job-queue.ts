@@ -16,7 +16,8 @@ type ScanFailureReason =
   | "plan_limit_reached"
   | "queue_backlog"
   | "account_ineligible"
-  | "schedule_disabled";
+  | "schedule_disabled"
+  | "superseded";
 
 type ScanJobQueueRow = {
   id: string;
@@ -58,6 +59,7 @@ export type ProcessQueuedScanJobsResult = {
   executedWebsiteIds: string[];
   processedCount: number;
   inspectedCount: number;
+  settledCount: number;
   hasMore: boolean;
 };
 
@@ -260,6 +262,10 @@ function toScanFrequency(value: ReportFrequency): ScanFrequency | null {
   return value === "never" ? null : value;
 }
 
+function isCurrentPeriod(row: Pick<ScanJobQueueRow, "frequency" | "period_key" | "timezone">) {
+  return row.period_key === getPeriodKey(row.frequency, new Date(), row.timezone);
+}
+
 export async function enqueueDueScanJobs(limit = 250, offset = 0): Promise<EnqueueDueScanJobsResult> {
   const websites = await loadActiveWebsites(limit, offset);
   const profiles = await loadProfiles(Array.from(new Set(websites.map((website) => website.user_id))));
@@ -392,6 +398,7 @@ export async function processQueuedScanJobs(
   const rows = (data ?? []) as ScanJobQueueRow[];
   const executedWebsiteIds: string[] = [];
   let inspectedCount = 0;
+  let settledCount = 0;
 
   for (const row of rows) {
     if (
@@ -412,6 +419,18 @@ export async function processQueuedScanJobs(
         status: "skipped",
         last_attempt_at: new Date().toISOString()
       });
+      settledCount += 1;
+      continue;
+    }
+
+    if (!isCurrentPeriod(row)) {
+      await updateQueueRow(row.id, {
+        status: "skipped",
+        failure_reason: "superseded",
+        last_error: "This queued scan belongs to an older schedule period and was skipped.",
+        last_attempt_at: new Date().toISOString()
+      });
+      settledCount += 1;
       continue;
     }
 
@@ -438,6 +457,7 @@ export async function processQueuedScanJobs(
           last_error: "Scheduled scans are no longer enabled for this account.",
           last_attempt_at: startedAt
         });
+        settledCount += 1;
         continue;
       }
 
@@ -462,6 +482,7 @@ export async function processQueuedScanJobs(
           last_error: "Scheduled scans are disabled because this website is not enabled for scheduled report emails.",
           last_attempt_at: startedAt
         });
+        settledCount += 1;
         continue;
       }
 
@@ -487,6 +508,7 @@ export async function processQueuedScanJobs(
         }
       });
       executedWebsiteIds.push(row.website_id);
+      settledCount += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown scan queue failure.";
       const failureReason = classifyScanFailure(message);
@@ -500,6 +522,7 @@ export async function processQueuedScanJobs(
         next_attempt_at: getRetryAt(Math.min(60, attemptCount * 10)),
         attempt_count: attemptCount
       });
+      settledCount += 1;
       await logScanExecution({
         scanJobId: row.id,
         websiteId: row.website_id,
@@ -531,6 +554,7 @@ export async function processQueuedScanJobs(
     executedWebsiteIds,
     processedCount: executedWebsiteIds.length,
     inspectedCount,
+    settledCount,
     hasMore: inspectedCount < rows.length || dueQueuedCount > 0
   };
 }

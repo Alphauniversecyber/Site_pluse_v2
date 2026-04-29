@@ -20,7 +20,7 @@ import { enqueueDueScanJobs, processQueuedScanJobs } from "@/lib/scan-job-queue"
 import { processDailyUptimeChecksBatch } from "@/lib/uptime-monitoring";
 
 const SCAN_DISCOVERY_LIMIT = 25;
-const SCAN_QUEUE_LIMIT = 1;
+const SCAN_QUEUE_LIMIT = 5;
 const REPORT_DISCOVERY_LIMIT = 25;
 const REPORT_QUEUE_LIMIT = 1;
 const UPTIME_LIMIT = 5;
@@ -55,8 +55,9 @@ async function processScanJob(job: JobQueueRow) {
   }
 
   const queueResult = await processQueuedScanJobs(SCAN_QUEUE_LIMIT);
+  const shouldContinue = queueResult.hasMore && queueResult.settledCount > 0;
 
-  if (queueResult.hasMore) {
+  if (shouldContinue) {
     await enqueueJob("process-scans", {
       mode: "process-queue",
       requestedAt: new Date().toISOString(),
@@ -68,7 +69,8 @@ async function processScanJob(job: JobQueueRow) {
     phase: "process-queue",
     processedCount: queueResult.processedCount,
     queueInspectedCount: queueResult.inspectedCount,
-    hasMore: queueResult.hasMore,
+    queueSettledCount: queueResult.settledCount,
+    hasMore: shouldContinue,
     nextOffset: null
   };
 }
