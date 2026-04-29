@@ -95,6 +95,11 @@ create table if not exists public.users (
   profile_photo_url text,
   uptimerobot_api_key text,
   extra_report_recipients text[] not null default '{}'::text[],
+  ip_address text,
+  country text,
+  city text,
+  region text,
+  located_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -440,6 +445,11 @@ alter table public.users add column if not exists last_payment_date timestamptz;
 alter table public.users add column if not exists trial_end_date timestamptz;
 alter table public.users add column if not exists trial_ends_at timestamptz;
 alter table public.users add column if not exists is_trial boolean not null default false;
+alter table public.users add column if not exists ip_address text;
+alter table public.users add column if not exists country text;
+alter table public.users add column if not exists city text;
+alter table public.users add column if not exists region text;
+alter table public.users add column if not exists located_at timestamptz;
 alter table public.websites add column if not exists competitor_urls jsonb not null default '[]'::jsonb;
 alter table public.websites add column if not exists email_report_frequency public.scan_frequency not null default 'weekly';
 alter table public.websites add column if not exists report_frequency text;

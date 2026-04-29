@@ -23,6 +23,18 @@ function buildHref(params: URLSearchParams, page: number) {
   return `/admin/users?${next.toString()}`;
 }
 
+function formatUserLocation(row: { city: string | null; country: string | null }) {
+  if (row.city && row.country) {
+    return `${row.city}, ${row.country}`;
+  }
+
+  if (row.country) {
+    return row.country;
+  }
+
+  return "Unknown";
+}
+
 export default async function AdminUsersPage({
   searchParams
 }: {
@@ -118,6 +130,8 @@ export default async function AdminUsersPage({
                     <th className="px-4 py-3 font-medium">Status</th>
                     <th className="px-4 py-3 font-medium">Trial ends</th>
                     <th className="px-4 py-3 font-medium">Websites</th>
+                    <th className="px-4 py-3 font-medium">Location</th>
+                    <th className="px-4 py-3 font-medium">IP Address</th>
                     <th className="px-4 py-3 font-medium">Joined</th>
                     <th className="px-4 py-3 font-medium">Last active</th>
                     <th className="px-4 py-3 font-medium">Actions</th>
@@ -173,6 +187,8 @@ export default async function AdminUsersPage({
                           {row.trialEndsAt ? formatAdminDate(row.trialEndsAt) : "N/A"}
                         </td>
                         <td className="px-4 py-4 text-zinc-300">{row.websitesCount}</td>
+                        <td className="px-4 py-4 text-zinc-300">{formatUserLocation(row)}</td>
+                        <td className="px-4 py-4 font-mono text-zinc-300">{row.ipAddress ?? "—"}</td>
                         <td className="px-4 py-4 text-zinc-300">{formatAdminDate(row.joinedAt)}</td>
                         <td className="px-4 py-4 text-zinc-300">
                           {row.lastActiveAt ? formatAdminDate(row.lastActiveAt) : "N/A"}

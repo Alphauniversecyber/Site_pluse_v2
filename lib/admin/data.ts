@@ -37,6 +37,11 @@ type AdminUserRecord = {
   trial_end_date: string | null;
   trial_ends_at: string | null;
   is_trial: boolean;
+  ip_address: string | null;
+  country: string | null;
+  city: string | null;
+  region: string | null;
+  located_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -154,6 +159,11 @@ export type AdminUsersPageData = {
     nextBillingDate: string | null;
     reportsSentCount: number;
     lastScanAt: string | null;
+    ipAddress: string | null;
+    country: string | null;
+    city: string | null;
+    region: string | null;
+    locatedAt: string | null;
   }>;
   total: number;
   page: number;
@@ -408,7 +418,7 @@ async function loadUsersByIds(ids: string[]) {
   const { data } = await admin
     .from("users")
     .select(
-      "id,email,full_name,plan,billing_cycle,subscription_price,subscription_status,next_billing_date,trial_end_date,trial_ends_at,is_trial,created_at,updated_at"
+      "id,email,full_name,plan,billing_cycle,subscription_price,subscription_status,next_billing_date,trial_end_date,trial_ends_at,is_trial,ip_address,country,city,region,located_at,created_at,updated_at"
     )
     .in("id", ids);
 
@@ -688,7 +698,7 @@ export async function getAdminUsersData(input: {
     const { data, error } = await admin
       .from("users")
       .select(
-        "id,email,full_name,plan,billing_cycle,subscription_price,subscription_status,next_billing_date,trial_end_date,trial_ends_at,is_trial,created_at,updated_at"
+        "id,email,full_name,plan,billing_cycle,subscription_price,subscription_status,next_billing_date,trial_end_date,trial_ends_at,is_trial,ip_address,country,city,region,located_at,created_at,updated_at"
       )
       .order("created_at", { ascending: false });
 
@@ -807,7 +817,12 @@ export async function getAdminUsersData(input: {
           subscriptionPrice: user.subscription_price,
           nextBillingDate: user.next_billing_date,
           reportsSentCount: reportCounts,
-          lastScanAt
+          lastScanAt,
+          ipAddress: user.ip_address,
+          country: user.country,
+          city: user.city,
+          region: user.region,
+          locatedAt: user.located_at
         };
       }),
       total,

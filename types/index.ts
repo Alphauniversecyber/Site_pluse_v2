@@ -74,6 +74,11 @@ export interface UserProfile {
   profile_photo_url: string | null;
   uptimerobot_api_key?: string | null;
   extra_report_recipients: string[];
+  ip_address?: string | null;
+  country?: string | null;
+  city?: string | null;
+  region?: string | null;
+  located_at?: string | null;
   created_at: string;
 }
 

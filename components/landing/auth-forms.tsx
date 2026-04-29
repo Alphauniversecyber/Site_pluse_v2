@@ -44,6 +44,12 @@ function buildAuthCallbackUrl(nextPath: string) {
   return callback.toString();
 }
 
+function triggerLocationTracking() {
+  void fetch("/api/auth/track-location", {
+    method: "POST"
+  }).catch(() => undefined);
+}
+
 export function LoginForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -86,6 +92,7 @@ export function LoginForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
               return;
             }
 
+            triggerLocationTracking();
             toast.success("Welcome back.");
             window.location.href = nextPath;
           })}
@@ -193,6 +200,8 @@ export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
               toast.error(error.message);
               return;
             }
+
+            triggerLocationTracking();
 
             if (data.session) {
               toast.success("Account created.");
