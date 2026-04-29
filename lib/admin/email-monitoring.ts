@@ -120,6 +120,10 @@ export type AdminEmailMonitoringData = {
       effectiveFrequency: ReportFrequency;
       latestSuccessfulScanAt: string | null;
       recipientCount: number;
+      reportStatus: QueueStatus | "not_due" | null;
+      reportReason: string;
+      lastReportAttempt: string | null;
+      lastReportError: string | null;
     }>;
   };
   rows: AdminEmailMonitoringRow[];
@@ -429,6 +433,13 @@ export async function getAdminEmailMonitoringData(input?: {
       })
       .filter((row): row is EmailCandidate => Boolean(row));
 
+    const sentToday = dueCandidates.filter((candidate) => candidate.sentToday).length;
+    const unsentRows = dueCandidates
+      .filter((candidate) => !candidate.sentToday)
+      .map((candidate) => toMonitoringRow(candidate, latestCron, cronRanToday));
+    const unsentByWebsiteId = new Map(unsentRows.map((row) => [row.websiteId, row]));
+    const dueCandidateByWebsiteId = new Map(dueCandidates.map((candidate) => [candidate.websiteId, candidate]));
+
     const eligibilityRows = websites
       .map((website) => {
         const user = usersById.get(website.user_id);
@@ -459,6 +470,25 @@ export async function getAdminEmailMonitoringData(input?: {
           status = "missing_successful_scan";
         }
 
+        const dueCandidate = dueCandidateByWebsiteId.get(website.id) ?? null;
+        const unsentRow = unsentByWebsiteId.get(website.id) ?? null;
+        const queueRow = dueCandidate?.queueRow ?? null;
+        const reportStatus: QueueStatus | "not_due" | null =
+          status !== "ready"
+            ? null
+            : dueCandidate?.sentToday
+              ? "sent"
+              : queueRow?.status ?? (unsentRow ? unsentRow.status : "not_due");
+        const reportReason =
+          status !== "ready"
+            ? "Blocked before scan/report scheduling."
+            : dueCandidate?.sentToday
+              ? "Scheduled report email sent for the current local day."
+              : unsentRow?.reason ?? "Ready for scheduled scans and reports; no report email is due right now.";
+        const lastReportAttempt =
+          queueRow?.last_attempt_at ?? queueRow?.updated_at ?? queueRow?.created_at ?? unsentRow?.lastAttempt ?? null;
+        const lastReportError = queueRow?.last_error ?? unsentRow?.lastError ?? null;
+
         return {
           id: `${website.id}:${status}`,
           userId: user.id,
@@ -471,7 +501,11 @@ export async function getAdminEmailMonitoringData(input?: {
           reason: getEligibilityReason(status),
           effectiveFrequency,
           latestSuccessfulScanAt,
-          recipientCount
+          recipientCount,
+          reportStatus,
+          reportReason,
+          lastReportAttempt,
+          lastReportError
         };
       })
       .filter(
@@ -487,13 +521,14 @@ export async function getAdminEmailMonitoringData(input?: {
         row.websiteUrl.toLowerCase().includes(userFilter) ||
         row.websiteLabel.toLowerCase().includes(userFilter);
 
-      return matchesUser && row.status !== "ready";
-    });
+      const matchesStatus =
+        statusFilter === "all" ||
+        row.status === statusFilter ||
+        row.reportStatus === statusFilter;
+      const matchesDate = matchesDateFilter(row.lastReportAttempt, dateFilter);
 
-    const sentToday = dueCandidates.filter((candidate) => candidate.sentToday).length;
-    const unsentRows = dueCandidates
-      .filter((candidate) => !candidate.sentToday)
-      .map((candidate) => toMonitoringRow(candidate, latestCron, cronRanToday));
+      return matchesUser && matchesStatus && matchesDate;
+    });
 
     return {
       filters: {

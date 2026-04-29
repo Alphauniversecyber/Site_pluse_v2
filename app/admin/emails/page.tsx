@@ -43,6 +43,10 @@ function getStatusTone(status: string) {
     return "green" as const;
   }
 
+  if (status === "ready") {
+    return "green" as const;
+  }
+
   if (status === "processing") {
     return "blue" as const;
   }
@@ -51,7 +55,7 @@ function getStatusTone(status: string) {
     return "amber" as const;
   }
 
-  if (status === "never") {
+  if (status === "never" || status === "not_due") {
     return "neutral" as const;
   }
 
@@ -107,7 +111,7 @@ export default async function AdminEmailsPage({
     <div>
       <AdminPageHeader
         title="Emails"
-        description="Monitor scheduled PDF report emails, see what should have gone out today, and inspect raw delivery activity from Resend in one place."
+        description="Monitor the single scheduled scan and PDF report email pipeline, plus raw delivery activity from Resend."
       />
 
       <AdminErrorNotice message={data.error} />
@@ -129,9 +133,9 @@ export default async function AdminEmailsPage({
       <div className="mb-8">
         <div className="mb-4 flex flex-col gap-2">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#22C55E]">Email Monitoring</p>
-          <h2 className="text-2xl font-semibold text-white">Scheduled PDF report emails</h2>
+          <h2 className="text-2xl font-semibold text-white">Scheduled scans and PDF report emails</h2>
           <p className="max-w-3xl text-sm leading-6 text-zinc-400">
-            This section only tracks report emails that should send a PDF attachment. Marketing and system emails are intentionally excluded.
+            Scheduled scans and scheduled PDF report emails now use the same website frequency and automatic report setting.
           </p>
         </div>
 
@@ -198,10 +202,17 @@ export default async function AdminEmailsPage({
                   className="mt-2 w-full rounded-2xl border border-[#27272A] bg-[#0D0D0D] px-4 py-3 text-sm text-white outline-none"
                 >
                   <option value="all">All statuses</option>
+                  <option value="ready">Ready</option>
+                  <option value="sent">Sent</option>
+                  <option value="not_due">Not due</option>
                   <option value="pending">Pending</option>
                   <option value="processing">Processing</option>
                   <option value="failed">Failed</option>
                   <option value="skipped">Skipped</option>
+                  <option value="website_disabled">Website disabled</option>
+                  <option value="user_disabled">User disabled</option>
+                  <option value="plan_ineligible">Plan ineligible</option>
+                  <option value="missing_successful_scan">Missing scan</option>
                 </select>
               </div>
               <div>
@@ -231,95 +242,14 @@ export default async function AdminEmailsPage({
           </AdminCard>
         </div>
 
-        <div className="mt-6">
-          {monitoring.rows.length ? (
-            <AdminCard className="overflow-hidden p-0">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="bg-[#0D0D0D] text-zinc-400">
-                    <tr>
-                      <th className="px-4 py-3 font-medium">User</th>
-                      <th className="px-4 py-3 font-medium">Website</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium">Reason</th>
-                      <th className="px-4 py-3 font-medium">Last Attempt</th>
-                      <th className="px-4 py-3 font-medium">Recovery</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {monitoring.rows.map((row, index) => (
-                      <tr key={row.id} className={`${index % 2 === 0 ? "bg-[#101010]" : "bg-[#141414]"} align-top hover:bg-[#181818]`}>
-                        <td className="px-4 py-4">
-                          <p className="break-all font-medium text-white">{row.email}</p>
-                          <p className="mt-1 font-mono text-xs text-zinc-500">{row.userId}</p>
-                          <p className="mt-2 text-xs uppercase tracking-[0.16em] text-[#86EFAC]">{row.planLabel}</p>
-                        </td>
-                        <td className="px-4 py-4 text-zinc-300">
-                          <p className="font-medium text-white">{row.websiteLabel}</p>
-                          <p className="mt-1 break-all text-xs text-zinc-500">{row.websiteUrl}</p>
-                        </td>
-                        <td className="px-4 py-4">
-                          <AdminBadge label={row.status} tone={getStatusTone(row.status)} />
-                        </td>
-                        <td className="px-4 py-4 text-zinc-300">
-                          <p>{row.reason}</p>
-                          {row.lastError ? <p className="mt-2 text-xs leading-5 text-[#FCA5A5]">{row.lastError}</p> : null}
-                        </td>
-                        <td className="px-4 py-4 font-mono text-xs text-zinc-500">{formatAdminDate(row.lastAttempt)}</td>
-                        <td className="px-4 py-4">
-                          <div className="flex min-w-[180px] flex-col gap-2">
-                            <form action={runAdminEmailRecoveryAction}>
-                              <input type="hidden" name="actionType" value="send-report" />
-                              <input type="hidden" name="websiteId" value={row.websiteId} />
-                              <input type="hidden" name="returnTo" value="/admin/emails" />
-                              <input type="hidden" name="page" value={String(page)} />
-                              <input type="hidden" name="monitorUser" value={monitoring.filters.user} />
-                              <input type="hidden" name="monitorStatus" value={monitoring.filters.status} />
-                              <input type="hidden" name="monitorDate" value={monitoring.filters.date} />
-                              <AdminActionButton
-                                idleLabel="Send Report Now"
-                                pendingLabel="Sending..."
-                                className="w-full px-3 py-2 text-xs"
-                              />
-                            </form>
-                            <form action={runAdminEmailRecoveryAction}>
-                              <input type="hidden" name="actionType" value="run-scan" />
-                              <input type="hidden" name="websiteId" value={row.websiteId} />
-                              <input type="hidden" name="returnTo" value="/admin/emails" />
-                              <input type="hidden" name="page" value={String(page)} />
-                              <input type="hidden" name="monitorUser" value={monitoring.filters.user} />
-                              <input type="hidden" name="monitorStatus" value={monitoring.filters.status} />
-                              <input type="hidden" name="monitorDate" value={monitoring.filters.date} />
-                              <AdminActionButton
-                                idleLabel="Run Scan Now"
-                                pendingLabel="Running..."
-                                tone="secondary"
-                                className="w-full px-3 py-2 text-xs"
-                              />
-                            </form>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </AdminCard>
-          ) : (
-            <AdminEmptyState
-              title="No failed or pending report emails"
-              description="Every scheduled PDF report email that is due right now has either been sent or there is no backlog matching the selected filters."
-            />
-          )}
-        </div>
       </div>
 
       <div className="mb-8">
         <div className="mb-4 flex flex-col gap-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">Eligibility Audit</p>
-          <h2 className="text-2xl font-semibold text-white">Scheduled email coverage across active websites</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">Unified Coverage</p>
+          <h2 className="text-2xl font-semibold text-white">Scheduled scan and report coverage</h2>
           <p className="max-w-3xl text-sm leading-6 text-zinc-400">
-            This shows why a website will or will not ever enter the scheduled PDF report pipeline. If it is not ready here, the cron can never send it.
+            One table for the shared scan/report schedule. If a website is disabled here, it will not be scheduled for scans or report emails.
           </p>
         </div>
 
@@ -357,9 +287,11 @@ export default async function AdminEmailsPage({
                     <tr>
                       <th className="px-4 py-3 font-medium">User</th>
                       <th className="px-4 py-3 font-medium">Website</th>
-                      <th className="px-4 py-3 font-medium">Eligibility</th>
+                      <th className="px-4 py-3 font-medium">Schedule</th>
+                      <th className="px-4 py-3 font-medium">Report Email</th>
                       <th className="px-4 py-3 font-medium">Reason</th>
                       <th className="px-4 py-3 font-medium">Latest Successful Scan</th>
+                      <th className="px-4 py-3 font-medium">Last Report Attempt</th>
                       <th className="px-4 py-3 font-medium">Recipients</th>
                       <th className="px-4 py-3 font-medium">Recovery</th>
                     </tr>
@@ -380,8 +312,20 @@ export default async function AdminEmailsPage({
                         <td className="px-4 py-4">
                           <AdminBadge label={row.status.replace(/_/g, " ")} tone={getEligibilityTone(row.status)} />
                         </td>
-                        <td className="px-4 py-4 text-zinc-300">{row.reason}</td>
+                        <td className="px-4 py-4">
+                          {row.reportStatus ? (
+                            <AdminBadge label={row.reportStatus.replace(/_/g, " ")} tone={getStatusTone(row.reportStatus)} />
+                          ) : (
+                            <AdminBadge label="blocked" tone="amber" />
+                          )}
+                        </td>
+                        <td className="px-4 py-4 text-zinc-300">
+                          <p>{row.reason}</p>
+                          <p className="mt-2 text-xs leading-5 text-zinc-500">{row.reportReason}</p>
+                          {row.lastReportError ? <p className="mt-2 text-xs leading-5 text-[#FCA5A5]">{row.lastReportError}</p> : null}
+                        </td>
                         <td className="px-4 py-4 font-mono text-xs text-zinc-500">{formatAdminDate(row.latestSuccessfulScanAt)}</td>
+                        <td className="px-4 py-4 font-mono text-xs text-zinc-500">{formatAdminDate(row.lastReportAttempt)}</td>
                         <td className="px-4 py-4 text-zinc-300">{row.recipientCount}</td>
                         <td className="px-4 py-4">
                           <div className="flex min-w-[180px] flex-col gap-2">
@@ -424,8 +368,8 @@ export default async function AdminEmailsPage({
             </AdminCard>
           ) : (
             <AdminEmptyState
-              title="Every filtered active website is eligible"
-              description="No active website is blocked by plan limits, disabled report settings, or missing successful scans for the current filter."
+              title="No matching scheduled websites"
+              description="No active website matches the current scan/report coverage filters."
             />
           )}
         </div>

@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ScanFrequency, UserProfile, Website } from "@/types";
+import type { ReportFrequency, ScanFrequency, UserProfile, Website } from "@/types";
 import { logAdminError, logScanExecution } from "@/lib/admin/logging";
 import type { CronExecutionGuard } from "@/lib/cron";
 import { executeWebsiteScan } from "@/lib/scan-service";
@@ -15,7 +15,8 @@ type ScanFailureReason =
   | "api_error"
   | "plan_limit_reached"
   | "queue_backlog"
-  | "account_ineligible";
+  | "account_ineligible"
+  | "schedule_disabled";
 
 type ScanJobQueueRow = {
   id: string;
@@ -116,7 +117,7 @@ async function loadActiveWebsites(limit: number, offset: number) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("websites")
-    .select("id,user_id,url,label,is_active,created_at")
+    .select("id,user_id,url,label,is_active,report_frequency,auto_email_reports,created_at")
     .eq("is_active", true)
     .order("created_at", { ascending: true })
     .range(offset, offset + Math.max(limit - 1, 0));
@@ -125,7 +126,12 @@ async function loadActiveWebsites(limit: number, offset: number) {
     throw new Error(error.message);
   }
 
-  return (data ?? []) as Array<Pick<Website, "id" | "user_id" | "url" | "label" | "is_active" | "created_at">>;
+  return (data ?? []) as Array<
+    Pick<
+      Website,
+      "id" | "user_id" | "url" | "label" | "is_active" | "report_frequency" | "auto_email_reports" | "created_at"
+    >
+  >;
 }
 
 async function loadActiveWebsitesForUsers(userIds: string[]) {
@@ -250,6 +256,10 @@ async function countDueQueuedScanJobs() {
   return count ?? 0;
 }
 
+function toScanFrequency(value: ReportFrequency): ScanFrequency | null {
+  return value === "never" ? null : value;
+}
+
 export async function enqueueDueScanJobs(limit = 250, offset = 0): Promise<EnqueueDueScanJobsResult> {
   const websites = await loadActiveWebsites(limit, offset);
   const profiles = await loadProfiles(Array.from(new Set(websites.map((website) => website.user_id))));
@@ -281,6 +291,16 @@ export async function enqueueDueScanJobs(limit = 250, offset = 0): Promise<Enque
     }
 
     const planLimits = PLAN_LIMITS[profile.plan];
+    if (!planLimits.emailReports || !website.auto_email_reports) {
+      continue;
+    }
+
+    const reportFrequency = website.report_frequency ?? "weekly";
+    const requestedFrequency = toScanFrequency(reportFrequency);
+    if (!requestedFrequency || !planLimits.scanFrequencies.includes(requestedFrequency)) {
+      continue;
+    }
+
     const ownedWebsites = websitesByUser[website.user_id] ?? [];
     const orderedWebsites = ownedWebsites
       .slice()
@@ -288,10 +308,7 @@ export async function enqueueDueScanJobs(limit = 250, offset = 0): Promise<Enque
     const websiteIndex = orderedWebsites.findIndex((item) => item.id === website.id);
     const schedule = schedules.get(website.id);
     const timezone = normalizeTimezone(profile.timezone);
-    const frequency =
-      schedule?.frequency && planLimits.scanFrequencies.includes(schedule.frequency)
-        ? schedule.frequency
-        : planLimits.scanFrequencies[0];
+    const frequency = requestedFrequency;
 
     const dueBySchedule = schedule?.next_scan_at ? new Date(schedule.next_scan_at).getTime() <= now.getTime() : true;
     const dueByPeriod = isDueForPeriod({
@@ -419,6 +436,30 @@ export async function processQueuedScanJobs(
           status: "skipped",
           failure_reason: "account_ineligible",
           last_error: "Scheduled scans are no longer enabled for this account.",
+          last_attempt_at: startedAt
+        });
+        continue;
+      }
+
+      const { data: currentWebsite } = await admin
+        .from("websites")
+        .select("id,auto_email_reports,report_frequency")
+        .eq("id", row.website_id)
+        .maybeSingle<Pick<Website, "id" | "auto_email_reports" | "report_frequency">>();
+
+      const currentPlanLimits = PLAN_LIMITS[currentProfile.plan];
+      const currentReportFrequency = currentWebsite?.report_frequency ?? "weekly";
+      if (
+        !currentWebsite ||
+        !currentPlanLimits.emailReports ||
+        !currentWebsite.auto_email_reports ||
+        currentReportFrequency === "never" ||
+        currentReportFrequency !== row.frequency
+      ) {
+        await updateQueueRow(row.id, {
+          status: "skipped",
+          failure_reason: "schedule_disabled",
+          last_error: "Scheduled scans are disabled because this website is not enabled for scheduled report emails.",
           last_attempt_at: startedAt
         });
         continue;
