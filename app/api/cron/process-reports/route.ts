@@ -1,4 +1,3 @@
-import { runLoggedCron } from "@/lib/admin/logging";
 import { apiError, apiSuccess } from "@/lib/api";
 import { enqueueJob, isAuthorizedCronRequest } from "@/lib/job-queue";
 
@@ -11,26 +10,37 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await runLoggedCron("process-reports", async () => {
-      const queued = await enqueueJob(
-        "process-reports",
-        {
-          mode: "discover",
-          discoveryOffset: 0,
-          requestedAt: new Date().toISOString(),
-          source: "cron"
-        },
-        {
-          skipIfOpen: true
-        }
-      );
+    const pdfJob = await enqueueJob(
+      "process-report-pdfs",
+      {
+        mode: "process-queue",
+        requestedAt: new Date().toISOString(),
+        source: "cron-compat"
+      },
+      {
+        skipIfOpen: true
+      }
+    );
+    const emailJob = await enqueueJob(
+      "process-report-emails",
+      {
+        mode: "process-queue",
+        requestedAt: new Date().toISOString(),
+        source: "cron-compat"
+      },
+      {
+        skipIfOpen: true
+      }
+    );
 
-      return {
-        processedCount: queued.queued ? 1 : 0,
-        queued: queued.queued,
-        jobId: queued.job.id
-      };
-    });
+    const result = {
+      processedCount: Number(pdfJob.queued) + Number(emailJob.queued),
+      queuedPdfWorker: pdfJob.queued,
+      queuedEmailWorker: emailJob.queued,
+      pdfJobId: pdfJob.job.id,
+      emailJobId: emailJob.job.id,
+      deprecated: true
+    };
 
     return apiSuccess(result);
   } catch (error) {

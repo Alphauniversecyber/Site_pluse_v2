@@ -254,15 +254,22 @@ export type AdminCronsPageData = {
 function getQueueMetricLabels(cronName: AdminCronName) {
   if (cronName === "process-scans") {
     return {
-      completedLabel: "completed today",
+      completedLabel: "completed scans",
       remainingLabel: "scan backlog"
     };
   }
 
-  if (cronName === "process-reports") {
+  if (cronName === "process-report-pdfs") {
+    return {
+      completedLabel: "generated today",
+      remainingLabel: "PDF backlog"
+    };
+  }
+
+  if (cronName === "process-report-emails") {
     return {
       completedLabel: "sent today",
-      remainingLabel: "report backlog"
+      remainingLabel: "email backlog"
     };
   }
 
@@ -555,7 +562,8 @@ export async function getAdminOverviewData(): Promise<AdminOverviewData> {
 
     const cronLogs = (cronLogsResult.data ?? []) as AdminCronLogRecord[];
     const scanCronLog = cronLogs.find((row) => row.cron_name === "process-scans") ?? null;
-    const reportCronLog = cronLogs.find((row) => row.cron_name === "process-reports") ?? null;
+    const reportPdfCronLog = cronLogs.find((row) => row.cron_name === "process-report-pdfs") ?? null;
+    const reportEmailCronLog = cronLogs.find((row) => row.cron_name === "process-report-emails") ?? null;
 
     const websiteIds = Array.from(
       new Set([
@@ -647,13 +655,32 @@ export async function getAdminOverviewData(): Promise<AdminOverviewData> {
           tone: scanCronLog?.status === "failed" ? "red" : scanCronLog?.status === "timeout" ? "amber" : "green"
         },
         {
-          label: "Last cron run: process-reports",
-          value: reportCronLog?.started_at ?? "Never",
+          label: "Last cron run: process-report-pdfs",
+          value: reportPdfCronLog?.started_at ?? "Never",
           note:
-            reportCronLog?.status === "running"
+            reportPdfCronLog?.status === "running"
               ? "Currently running"
-              : reportCronLog?.status ?? "No cron log yet",
-          tone: reportCronLog?.status === "failed" ? "red" : reportCronLog?.status === "timeout" ? "amber" : "green"
+              : reportPdfCronLog?.status ?? "No cron log yet",
+          tone:
+            reportPdfCronLog?.status === "failed"
+              ? "red"
+              : reportPdfCronLog?.status === "timeout"
+                ? "amber"
+                : "green"
+        },
+        {
+          label: "Last cron run: process-report-emails",
+          value: reportEmailCronLog?.started_at ?? "Never",
+          note:
+            reportEmailCronLog?.status === "running"
+              ? "Currently running"
+              : reportEmailCronLog?.status ?? "No cron log yet",
+          tone:
+            reportEmailCronLog?.status === "failed"
+              ? "red"
+              : reportEmailCronLog?.status === "timeout"
+                ? "amber"
+                : "green"
         },
         {
           label: "Supabase egress this month",
@@ -1099,15 +1126,17 @@ export async function getAdminCronsData(): Promise<AdminCronsPageData> {
   const todayIso = startOfDayIso();
 
   try {
-    const [
-      { data, error },
-      { count: scanCompletedTodayCount, error: scanCompletedError },
-      { count: scanRemainingCount, error: scanRemainingError },
-      { count: reportCompletedTodayCount, error: reportCompletedError },
-      { count: reportRemainingCount, error: reportRemainingError },
-      { count: uptimeCompletedTodayCount, error: uptimeCompletedError },
-      { count: uptimeRemainingCount, error: uptimeRemainingError },
-      { count: competitorCompletedTodayCount, error: competitorCompletedError },
+      const [
+        { data, error },
+        { count: scanCompletedTodayCount, error: scanCompletedError },
+        { count: scanRemainingCount, error: scanRemainingError },
+        { count: reportPdfCompletedTodayCount, error: reportPdfCompletedError },
+        { count: reportPdfRemainingCount, error: reportPdfRemainingError },
+        { count: reportEmailCompletedTodayCount, error: reportEmailCompletedError },
+        { count: reportEmailRemainingCount, error: reportEmailRemainingError },
+        { count: uptimeCompletedTodayCount, error: uptimeCompletedError },
+        { count: uptimeRemainingCount, error: uptimeRemainingError },
+        { count: competitorCompletedTodayCount, error: competitorCompletedError },
       { count: competitorRemainingCount, error: competitorRemainingError }
     ] = await Promise.all([
       admin
@@ -1124,15 +1153,24 @@ export async function getAdminCronsData(): Promise<AdminCronsPageData> {
         .from("scan_job_queue")
         .select("*", { count: "exact", head: true })
         .in("status", ["pending", "processing", "failed"]),
-      admin
-        .from("report_email_queue")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "sent")
-        .gte("sent_at", todayIso),
-      admin
-        .from("report_email_queue")
-        .select("*", { count: "exact", head: true })
-        .in("status", ["pending", "processing", "failed"]),
+        admin
+          .from("report_generation_queue")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "completed")
+          .gte("completed_at", todayIso),
+        admin
+          .from("report_generation_queue")
+          .select("*", { count: "exact", head: true })
+          .in("status", ["pending", "processing", "failed"]),
+        admin
+          .from("report_email_queue")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "sent")
+          .gte("sent_at", todayIso),
+        admin
+          .from("report_email_queue")
+          .select("*", { count: "exact", head: true })
+          .in("status", ["pending", "processing", "failed"]),
       admin
         .from("job_queue")
         .select("*", { count: "exact", head: true })
@@ -1163,8 +1201,10 @@ export async function getAdminCronsData(): Promise<AdminCronsPageData> {
 
     if (scanCompletedError) throw new Error(scanCompletedError.message);
     if (scanRemainingError) throw new Error(scanRemainingError.message);
-    if (reportCompletedError) throw new Error(reportCompletedError.message);
-    if (reportRemainingError) throw new Error(reportRemainingError.message);
+      if (reportPdfCompletedError) throw new Error(reportPdfCompletedError.message);
+      if (reportPdfRemainingError) throw new Error(reportPdfRemainingError.message);
+      if (reportEmailCompletedError) throw new Error(reportEmailCompletedError.message);
+      if (reportEmailRemainingError) throw new Error(reportEmailRemainingError.message);
     if (uptimeCompletedError) throw new Error(uptimeCompletedError.message);
     if (uptimeRemainingError) throw new Error(uptimeRemainingError.message);
     if (competitorCompletedError) throw new Error(competitorCompletedError.message);
@@ -1178,10 +1218,14 @@ export async function getAdminCronsData(): Promise<AdminCronsPageData> {
         completedCount: scanCompletedTodayCount ?? 0,
         remainingCount: scanRemainingCount ?? 0
       },
-      "process-reports": {
-        completedCount: reportCompletedTodayCount ?? 0,
-        remainingCount: reportRemainingCount ?? 0
-      },
+        "process-report-pdfs": {
+          completedCount: reportPdfCompletedTodayCount ?? 0,
+          remainingCount: reportPdfRemainingCount ?? 0
+        },
+        "process-report-emails": {
+          completedCount: reportEmailCompletedTodayCount ?? 0,
+          remainingCount: reportEmailRemainingCount ?? 0
+        },
       "process-uptime": {
         completedCount: uptimeCompletedTodayCount ?? 0,
         remainingCount: uptimeRemainingCount ?? 0
@@ -1532,7 +1576,27 @@ function getAdminCronSuccessMessage(cronName: AdminCronName, data: Record<string
     }
   }
 
-  if (cronName === "process-reports") {
+  if (cronName === "process-report-pdfs") {
+    const result = data.generated as
+      | {
+          processedCount?: number;
+          queued?: boolean;
+          remaining?: number;
+          done?: boolean;
+        }
+      | undefined;
+
+    if (result) {
+      const processedCount = result.processedCount ?? 0;
+      const queuedState = result.queued ? "queued a new worker job" : "reused the existing open worker job";
+
+      return result.done
+        ? `process-report-pdfs ${queuedState}, processed ${processedCount} PDF queue job(s), and drained the current backlog.`
+        : `process-report-pdfs ${queuedState}, processed ${processedCount} PDF queue job(s), and still has ${result.remaining ?? 0} worker job(s) remaining.`;
+    }
+  }
+
+  if (cronName === "process-report-emails") {
     const result = data.sent as
       | {
           processedCount?: number;
@@ -1547,8 +1611,8 @@ function getAdminCronSuccessMessage(cronName: AdminCronName, data: Record<string
       const queuedState = result.queued ? "queued a new worker job" : "reused the existing open worker job";
 
       return result.done
-        ? `process-reports ${queuedState}, processed ${processedCount} report queue job(s), and drained the current backlog.`
-        : `process-reports ${queuedState}, processed ${processedCount} report queue job(s), and still has ${result.remaining ?? 0} worker job(s) remaining.`;
+        ? `process-report-emails ${queuedState}, processed ${processedCount} email queue job(s), and drained the current backlog.`
+        : `process-report-emails ${queuedState}, processed ${processedCount} email queue job(s), and still has ${result.remaining ?? 0} worker job(s) remaining.`;
     }
   }
 

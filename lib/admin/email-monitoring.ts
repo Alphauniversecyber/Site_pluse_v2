@@ -8,6 +8,7 @@ import { PLAN_LIMITS } from "@/lib/utils";
 import type { ReportFrequency, ScanFrequency, ScanResult, UserProfile, Website } from "@/types";
 
 type QueueStatus = "pending" | "processing" | "sent" | "failed" | "skipped";
+type PdfQueueStatus = "pending" | "processing" | "completed" | "failed" | "skipped";
 type MonitoringRowStatus = "pending" | "processing" | "failed" | "skipped";
 type EligibilityStatus =
   | "ready"
@@ -15,6 +16,37 @@ type EligibilityStatus =
   | "user_disabled"
   | "website_disabled"
   | "missing_successful_scan";
+type PipelineStage =
+  | "missing_successful_scan"
+  | "waiting_for_pdf"
+  | "pdf_failed"
+  | "pdf_ready"
+  | "waiting_for_email"
+  | "email_failed"
+  | "email_sent";
+
+type ReportPdfQueueRow = {
+  id: string;
+  user_id: string;
+  website_id: string;
+  report_id: string | null;
+  scan_id: string | null;
+  frequency: ScanFrequency;
+  timezone: string;
+  period_key: string;
+  dedupe_key: string;
+  scheduled_for: string;
+  next_attempt_at: string;
+  attempt_count: number;
+  status: PdfQueueStatus;
+  failure_reason: string | null;
+  last_error: string | null;
+  last_attempt_at: string | null;
+  completed_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
 
 type ReportEmailQueueRow = {
   id: string;
@@ -44,8 +76,11 @@ type CronLogRow = {
 };
 
 type SentReportRow = {
+  id: string;
   website_id: string;
   sent_at: string | null;
+  sent_to_email: string | null;
+  created_at: string;
 };
 
 type EmailCandidate = {
@@ -56,9 +91,14 @@ type EmailCandidate = {
   websiteId: string;
   websiteLabel: string;
   websiteUrl: string;
-  queueRow: ReportEmailQueueRow | null;
+  frequency: ScanFrequency;
+  timezone: string;
   latestScan: Pick<ScanResult, "id" | "scan_status" | "scanned_at"> | null;
-  sentToday: boolean;
+  latestSentAt: string | null;
+  pdfQueueRow: ReportPdfQueueRow | null;
+  emailQueueRow: ReportEmailQueueRow | null;
+  sentReport: SentReportRow | null;
+  stage: PipelineStage;
 };
 
 export type AdminEmailMonitoringRow = {
@@ -82,21 +122,24 @@ export type AdminEmailMonitoringData = {
     date: string;
   };
   summary: {
-    scheduledToday: number;
+    dueToday: number;
+    reportsGeneratedToday: number;
     sentToday: number;
-    notSentToday: number;
-    failedPendingToday: number;
+    blockedPendingToday: number;
   };
   cron: {
-    lastRunAt: string | null;
-    lastRunStatus: string;
-    lastRunProcessed: number;
+    lastPdfRunAt: string | null;
+    lastPdfRunStatus: string;
+    lastPdfRunProcessed: number;
+    lastEmailRunAt: string | null;
+    lastEmailRunStatus: string;
+    lastEmailRunProcessed: number;
   };
   chart: Array<{
     date: string;
-    scheduled: number;
+    due: number;
+    generated: number;
     sent: number;
-    failed: number;
   }>;
   eligibility: {
     summary: {
@@ -120,7 +163,7 @@ export type AdminEmailMonitoringData = {
       effectiveFrequency: ReportFrequency;
       latestSuccessfulScanAt: string | null;
       recipientCount: number;
-      reportStatus: QueueStatus | "not_due" | null;
+      reportStatus: string | null;
       reportReason: string;
       lastReportAttempt: string | null;
       lastReportError: string | null;
@@ -130,8 +173,12 @@ export type AdminEmailMonitoringData = {
   error: string | null;
 };
 
-function buildReportQueueDedupeKey(websiteId: string, frequency: ScanFrequency, periodKey: string) {
-  return `report-queue:${websiteId}:${frequency}:${periodKey}`;
+function buildReportPdfQueueDedupeKey(websiteId: string, frequency: ScanFrequency, periodKey: string) {
+  return `report-pdf:${websiteId}:${frequency}:${periodKey}`;
+}
+
+function buildReportEmailQueueDedupeKey(websiteId: string, frequency: ScanFrequency, periodKey: string) {
+  return `report-email:${websiteId}:${frequency}:${periodKey}`;
 }
 
 function startOfTodayIso(reference = new Date()) {
@@ -156,18 +203,29 @@ function matchesDateFilter(value: string | null | undefined, dateFilter: string)
   return toDayKey(value) === dateFilter;
 }
 
-function formatReason(reason: string | null | undefined) {
-  if (reason === "smtp_failure") return "SMTP failure";
-  if (reason === "cron_not_triggered") return "Cron not triggered";
-  if (reason === "frequency_mismatch") return "Frequency mismatch";
-  if (reason === "already_sent") return "Already sent (duplicate prevention)";
-  if (reason === "missing_pdf_generation") return "Missing PDF generation";
-  if (reason === "account_ineligible") return "Account no longer eligible";
-  if (reason === "queue_failure") return "Queue failure";
-  return "Queue backlog";
+function getStageReason(stage: PipelineStage, candidate: EmailCandidate) {
+  if (stage === "missing_successful_scan") {
+    return "A successful scan is required before SitePulse can generate the scheduled PDF report.";
+  }
+  if (stage === "waiting_for_pdf") {
+    return "The report is due, but the PDF generation worker has not completed yet.";
+  }
+  if (stage === "pdf_failed") {
+    return candidate.pdfQueueRow?.last_error ?? "PDF generation failed for the current report period.";
+  }
+  if (stage === "pdf_ready") {
+    return "The scheduled PDF is ready and waiting for the email delivery stage.";
+  }
+  if (stage === "waiting_for_email") {
+    return "The scheduled PDF exists, but the email delivery worker has not completed yet.";
+  }
+  if (stage === "email_failed") {
+    return candidate.emailQueueRow?.last_error ?? "Scheduled report email delivery failed.";
+  }
+  return "The scheduled report email was sent for the current period.";
 }
 
-function buildChart(reference: Date, queueRows: ReportEmailQueueRow[]) {
+function buildChart(reference: Date, pdfQueueRows: ReportPdfQueueRow[], emailQueueRows: ReportEmailQueueRow[]) {
   return Array.from({ length: 7 }).map((_, index) => {
     const day = new Date(reference);
     day.setDate(reference.getDate() - (6 - index));
@@ -175,77 +233,32 @@ function buildChart(reference: Date, queueRows: ReportEmailQueueRow[]) {
 
     return {
       date: dayKey,
-      scheduled: queueRows.filter((row) => toDayKey(row.scheduled_for) === dayKey).length,
-      sent: queueRows.filter((row) => row.status === "sent" && toDayKey(row.sent_at) === dayKey).length,
-      failed: queueRows.filter(
-        (row) =>
-          toDayKey(row.scheduled_for) === dayKey &&
-          (row.status === "failed" || row.status === "skipped")
-      ).length
+      due: pdfQueueRows.filter((row) => toDayKey(row.scheduled_for) === dayKey).length,
+      generated: pdfQueueRows.filter((row) => row.status === "completed" && toDayKey(row.completed_at) === dayKey).length,
+      sent: emailQueueRows.filter((row) => row.status === "sent" && toDayKey(row.sent_at) === dayKey).length
     };
   });
 }
 
-function toMonitoringRow(candidate: EmailCandidate, latestCron: CronLogRow | null, cronRanToday: boolean) {
-  const queueRow = candidate.queueRow;
-
-  if (queueRow) {
-    return {
-      id: queueRow.id,
-      userId: candidate.userId,
-      email: candidate.email,
-      planLabel: candidate.planLabel,
-      websiteId: candidate.websiteId,
-      websiteLabel: candidate.websiteLabel,
-      websiteUrl: candidate.websiteUrl,
-      status:
-        queueRow.status === "processing"
-          ? "processing"
-          : queueRow.status === "pending"
-            ? "pending"
-            : queueRow.status === "skipped"
-              ? "skipped"
-              : "failed",
-      reason:
-        queueRow.status === "pending" || queueRow.status === "processing"
-          ? "Queue failure"
-          : formatReason(queueRow.failure_reason),
-      lastAttempt: queueRow.last_attempt_at ?? queueRow.updated_at ?? queueRow.created_at,
-      lastError: queueRow.last_error
-    } satisfies AdminEmailMonitoringRow;
-  }
-
-  if (!cronRanToday) {
-    return {
-      id: candidate.id,
-      userId: candidate.userId,
-      email: candidate.email,
-      planLabel: candidate.planLabel,
-      websiteId: candidate.websiteId,
-      websiteLabel: candidate.websiteLabel,
-      websiteUrl: candidate.websiteUrl,
-      status: "failed",
-      reason: "Cron not triggered",
-      lastAttempt: latestCron?.started_at ?? null,
-      lastError: "The report cron never created a queue job for this due report today."
-    } satisfies AdminEmailMonitoringRow;
-  }
-
-  if (!candidate.latestScan || candidate.latestScan.scan_status === "failed") {
-    return {
-      id: candidate.id,
-      userId: candidate.userId,
-      email: candidate.email,
-      planLabel: candidate.planLabel,
-      websiteId: candidate.websiteId,
-      websiteLabel: candidate.websiteLabel,
-      websiteUrl: candidate.websiteUrl,
-      status: "failed",
-      reason: "Missing PDF generation",
-      lastAttempt: candidate.latestScan?.scanned_at ?? null,
-      lastError: "A successful scan was not available, so SitePulse could not build the PDF report."
-    } satisfies AdminEmailMonitoringRow;
-  }
+function toMonitoringRow(candidate: EmailCandidate): AdminEmailMonitoringRow {
+  const stage = candidate.stage;
+  const status: MonitoringRowStatus =
+    stage === "waiting_for_pdf" || stage === "waiting_for_email"
+      ? "pending"
+      : stage === "pdf_ready"
+        ? "processing"
+        : stage === "email_failed" || stage === "pdf_failed" || stage === "missing_successful_scan"
+          ? "failed"
+          : "skipped";
+  const lastAttempt =
+    candidate.emailQueueRow?.last_attempt_at ??
+    candidate.emailQueueRow?.updated_at ??
+    candidate.pdfQueueRow?.last_attempt_at ??
+    candidate.pdfQueueRow?.completed_at ??
+    candidate.pdfQueueRow?.updated_at ??
+    candidate.latestScan?.scanned_at ??
+    null;
+  const lastError = candidate.emailQueueRow?.last_error ?? candidate.pdfQueueRow?.last_error ?? null;
 
   return {
     id: candidate.id,
@@ -255,11 +268,11 @@ function toMonitoringRow(candidate: EmailCandidate, latestCron: CronLogRow | nul
     websiteId: candidate.websiteId,
     websiteLabel: candidate.websiteLabel,
     websiteUrl: candidate.websiteUrl,
-    status: "pending",
-    reason: "Queue failure",
-    lastAttempt: latestCron?.started_at ?? null,
-    lastError: "The report was due, but no queue job exists for the current period."
-  } satisfies AdminEmailMonitoringRow;
+    status,
+    reason: getStageReason(stage, candidate),
+    lastAttempt,
+    lastError
+  };
 }
 
 function getEligibilityReason(status: EligibilityStatus) {
@@ -297,10 +310,8 @@ export async function getAdminEmailMonitoringData(input?: {
   const dateFilter = isValidDayKey(input?.date) ? (input?.date as string) : "";
 
   try {
-    const [usersResult, websitesResult, scansResult, queueResult, cronLogsResult, reportsResult] = await Promise.all([
-      admin
-        .from("users")
-        .select("id,email,plan,timezone,subscription_status,is_trial,trial_ends_at"),
+    const [usersResult, websitesResult, scansResult, pdfQueueResult, emailQueueResult, pdfCronLogsResult, emailCronLogsResult, reportsResult] = await Promise.all([
+      admin.from("users").select("id,email,plan,timezone,subscription_status,is_trial,trial_ends_at"),
       admin
         .from("websites")
         .select("id,user_id,url,label,is_active,auto_email_reports,report_frequency,extra_recipients,created_at")
@@ -311,6 +322,12 @@ export async function getAdminEmailMonitoringData(input?: {
         .gte("scanned_at", lookbackIso)
         .order("scanned_at", { ascending: false }),
       admin
+        .from("report_generation_queue")
+        .select("*")
+        .gte("scheduled_for", queueLookbackIso)
+        .order("scheduled_for", { ascending: false })
+        .limit(5000),
+      admin
         .from("report_email_queue")
         .select("*")
         .gte("scheduled_for", queueLookbackIso)
@@ -319,24 +336,32 @@ export async function getAdminEmailMonitoringData(input?: {
       admin
         .from("cron_logs")
         .select("started_at,status,items_processed")
-        .eq("cron_name", "process-reports")
+        .eq("cron_name", "process-report-pdfs")
+        .gte("started_at", queueLookbackIso)
+        .order("started_at", { ascending: false })
+        .limit(20),
+      admin
+        .from("cron_logs")
+        .select("started_at,status,items_processed")
+        .eq("cron_name", "process-report-emails")
         .gte("started_at", queueLookbackIso)
         .order("started_at", { ascending: false })
         .limit(20),
       admin
         .from("reports")
-        .select("website_id,sent_at")
-        .not("sent_at", "is", null)
-        .gte("sent_at", lookbackIso)
-        .order("sent_at", { ascending: false })
+        .select("id,website_id,sent_at,sent_to_email,created_at")
+        .gte("created_at", queueLookbackIso)
+        .order("created_at", { ascending: false })
         .limit(5000)
     ]);
 
     if (usersResult.error) throw new Error(usersResult.error.message);
     if (websitesResult.error) throw new Error(websitesResult.error.message);
     if (scansResult.error) throw new Error(scansResult.error.message);
-    if (queueResult.error) throw new Error(queueResult.error.message);
-    if (cronLogsResult.error) throw new Error(cronLogsResult.error.message);
+    if (pdfQueueResult.error) throw new Error(pdfQueueResult.error.message);
+    if (emailQueueResult.error) throw new Error(emailQueueResult.error.message);
+    if (pdfCronLogsResult.error) throw new Error(pdfCronLogsResult.error.message);
+    if (emailCronLogsResult.error) throw new Error(emailCronLogsResult.error.message);
     if (reportsResult.error) throw new Error(reportsResult.error.message);
 
     const users = (usersResult.data ?? []) as Array<
@@ -360,9 +385,11 @@ export async function getAdminEmailMonitoringData(input?: {
       >
     >;
     const scans = (scansResult.data ?? []) as Array<Pick<ScanResult, "id" | "website_id" | "scan_status" | "scanned_at">>;
-    const queueRows = (queueResult.data ?? []) as ReportEmailQueueRow[];
-    const cronRows = (cronLogsResult.data ?? []) as CronLogRow[];
-    const sentReports = (reportsResult.data ?? []) as SentReportRow[];
+    const pdfQueueRows = (pdfQueueResult.data ?? []) as ReportPdfQueueRow[];
+    const emailQueueRows = (emailQueueResult.data ?? []) as ReportEmailQueueRow[];
+    const pdfCronRows = (pdfCronLogsResult.data ?? []) as CronLogRow[];
+    const emailCronRows = (emailCronLogsResult.data ?? []) as CronLogRow[];
+    const reports = (reportsResult.data ?? []) as SentReportRow[];
 
     const usersById = new Map(users.map((user) => [user.id, user]));
     const latestScanByWebsite = new Map<string, Pick<ScanResult, "id" | "scan_status" | "scanned_at">>();
@@ -377,16 +404,17 @@ export async function getAdminEmailMonitoringData(input?: {
       }
     }
 
-    const queueByDedupeKey = new Map(queueRows.map((row) => [row.dedupe_key, row]));
-    const latestSentReportByWebsite = new Map<string, SentReportRow>();
-    for (const row of sentReports) {
-      if (!latestSentReportByWebsite.has(row.website_id)) {
-        latestSentReportByWebsite.set(row.website_id, row);
+    const latestReportByWebsite = new Map<string, SentReportRow>();
+    for (const row of reports) {
+      if (!latestReportByWebsite.has(row.website_id)) {
+        latestReportByWebsite.set(row.website_id, row);
       }
     }
 
-    const latestCron = cronRows[0] ?? null;
-    const cronRanToday = cronRows.some((row) => new Date(row.started_at).getTime() >= new Date(todayIso).getTime());
+    const pdfQueueByDedupeKey = new Map(pdfQueueRows.map((row) => [row.dedupe_key, row]));
+    const emailQueueByDedupeKey = new Map(emailQueueRows.map((row) => [row.dedupe_key, row]));
+    const latestPdfCron = pdfCronRows[0] ?? null;
+    const latestEmailCron = emailCronRows[0] ?? null;
 
     const dueCandidates = websites
       .map((website) => {
@@ -407,38 +435,71 @@ export async function getAdminEmailMonitoringData(input?: {
         }
 
         const frequency: ScanFrequency = frequencySetting;
-        const latestSentAt = latestSentReportByWebsite.get(website.id)?.sent_at ?? null;
-        const sentToday = Boolean(
-          latestSentAt && getLocalDayKey(latestSentAt, timezone) === getLocalDayKey(now, timezone)
-        );
+        const latestSentAt = latestReportByWebsite.get(website.id)?.sent_at ?? null;
 
         if (!isDueForPeriod({ frequency, lastEventAt: latestSentAt, timezone, reference: now })) {
           return null;
         }
 
-        const dedupeKey = buildReportQueueDedupeKey(website.id, frequency, getPeriodKey(frequency, now, timezone));
+        const periodKey = getPeriodKey(frequency, now, timezone);
+        const pdfQueueRow = pdfQueueByDedupeKey.get(buildReportPdfQueueDedupeKey(website.id, frequency, periodKey)) ?? null;
+        const emailQueueRow =
+          emailQueueByDedupeKey.get(buildReportEmailQueueDedupeKey(website.id, frequency, periodKey)) ?? null;
+        const latestScan = latestSuccessfulScanByWebsite.get(website.id) ?? null;
+        const sentReport = latestReportByWebsite.get(website.id) ?? null;
+        const stage: PipelineStage =
+          sentReport?.sent_at && getLocalDayKey(sentReport.sent_at, timezone) === getLocalDayKey(now, timezone)
+            ? "email_sent"
+            : !latestScan
+              ? "missing_successful_scan"
+              : pdfQueueRow?.status === "failed"
+                ? "pdf_failed"
+                : pdfQueueRow?.status === "completed"
+                  ? emailQueueRow?.status === "sent"
+                    ? "email_sent"
+                    : emailQueueRow?.status === "failed"
+                      ? "email_failed"
+                      : emailQueueRow
+                        ? "waiting_for_email"
+                        : "pdf_ready"
+                  : pdfQueueRow
+                    ? "waiting_for_pdf"
+                    : "waiting_for_pdf";
 
         return {
-          id: dedupeKey,
+          id: `${website.id}:${periodKey}`,
           userId: user.id,
           email: user.email,
           planLabel: getPlanLabel(user.plan),
           websiteId: website.id,
           websiteLabel: website.label,
           websiteUrl: website.url,
-          queueRow: queueByDedupeKey.get(dedupeKey) ?? null,
-          latestScan: latestScanByWebsite.get(website.id) ?? null,
-          sentToday
+          frequency,
+          timezone,
+          latestScan,
+          latestSentAt,
+          pdfQueueRow,
+          emailQueueRow,
+          sentReport,
+          stage
         } satisfies EmailCandidate;
       })
       .filter((row): row is EmailCandidate => Boolean(row));
 
-    const sentToday = dueCandidates.filter((candidate) => candidate.sentToday).length;
-    const unsentRows = dueCandidates
-      .filter((candidate) => !candidate.sentToday)
-      .map((candidate) => toMonitoringRow(candidate, latestCron, cronRanToday));
-    const unsentByWebsiteId = new Map(unsentRows.map((row) => [row.websiteId, row]));
-    const dueCandidateByWebsiteId = new Map(dueCandidates.map((candidate) => [candidate.websiteId, candidate]));
+    const generatedToday = dueCandidates.filter(
+      (candidate) =>
+        candidate.pdfQueueRow?.status === "completed" &&
+        candidate.pdfQueueRow.completed_at &&
+        new Date(candidate.pdfQueueRow.completed_at).getTime() >= new Date(todayIso).getTime()
+    ).length;
+    const sentToday = dueCandidates.filter(
+      (candidate) =>
+        candidate.sentReport?.sent_at &&
+        new Date(candidate.sentReport.sent_at).getTime() >= new Date(todayIso).getTime()
+    ).length;
+    const unresolvedRows = dueCandidates
+      .filter((candidate) => candidate.stage !== "email_sent")
+      .map((candidate) => toMonitoringRow(candidate));
 
     const eligibilityRows = websites
       .map((website) => {
@@ -451,12 +512,7 @@ export async function getAdminEmailMonitoringData(input?: {
         const effectiveFrequency = website.report_frequency ?? "weekly";
         const latestSuccessfulScanAt = latestSuccessfulScanByWebsite.get(website.id)?.scanned_at ?? null;
         const recipientCount = Array.from(
-          new Set(
-            [
-              user.email,
-              ...(website.extra_recipients ?? [])
-            ].filter(Boolean)
-          )
+          new Set([user.email, ...(website.extra_recipients ?? [])].filter(Boolean))
         ).length;
 
         let status: EligibilityStatus = "ready";
@@ -470,24 +526,39 @@ export async function getAdminEmailMonitoringData(input?: {
           status = "missing_successful_scan";
         }
 
-        const dueCandidate = dueCandidateByWebsiteId.get(website.id) ?? null;
-        const unsentRow = unsentByWebsiteId.get(website.id) ?? null;
-        const queueRow = dueCandidate?.queueRow ?? null;
-        const reportStatus: QueueStatus | "not_due" | null =
+        const dueCandidate = dueCandidates.find((candidate) => candidate.websiteId === website.id) ?? null;
+        const reportStatus =
           status !== "ready"
             ? null
-            : dueCandidate?.sentToday
+            : dueCandidate?.stage === "email_sent"
               ? "sent"
-              : queueRow?.status ?? (unsentRow ? unsentRow.status : "not_due");
+              : dueCandidate?.stage === "pdf_ready"
+                ? "pdf_ready"
+                : dueCandidate?.stage === "waiting_for_email"
+                  ? "waiting_for_email"
+                  : dueCandidate?.stage === "email_failed"
+                    ? "email_failed"
+                    : dueCandidate?.stage === "pdf_failed"
+                      ? "pdf_failed"
+                      : dueCandidate?.stage === "waiting_for_pdf"
+                        ? "waiting_for_pdf"
+                        : dueCandidate?.stage === "missing_successful_scan"
+                          ? "waiting_for_scan"
+                          : "not_due";
         const reportReason =
           status !== "ready"
             ? "Blocked before scan/report scheduling."
-            : dueCandidate?.sentToday
-              ? "Scheduled report email sent for the current local day."
-              : unsentRow?.reason ?? "Ready for scheduled scans and reports; no report email is due right now.";
+            : dueCandidate
+              ? getStageReason(dueCandidate.stage, dueCandidate)
+              : "Ready for scheduled reports; no report is due right now.";
         const lastReportAttempt =
-          queueRow?.last_attempt_at ?? queueRow?.updated_at ?? queueRow?.created_at ?? unsentRow?.lastAttempt ?? null;
-        const lastReportError = queueRow?.last_error ?? unsentRow?.lastError ?? null;
+          dueCandidate?.emailQueueRow?.last_attempt_at ??
+          dueCandidate?.emailQueueRow?.updated_at ??
+          dueCandidate?.pdfQueueRow?.last_attempt_at ??
+          dueCandidate?.pdfQueueRow?.completed_at ??
+          dueCandidate?.pdfQueueRow?.updated_at ??
+          null;
+        const lastReportError = dueCandidate?.emailQueueRow?.last_error ?? dueCandidate?.pdfQueueRow?.last_error ?? null;
 
         return {
           id: `${website.id}:${status}`,
@@ -508,11 +579,8 @@ export async function getAdminEmailMonitoringData(input?: {
           lastReportError
         };
       })
-      .filter(
-        (
-          row
-        ): row is NonNullable<typeof row> => Boolean(row)
-      );
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
     const filteredEligibilityRows = eligibilityRows.filter((row) => {
       const matchesUser =
         !userFilter ||
@@ -520,7 +588,6 @@ export async function getAdminEmailMonitoringData(input?: {
         row.userId.toLowerCase().includes(userFilter) ||
         row.websiteUrl.toLowerCase().includes(userFilter) ||
         row.websiteLabel.toLowerCase().includes(userFilter);
-
       const matchesStatus =
         statusFilter === "all" ||
         row.status === statusFilter ||
@@ -537,17 +604,20 @@ export async function getAdminEmailMonitoringData(input?: {
         date: dateFilter
       },
       summary: {
-        scheduledToday: dueCandidates.length,
+        dueToday: dueCandidates.length,
+        reportsGeneratedToday: generatedToday,
         sentToday,
-        notSentToday: Math.max(dueCandidates.length - sentToday, 0),
-        failedPendingToday: unsentRows.length
+        blockedPendingToday: Math.max(dueCandidates.length - sentToday, 0)
       },
       cron: {
-        lastRunAt: latestCron?.started_at ?? null,
-        lastRunStatus: latestCron?.status ?? "never",
-        lastRunProcessed: latestCron?.items_processed ?? 0
+        lastPdfRunAt: latestPdfCron?.started_at ?? null,
+        lastPdfRunStatus: latestPdfCron?.status ?? "never",
+        lastPdfRunProcessed: latestPdfCron?.items_processed ?? 0,
+        lastEmailRunAt: latestEmailCron?.started_at ?? null,
+        lastEmailRunStatus: latestEmailCron?.status ?? "never",
+        lastEmailRunProcessed: latestEmailCron?.items_processed ?? 0
       },
-      chart: buildChart(now, queueRows),
+      chart: buildChart(now, pdfQueueRows, emailQueueRows),
       eligibility: {
         summary: {
           totalActiveWebsites: websites.length,
@@ -559,7 +629,7 @@ export async function getAdminEmailMonitoringData(input?: {
         },
         rows: filteredEligibilityRows
       },
-      rows: unsentRows.filter((row) => {
+      rows: unresolvedRows.filter((row) => {
         const matchesUser =
           !userFilter ||
           row.email.toLowerCase().includes(userFilter) ||
@@ -581,15 +651,18 @@ export async function getAdminEmailMonitoringData(input?: {
         date: dateFilter
       },
       summary: {
-        scheduledToday: 0,
+        dueToday: 0,
+        reportsGeneratedToday: 0,
         sentToday: 0,
-        notSentToday: 0,
-        failedPendingToday: 0
+        blockedPendingToday: 0
       },
       cron: {
-        lastRunAt: null,
-        lastRunStatus: "never",
-        lastRunProcessed: 0
+        lastPdfRunAt: null,
+        lastPdfRunStatus: "never",
+        lastPdfRunProcessed: 0,
+        lastEmailRunAt: null,
+        lastEmailRunStatus: "never",
+        lastEmailRunProcessed: 0
       },
       chart: [],
       eligibility: {

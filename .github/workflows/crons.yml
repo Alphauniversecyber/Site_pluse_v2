@@ -10,6 +10,7 @@ on:
     - cron: "0 10 * * *"
     - cron: "0 11 * * *"
     - cron: "0 12 * * *"
+    - cron: "0 13 * * *"
   workflow_dispatch:
     inputs:
       job:
@@ -24,7 +25,8 @@ on:
           - process-uptime
           - sync-uptimerobot
           - process-competitors
-          - process-reports
+          - process-report-pdfs
+          - process-report-emails
           - expire-trials
           - process-lifecycle-emails
 
@@ -236,23 +238,23 @@ jobs:
           echo "Competitor worker queue still has pending jobs after 120 batches." >&2
           exit 1
 
-      - name: Trigger process-reports
-        if: ${{ github.event.schedule == '0 10 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-reports')) }}
+      - name: Trigger process-report-pdfs
+        if: ${{ github.event.schedule == '0 10 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-report-pdfs')) }}
         run: |
           set -euo pipefail
           base_url="${SITE_URL%/}"
-          echo "Triggering /api/cron/process-reports"
+          echo "Triggering /api/cron/process-report-pdfs"
           curl --fail --show-error --silent \
             --location \
             --location-trusted \
             --request GET \
             --header "Accept: application/json" \
             --header "Authorization: Bearer ${CRON_SECRET}" \
-            "${base_url}/api/cron/process-reports"
+            "${base_url}/api/cron/process-report-pdfs"
           echo
 
       - name: Drain queued slow jobs
-        if: ${{ github.event.schedule == '0 10 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-reports')) }}
+        if: ${{ github.event.schedule == '0 10 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-report-pdfs')) }}
         run: |
           set -euo pipefail
           base_url="${SITE_URL%/}"
@@ -265,7 +267,7 @@ jobs:
               --request GET \
               --header "Accept: application/json" \
               --header "Authorization: Bearer ${CRON_SECRET}" \
-              "${base_url}/api/worker/process-queue?job=process-reports")"
+              "${base_url}/api/worker/process-queue?job=process-report-pdfs")"
             echo "$response"
 
             done_flag="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Boolean(payload?.done)));" )"
@@ -278,11 +280,56 @@ jobs:
             sleep 2
           done
 
-          echo "Report worker queue still has pending jobs after 120 batches." >&2
+          echo "Report PDF worker queue still has pending jobs after 120 batches." >&2
+          exit 1
+
+      - name: Trigger process-report-emails
+        if: ${{ github.event.schedule == '0 11 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-report-emails')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+          echo "Triggering /api/cron/process-report-emails"
+          curl --fail --show-error --silent \
+            --location \
+            --location-trusted \
+            --request GET \
+            --header "Accept: application/json" \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${base_url}/api/cron/process-report-emails"
+          echo
+
+      - name: Drain queued slow jobs
+        if: ${{ github.event.schedule == '0 11 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-report-emails')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+
+          for iteration in $(seq 1 120); do
+            echo "Processing worker queue batch ${iteration}"
+            response="$(curl --fail --show-error --silent \
+              --location \
+              --location-trusted \
+              --request GET \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer ${CRON_SECRET}" \
+              "${base_url}/api/worker/process-queue?job=process-report-emails")"
+            echo "$response"
+
+            done_flag="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Boolean(payload?.done)));" )"
+            remaining="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Number(payload?.remaining ?? NaN)));" )"
+
+            if [ "$done_flag" = "true" ] || [ "$remaining" = "0" ]; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          echo "Report email worker queue still has pending jobs after 120 batches." >&2
           exit 1
 
       - name: Trigger expire-trials
-        if: ${{ github.event.schedule == '0 11 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'expire-trials')) }}
+        if: ${{ github.event.schedule == '0 12 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'expire-trials')) }}
         run: |
           set -euo pipefail
           base_url="${SITE_URL%/}"
@@ -297,7 +344,7 @@ jobs:
           echo
 
       - name: Trigger process-lifecycle-emails
-        if: ${{ github.event.schedule == '0 12 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-lifecycle-emails')) }}
+        if: ${{ github.event.schedule == '0 13 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'process-lifecycle-emails')) }}
         run: |
           set -euo pipefail
           base_url="${SITE_URL%/}"

@@ -4,7 +4,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export const SLOW_CRON_JOB_TYPES = [
   "process-scans",
-  "process-reports",
+  "process-report-pdfs",
+  "process-report-emails",
   "process-uptime",
   "process-competitors"
 ] as const;

@@ -11,7 +11,8 @@ import { processUptimeRobotSync } from "@/lib/uptime-monitoring";
 
 const ADMIN_DRAIN_ITERATION_LIMITS = {
   "process-scans": 120,
-  "process-reports": 120,
+  "process-report-pdfs": 120,
+  "process-report-emails": 120,
   "process-uptime": 60,
   "process-competitors": 120
 } as const;
@@ -44,7 +45,7 @@ async function expireTrials() {
 async function queueAndDrainCron(input: {
   cronName: Extract<
     AdminCronName,
-    "process-scans" | "process-reports" | "process-uptime" | "process-competitors"
+    "process-scans" | "process-report-pdfs" | "process-report-emails" | "process-uptime" | "process-competitors"
   >;
   payload: {
     mode?: "discover" | "process-queue";
@@ -88,12 +89,22 @@ export async function executeAdminCron(cronName: AdminCronName): Promise<Record<
       });
       return { executed };
     }
-    case "process-reports": {
-      const sent = await queueAndDrainCron({
-        cronName: "process-reports",
+    case "process-report-pdfs": {
+      const generated = await queueAndDrainCron({
+        cronName: "process-report-pdfs",
         payload: {
-          mode: "discover",
-          discoveryOffset: 0,
+          mode: "process-queue",
+          requestedAt: new Date().toISOString(),
+          source: "admin"
+        }
+      });
+      return { generated };
+    }
+    case "process-report-emails": {
+      const sent = await queueAndDrainCron({
+        cronName: "process-report-emails",
+        payload: {
+          mode: "process-queue",
           requestedAt: new Date().toISOString(),
           source: "admin"
         }

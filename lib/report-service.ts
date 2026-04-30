@@ -562,19 +562,115 @@ export async function sendStoredReportEmail(input: {
   }
 }
 
-export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_CRON_USER_LIMIT", 250)) {
-  return processDueEmailReportsBatch({
+export async function processDueReportPdfs(limit = getCronBatchLimit("REPORT_CRON_USER_LIMIT", 250)) {
+  return processDueReportPdfsBatch({
     discoveryLimit: limit,
     discoveryOffset: 0
   });
 }
 
-export async function processDueEmailReportsBatch(input: {
+export async function processDueReportPdfsBatch(input: {
   discoveryLimit?: number;
   discoveryOffset?: number;
   queueLimit?: number;
 }) {
-  const guard = createCronExecutionGuard("process-reports", 240_000);
+  const guard = createCronExecutionGuard("process-report-pdfs", 240_000);
+  const { enqueueDueReportPdfs, processQueuedReportPdfs } = await import("@/lib/report-pdf-queue");
+  const discoveryLimit = input.discoveryLimit ?? getCronBatchLimit("REPORT_CRON_USER_LIMIT", 250);
+  const queueLimit = input.queueLimit ?? getCronBatchLimit("REPORT_QUEUE_BATCH_LIMIT", 10);
+  const discoveryOffset = input.discoveryOffset ?? 0;
+  let cursor: number | null = discoveryOffset;
+  let queuedCount = 0;
+  let inspectedCount = 0;
+  let discoveryHasMore = false;
+  let stoppedBeforeQueue = false;
+
+  while (cursor !== null) {
+    const enqueueResult = await enqueueDueReportPdfs(discoveryLimit, cursor);
+    queuedCount += enqueueResult.queuedCount;
+    inspectedCount += enqueueResult.inspectedCount;
+    discoveryHasMore = enqueueResult.hasMoreCandidates;
+    cursor = enqueueResult.nextOffset;
+
+    if (guard.shouldStop({ stage: "discovery", queue: "report_generation_queue", nextOffset: enqueueResult.nextOffset })) {
+      stoppedBeforeQueue = true;
+      break;
+    }
+
+    if (!enqueueResult.hasMoreCandidates) {
+      break;
+    }
+  }
+
+  const queueResult = stoppedBeforeQueue
+    ? {
+        generatedReportIds: [] as string[],
+        processedCount: 0,
+        inspectedCount: 0,
+        hasMore: true
+      }
+    : await (async () => {
+        const generatedReportIds: string[] = [];
+        let processedCount = 0;
+        let queueInspectedCount = 0;
+        let hasMore = false;
+
+        while (true) {
+          const batchResult = await processQueuedReportPdfs(queueLimit, guard);
+          generatedReportIds.push(...batchResult.generatedReportIds);
+          processedCount += batchResult.processedCount;
+          queueInspectedCount += batchResult.inspectedCount;
+          hasMore = batchResult.hasMore;
+
+          if (!batchResult.hasMore) {
+            break;
+          }
+
+          if (
+            guard.shouldStop({
+              stage: "queue",
+              queue: "report_generation_queue",
+              processedCount,
+              inspectedCount: queueInspectedCount
+            })
+          ) {
+            break;
+          }
+        }
+
+        return {
+          generatedReportIds,
+          processedCount,
+          inspectedCount: queueInspectedCount,
+          hasMore
+        };
+      })();
+
+  return {
+    generatedReportIds: queueResult.generatedReportIds,
+    processedCount: queueResult.processedCount,
+    inspectedCount: inspectedCount + queueResult.inspectedCount,
+    queuedCount,
+    nextCursor: cursor,
+    hasMore: discoveryHasMore || queueResult.hasMore,
+    discoveryHasMore,
+    queueHasMore: queueResult.hasMore
+  };
+}
+
+export async function processDueReportEmails(limit = getCronBatchLimit("REPORT_CRON_USER_LIMIT", 250)) {
+  return processDueReportEmailsBatch({
+    discoveryLimit: limit,
+    discoveryOffset: 0
+  });
+}
+
+export async function processDueReportEmailsBatch(input: {
+  discoveryLimit?: number;
+  discoveryOffset?: number;
+  queueLimit?: number;
+}) {
+  const guard = createCronExecutionGuard("process-report-emails", 240_000);
   const { enqueueDueReportEmails, processQueuedReportEmails } = await import("@/lib/report-email-queue");
   const discoveryLimit = input.discoveryLimit ?? getCronBatchLimit("REPORT_CRON_USER_LIMIT", 250);
   const queueLimit = input.queueLimit ?? getCronBatchLimit("REPORT_QUEUE_BATCH_LIMIT", 10);
@@ -656,4 +752,16 @@ export async function processDueEmailReportsBatch(input: {
     discoveryHasMore,
     queueHasMore: queueResult.hasMore
   };
+}
+
+export async function processDueEmailReports(limit = getCronBatchLimit("REPORT_CRON_USER_LIMIT", 250)) {
+  return processDueReportEmails(limit);
+}
+
+export async function processDueEmailReportsBatch(input: {
+  discoveryLimit?: number;
+  discoveryOffset?: number;
+  queueLimit?: number;
+}) {
+  return processDueReportEmailsBatch(input);
 }

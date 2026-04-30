@@ -4,7 +4,8 @@ export const ADMIN_SUPABASE_EGRESS_THIS_MONTH = "6.48 / 5 GB";
 
 export type AdminCronName =
   | "process-scans"
-  | "process-reports"
+  | "process-report-pdfs"
+  | "process-report-emails"
   | "process-uptime"
   | "sync-uptimerobot"
   | "process-competitors"
@@ -28,9 +29,10 @@ export const ADMIN_CRON_DEFINITIONS: Record<
   {
     label: string;
     path: string;
-    schedule: string;
-    description: string;
-    queueBacked?: boolean;
+  schedule: string;
+  description: string;
+  queueBacked?: boolean;
+  hidden?: boolean;
   }
 > = {
   "process-scans": {
@@ -41,12 +43,20 @@ export const ADMIN_CRON_DEFINITIONS: Record<
       "Daily GitHub Actions job for due website scans. This cron enqueues work and the worker drains the queue separately, so scan completion is tracked in Scan Monitoring above.",
     queueBacked: true
   },
-  "process-reports": {
-    label: "process-reports",
-    path: "/api/cron/process-reports",
+  "process-report-pdfs": {
+    label: "process-report-pdfs",
+    path: "/api/cron/process-report-pdfs",
     schedule: "0 10 * * *",
     description:
-      "Daily GitHub Actions job for scheduled report emails. This cron enqueues work and the worker drains the queue separately.",
+      "Daily GitHub Actions job for scheduled report PDF generation. It queues websites that are due for a scheduled report, then the worker generates or refreshes the PDF.",
+    queueBacked: true
+  },
+  "process-report-emails": {
+    label: "process-report-emails",
+    path: "/api/cron/process-report-emails",
+    schedule: "0 11 * * *",
+    description:
+      "Daily GitHub Actions job for scheduled report email delivery. It only sends emails for reports that already have a generated PDF.",
     queueBacked: true
   },
   "process-uptime": {
@@ -72,13 +82,13 @@ export const ADMIN_CRON_DEFINITIONS: Record<
   "expire-trials": {
     label: "expire-trials",
     path: "/api/cron/expire-trials",
-    schedule: "0 11 * * *",
+    schedule: "0 12 * * *",
     description: "Moves expired trials back to the free plan."
   },
   "process-lifecycle-emails": {
     label: "process-lifecycle-emails",
     path: "/api/cron/process-lifecycle-emails",
-    schedule: "0 12 * * *",
+    schedule: "0 13 * * *",
     description: "Sends welcome, trial, onboarding, and lifecycle emails."
   },
   "process-paddle-webhooks": {
@@ -89,4 +99,6 @@ export const ADMIN_CRON_DEFINITIONS: Record<
   }
 };
 
-export const ADMIN_CRON_NAMES = Object.keys(ADMIN_CRON_DEFINITIONS) as AdminCronName[];
+export const ADMIN_CRON_NAMES = (Object.entries(ADMIN_CRON_DEFINITIONS)
+  .filter(([, definition]) => !definition.hidden)
+  .map(([key]) => key)) as AdminCronName[];

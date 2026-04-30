@@ -43,15 +43,15 @@ function getStatusTone(status: string) {
     return "green" as const;
   }
 
-  if (status === "ready") {
+  if (status === "ready" || status === "pdf_ready") {
     return "green" as const;
   }
 
-  if (status === "processing") {
+  if (status === "processing" || status === "waiting_for_email") {
     return "blue" as const;
   }
 
-  if (status === "pending") {
+  if (status === "pending" || status === "waiting_for_pdf" || status === "waiting_for_scan") {
     return "amber" as const;
   }
 
@@ -111,7 +111,7 @@ export default async function AdminEmailsPage({
     <div>
       <AdminPageHeader
         title="Emails"
-        description="Monitor the single scheduled scan and PDF report email pipeline, plus raw delivery activity from Resend."
+        description="Monitor scheduled report PDFs, scheduled report emails, and the raw Resend provider activity that sits beside them."
       />
 
       <AdminErrorNotice message={data.error} />
@@ -132,48 +132,54 @@ export default async function AdminEmailsPage({
 
       <div className="mb-8">
         <div className="mb-4 flex flex-col gap-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#22C55E]">Email Monitoring</p>
-          <h2 className="text-2xl font-semibold text-white">Scheduled scans and PDF report emails</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#22C55E]">Scheduled Report Pipeline</p>
+          <h2 className="text-2xl font-semibold text-white">Scheduled report generation and delivery</h2>
           <p className="max-w-3xl text-sm leading-6 text-zinc-400">
-            Scheduled scans and scheduled PDF report emails now use the same website frequency and automatic report setting.
+            This section tracks the scheduled report pipeline in stages: due website, successful scan, PDF generation, and final email delivery.
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <AdminCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Scheduled today</p>
-            <p className="mt-4 text-3xl font-semibold text-white">{monitoring.summary.scheduledToday}</p>
-            <p className="mt-2 text-sm text-zinc-500">Due by subscription, frequency, last sent date, and timezone-aware period.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Due scheduled reports</p>
+            <p className="mt-4 text-3xl font-semibold text-white">{monitoring.summary.dueToday}</p>
+            <p className="mt-2 text-sm text-zinc-500">Websites that are due for a scheduled report in the current local period.</p>
           </AdminCard>
           <AdminCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Sent today</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Reports generated today</p>
+            <p className="mt-4 text-3xl font-semibold text-[#86EFAC]">{monitoring.summary.reportsGeneratedToday}</p>
+            <p className="mt-2 text-sm text-zinc-500">Due reports whose PDF generation stage completed today.</p>
+          </AdminCard>
+          <AdminCard>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Scheduled emails sent</p>
             <p className="mt-4 text-3xl font-semibold text-[#86EFAC]">{monitoring.summary.sentToday}</p>
-            <p className="mt-2 text-sm text-zinc-500">Queue rows that successfully delivered the scheduled PDF report.</p>
+            <p className="mt-2 text-sm text-zinc-500">Due reports whose scheduled email delivery finished today.</p>
           </AdminCard>
           <AdminCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Failed / Pending</p>
-            <p className="mt-4 text-3xl font-semibold text-[#FCA5A5]">{monitoring.summary.failedPendingToday}</p>
-            <p className="mt-2 text-sm text-zinc-500">Anything due today that is still unsent, failed, skipped, or waiting in queue.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Still blocked / pending</p>
+            <p className="mt-4 text-3xl font-semibold text-[#FCA5A5]">{monitoring.summary.blockedPendingToday}</p>
+            <p className="mt-2 text-sm text-zinc-500">Due reports still waiting on a successful scan, PDF generation, or email delivery.</p>
           </AdminCard>
           <AdminCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Last report cron</p>
-            <p className="mt-4 text-lg font-semibold text-white">{formatAdminDate(monitoring.cron.lastRunAt)}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Latest pipeline crons</p>
+            <p className="mt-4 text-sm font-semibold text-white">PDFs: {formatAdminDate(monitoring.cron.lastPdfRunAt)}</p>
+            <p className="mt-2 text-sm font-semibold text-white">Emails: {formatAdminDate(monitoring.cron.lastEmailRunAt)}</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <AdminBadge label={monitoring.cron.lastRunStatus} tone={getStatusTone(monitoring.cron.lastRunStatus)} />
-              <AdminBadge label={`${monitoring.cron.lastRunProcessed} items`} tone="neutral" mono />
+              <AdminBadge label={`PDF ${monitoring.cron.lastPdfRunStatus}`} tone={getStatusTone(monitoring.cron.lastPdfRunStatus)} />
+              <AdminBadge label={`Email ${monitoring.cron.lastEmailRunStatus}`} tone={getStatusTone(monitoring.cron.lastEmailRunStatus)} />
             </div>
           </AdminCard>
         </div>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr,1fr]">
           <AdminSeriesChart
-            title="Emails sent vs failed"
-            description="Daily queue activity for scheduled report emails over the last 7 days."
+            title="Due reports vs generated PDFs vs sent emails"
+            description="Daily scheduled report pipeline activity over the last 7 days."
             points={monitoring.chart}
             series={[
-              { key: "scheduled", label: "Scheduled", tone: "blue" },
+              { key: "due", label: "Due", tone: "blue" },
+              { key: "generated", label: "Generated", tone: "amber" },
               { key: "sent", label: "Sent", tone: "green" },
-              { key: "failed", label: "Failed", tone: "red" }
             ]}
           />
 
@@ -203,11 +209,17 @@ export default async function AdminEmailsPage({
                 >
                   <option value="all">All statuses</option>
                   <option value="ready">Ready</option>
+                  <option value="pdf_ready">PDF ready</option>
                   <option value="sent">Sent</option>
                   <option value="not_due">Not due</option>
+                  <option value="waiting_for_pdf">Waiting for PDF</option>
+                  <option value="waiting_for_email">Waiting for email</option>
+                  <option value="waiting_for_scan">Waiting for scan</option>
                   <option value="pending">Pending</option>
                   <option value="processing">Processing</option>
                   <option value="failed">Failed</option>
+                  <option value="pdf_failed">PDF failed</option>
+                  <option value="email_failed">Email failed</option>
                   <option value="skipped">Skipped</option>
                   <option value="website_disabled">Website disabled</option>
                   <option value="user_disabled">User disabled</option>
@@ -376,8 +388,11 @@ export default async function AdminEmailsPage({
       </div>
 
       <div className="mb-4 flex flex-col gap-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">Delivery Log</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">Provider Delivery Log</p>
         <h2 className="text-2xl font-semibold text-white">Raw Resend activity</h2>
+        <p className="max-w-3xl text-sm leading-6 text-zinc-400">
+          This table comes directly from `email_logs`. It can include manual sends and other Resend traffic, so it is not the same as scheduled report pipeline completion.
+        </p>
       </div>
 
       <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">

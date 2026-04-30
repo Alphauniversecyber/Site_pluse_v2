@@ -1,25 +1,23 @@
 import "server-only";
 
-import type { Report, ScanFrequency, UserProfile, Website } from "@/types";
+import type { ScanFrequency, ScanResult, UserProfile, Website } from "@/types";
 import { logAdminError } from "@/lib/admin/logging";
 import type { CronExecutionGuard } from "@/lib/cron";
-import { sendStoredReportEmail } from "@/lib/report-service";
+import { generateAndStoreReport } from "@/lib/report-service";
 import { getPeriodKey, getRetryAt, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { hasScheduledAutomationAccess } from "@/lib/trial";
 import { PLAN_LIMITS } from "@/lib/utils";
 
-type QueueStatus = "pending" | "processing" | "sent" | "failed" | "skipped";
-type ReportQueueReason =
-  | "smtp_failure"
-  | "cron_not_triggered"
+type QueueStatus = "pending" | "processing" | "completed" | "failed" | "skipped";
+type ReportPdfQueueReason =
+  | "missing_successful_scan"
   | "frequency_mismatch"
-  | "already_sent"
   | "queue_failure"
-  | "missing_pdf_generation"
-  | "account_ineligible";
+  | "account_ineligible"
+  | "already_generated";
 
-type ReportGenerationQueueRow = {
+type ReportPdfQueueRow = {
   id: string;
   user_id: string;
   website_id: string;
@@ -32,8 +30,8 @@ type ReportGenerationQueueRow = {
   scheduled_for: string;
   next_attempt_at: string;
   attempt_count: number;
-  status: "pending" | "processing" | "completed" | "failed" | "skipped";
-  failure_reason: string | null;
+  status: QueueStatus;
+  failure_reason: ReportPdfQueueReason | null;
   last_error: string | null;
   last_attempt_at: string | null;
   completed_at: string | null;
@@ -42,75 +40,47 @@ type ReportGenerationQueueRow = {
   updated_at: string;
 };
 
-type ReportEmailQueueRow = {
-  id: string;
-  user_id: string;
-  website_id: string;
-  report_id: string | null;
-  frequency: ScanFrequency;
-  timezone: string;
-  period_key: string;
-  dedupe_key: string;
-  scheduled_for: string;
-  next_attempt_at: string;
-  attempt_count: number;
-  status: QueueStatus;
-  failure_reason: ReportQueueReason | null;
-  last_error: string | null;
-  last_attempt_at: string | null;
-  sent_at: string | null;
-  metadata: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-};
-
-export type EnqueueDueReportEmailsResult = {
+export type EnqueueDueReportPdfsResult = {
   queuedCount: number;
   inspectedCount: number;
   nextOffset: number | null;
   hasMoreCandidates: boolean;
 };
 
-export type ProcessQueuedReportEmailsResult = {
-  sentReportIds: string[];
+export type ProcessQueuedReportPdfsResult = {
+  generatedReportIds: string[];
   processedCount: number;
   inspectedCount: number;
   hasMore: boolean;
 };
 
-function buildReportEmailQueueDedupeKey(websiteId: string, frequency: ScanFrequency, periodKey: string) {
-  return `report-email:${websiteId}:${frequency}:${periodKey}`;
-}
-
 function buildReportPdfQueueDedupeKey(websiteId: string, frequency: ScanFrequency, periodKey: string) {
   return `report-pdf:${websiteId}:${frequency}:${periodKey}`;
 }
 
-function classifyEmailFailure(message: string): ReportQueueReason {
+function classifyPdfFailure(message: string): ReportPdfQueueReason {
   const normalized = message.toLowerCase();
 
   if (
-    normalized.includes("from_email") ||
-    normalized.includes("verified sender") ||
-    normalized.includes("provider") ||
-    normalized.includes("resend") ||
-    normalized.includes("unable to send email")
+    normalized.includes("no successful scan") ||
+    normalized.includes("scan result not found") ||
+    normalized.includes("scan not found")
   ) {
-    return "smtp_failure";
-  }
-
-  if (normalized.includes("pdf") || normalized.includes("report not found") || normalized.includes("download report")) {
-    return "missing_pdf_generation";
+    return "missing_successful_scan";
   }
 
   if (normalized.includes("frequency") || normalized.includes("disabled")) {
     return "frequency_mismatch";
   }
 
+  if (normalized.includes("already generated")) {
+    return "already_generated";
+  }
+
   return "queue_failure";
 }
 
-async function loadEligibleProfiles(limit: number, offset: number) {
+async function loadEligibleProfiles(limit = 200, offset = 0) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("users")
@@ -134,7 +104,10 @@ async function loadEligibleProfiles(limit: number, offset: number) {
 async function loadActiveWebsites(userIds: string[]) {
   if (!userIds.length) {
     return [] as Array<
-      Pick<Website, "id" | "user_id" | "url" | "label" | "is_active" | "auto_email_reports" | "report_frequency" | "created_at">
+      Pick<
+        Website,
+        "id" | "user_id" | "url" | "label" | "is_active" | "auto_email_reports" | "report_frequency" | "created_at"
+      >
     >;
   }
 
@@ -153,8 +126,38 @@ async function loadActiveWebsites(userIds: string[]) {
   }
 
   return (data ?? []) as Array<
-    Pick<Website, "id" | "user_id" | "url" | "label" | "is_active" | "auto_email_reports" | "report_frequency" | "created_at">
+    Pick<
+      Website,
+      "id" | "user_id" | "url" | "label" | "is_active" | "auto_email_reports" | "report_frequency" | "created_at"
+    >
   >;
+}
+
+async function loadLatestSuccessfulScans(websiteIds: string[]) {
+  if (!websiteIds.length) {
+    return new Map<string, Pick<ScanResult, "id" | "website_id" | "scan_status" | "scanned_at"> | null>();
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("scan_results")
+    .select("id,website_id,scan_status,scanned_at")
+    .in("website_id", websiteIds)
+    .eq("scan_status", "success")
+    .order("scanned_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const latest = new Map<string, Pick<ScanResult, "id" | "website_id" | "scan_status" | "scanned_at"> | null>();
+  for (const row of (data ?? []) as Array<Pick<ScanResult, "id" | "website_id" | "scan_status" | "scanned_at">>) {
+    if (!latest.has(row.website_id)) {
+      latest.set(row.website_id, row);
+    }
+  }
+
+  return latest;
 }
 
 async function loadLatestSentReports(websiteIds: string[]) {
@@ -184,71 +187,41 @@ async function loadLatestSentReports(websiteIds: string[]) {
   return latest;
 }
 
-async function loadCompletedPdfRows(dedupeKeys: string[]) {
+async function loadExistingQueueRows(dedupeKeys: string[]) {
   if (!dedupeKeys.length) {
-    return new Map<string, ReportGenerationQueueRow>();
+    return new Map<string, ReportPdfQueueRow>();
   }
 
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("report_generation_queue")
     .select("*")
-    .eq("status", "completed")
     .in("dedupe_key", dedupeKeys);
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return new Map(((data ?? []) as ReportGenerationQueueRow[]).map((row) => [row.dedupe_key, row]));
+  return new Map(((data ?? []) as ReportPdfQueueRow[]).map((row) => [row.dedupe_key, row]));
 }
 
-async function loadExistingQueueRows(dedupeKeys: string[]) {
-  if (!dedupeKeys.length) {
-    return new Map<string, ReportEmailQueueRow>();
-  }
-
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from("report_email_queue")
-    .select("*")
-    .in("dedupe_key", dedupeKeys);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return new Map(((data ?? []) as ReportEmailQueueRow[]).map((row) => [row.dedupe_key, row]));
-}
-
-async function loadReport(reportId: string) {
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin.from("reports").select("*").eq("id", reportId).maybeSingle<Report>();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data ?? null;
-}
-
-async function insertQueueRows(rows: Array<Partial<ReportEmailQueueRow>>) {
+async function insertQueueRows(rows: Array<Partial<ReportPdfQueueRow>>) {
   if (!rows.length) {
     return;
   }
 
   const admin = createSupabaseAdminClient();
-  const { error } = await admin.from("report_email_queue").insert(rows);
+  const { error } = await admin.from("report_generation_queue").insert(rows);
 
   if (error) {
     throw new Error(error.message);
   }
 }
 
-async function updateQueueRow(id: string, payload: Partial<ReportEmailQueueRow>) {
+async function updateQueueRow(id: string, payload: Partial<ReportPdfQueueRow>) {
   const admin = createSupabaseAdminClient();
   const { error } = await admin
-    .from("report_email_queue")
+    .from("report_generation_queue")
     .update({
       ...payload,
       updated_at: new Date().toISOString()
@@ -260,10 +233,10 @@ async function updateQueueRow(id: string, payload: Partial<ReportEmailQueueRow>)
   }
 }
 
-async function claimQueueRow(row: ReportEmailQueueRow, startedAt: string) {
+async function claimQueueRow(row: ReportPdfQueueRow, startedAt: string) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
-    .from("report_email_queue")
+    .from("report_generation_queue")
     .update({
       status: "processing",
       last_attempt_at: startedAt,
@@ -283,10 +256,64 @@ async function claimQueueRow(row: ReportEmailQueueRow, startedAt: string) {
   return Boolean(data?.id);
 }
 
-export async function enqueueDueReportEmails(limit = 200, offset = 0): Promise<EnqueueDueReportEmailsResult> {
+async function loadWebsite(websiteId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("websites")
+    .select("id,user_id,url,label,auto_email_reports,report_frequency")
+    .eq("id", websiteId)
+    .maybeSingle<Pick<Website, "id" | "user_id" | "url" | "label" | "auto_email_reports" | "report_frequency">>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? null;
+}
+
+async function loadUser(userId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("users")
+    .select("id,email,plan,timezone,subscription_status,is_trial,trial_ends_at")
+    .eq("id", userId)
+    .maybeSingle<
+      Pick<
+        UserProfile,
+        "id" | "email" | "plan" | "timezone" | "subscription_status" | "is_trial" | "trial_ends_at"
+      >
+    >();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? null;
+}
+
+async function loadLatestSuccessfulScan(websiteId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("scan_results")
+    .select("id,website_id,scan_status,scanned_at")
+    .eq("website_id", websiteId)
+    .eq("scan_status", "success")
+    .order("scanned_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<Pick<ScanResult, "id" | "website_id" | "scan_status" | "scanned_at">>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? null;
+}
+
+export async function enqueueDueReportPdfs(limit = 200, offset = 0): Promise<EnqueueDueReportPdfsResult> {
   const profiles = await loadEligibleProfiles(limit, offset);
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
   const websites = await loadActiveWebsites(profiles.map((profile) => profile.id));
+  const latestScans = await loadLatestSuccessfulScans(websites.map((website) => website.id));
   const latestReports = await loadLatestSentReports(websites.map((website) => website.id));
   const now = new Date();
 
@@ -312,54 +339,48 @@ export async function enqueueDueReportEmails(limit = 200, offset = 0): Promise<E
         return null;
       }
 
-      const pdfDedupeKey = buildReportPdfQueueDedupeKey(website.id, frequency, periodKey);
-      const dedupeKey = buildReportEmailQueueDedupeKey(website.id, frequency, periodKey);
+      const latestScan = latestScans.get(website.id) ?? null;
+      const dedupeKey = buildReportPdfQueueDedupeKey(website.id, frequency, periodKey);
+      const baseRow = {
+        user_id: profile.id,
+        website_id: website.id,
+        scan_id: latestScan?.id ?? null,
+        frequency,
+        timezone,
+        period_key: periodKey,
+        dedupe_key: dedupeKey,
+        scheduled_for: now.toISOString(),
+        next_attempt_at: now.toISOString(),
+        metadata: {
+          userEmail: profile.email,
+          plan: profile.plan,
+          websiteUrl: website.url,
+          websiteLabel: website.label,
+          latestScanId: latestScan?.id ?? null,
+          latestScanStatus: latestScan?.scan_status ?? null
+        }
+      };
+
+      if (!latestScan) {
+        return {
+          ...baseRow,
+          status: "failed" as const,
+          failure_reason: "missing_successful_scan" as const,
+          last_error: "No successful scan is available to generate the scheduled PDF report."
+        };
+      }
 
       return {
-        dedupeKey,
-        pdfDedupeKey,
-        baseRow: {
-          user_id: profile.id,
-          website_id: website.id,
-          frequency,
-          timezone,
-          period_key: periodKey,
-          dedupe_key: dedupeKey,
-          scheduled_for: now.toISOString(),
-          next_attempt_at: now.toISOString(),
-          metadata: {
-            userEmail: profile.email,
-            plan: profile.plan,
-            websiteUrl: website.url,
-            websiteLabel: website.label
-          }
-        }
+        ...baseRow,
+        status: "pending" as const,
+        failure_reason: null,
+        last_error: null
       };
     })
     .filter((row): row is NonNullable<typeof row> => Boolean(row));
 
-  const completedPdfRows = await loadCompletedPdfRows(candidates.map((row) => row.pdfDedupeKey));
-  const existingRows = await loadExistingQueueRows(candidates.map((row) => row.dedupeKey));
-  const rowsToInsert = candidates
-    .filter((row) => completedPdfRows.has(row.pdfDedupeKey))
-    .filter((row) => !existingRows.has(row.dedupeKey))
-    .map((row) => {
-      const pdfRow = completedPdfRows.get(row.pdfDedupeKey)!;
-
-      return {
-        ...row.baseRow,
-        report_id: pdfRow.report_id,
-        status: "pending" as const,
-        failure_reason: null,
-        last_error: null,
-        metadata: {
-          ...row.baseRow.metadata,
-          reportGenerationQueueId: pdfRow.id,
-          reportId: pdfRow.report_id,
-          scanId: pdfRow.scan_id
-        }
-      };
-    });
+  const existingRows = await loadExistingQueueRows(candidates.map((row) => row.dedupe_key));
+  const rowsToInsert = candidates.filter((row) => !existingRows.has(row.dedupe_key));
 
   await insertQueueRows(rowsToInsert);
 
@@ -373,13 +394,13 @@ export async function enqueueDueReportEmails(limit = 200, offset = 0): Promise<E
   };
 }
 
-export async function processQueuedReportEmails(
+export async function processQueuedReportPdfs(
   limit = 25,
   guard?: CronExecutionGuard
-): Promise<ProcessQueuedReportEmailsResult> {
+): Promise<ProcessQueuedReportPdfsResult> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
-    .from("report_email_queue")
+    .from("report_generation_queue")
     .select("*")
     .in("status", ["pending", "failed"])
     .lte("next_attempt_at", new Date().toISOString())
@@ -390,15 +411,15 @@ export async function processQueuedReportEmails(
     throw new Error(error.message);
   }
 
-  const rows = (data ?? []) as ReportEmailQueueRow[];
-  const sentReportIds: string[] = [];
+  const rows = (data ?? []) as ReportPdfQueueRow[];
+  const generatedReportIds: string[] = [];
   let inspectedCount = 0;
 
   for (const row of rows) {
     if (
       guard?.shouldStop({
-        queue: "report_email_queue",
-        processedCount: sentReportIds.length,
+        queue: "report_generation_queue",
+        processedCount: generatedReportIds.length,
         queueId: row.id,
         websiteId: row.website_id
       })
@@ -411,22 +432,8 @@ export async function processQueuedReportEmails(
     const startedAt = new Date().toISOString();
 
     try {
-      const adminNow = createSupabaseAdminClient();
-      const { data: website } = await adminNow
-        .from("websites")
-        .select("id,user_id,url,label,auto_email_reports,report_frequency")
-        .eq("id", row.website_id)
-        .maybeSingle<Website>();
-      const { data: profile } = await adminNow
-        .from("users")
-        .select("id,email,plan,timezone,subscription_status,is_trial,trial_ends_at")
-        .eq("id", row.user_id)
-        .maybeSingle<
-          Pick<
-            UserProfile,
-            "id" | "email" | "plan" | "timezone" | "subscription_status" | "is_trial" | "trial_ends_at"
-          >
-        >();
+      const website = await loadWebsite(row.website_id);
+      const profile = await loadUser(row.user_id);
 
       if (
         !website ||
@@ -442,7 +449,7 @@ export async function processQueuedReportEmails(
           last_error:
             !profile || !hasScheduledAutomationAccess(profile)
               ? "Scheduled reports are no longer enabled for this account."
-              : "Report emails are no longer enabled for this website.",
+              : "Report generation is no longer enabled for this website.",
           last_attempt_at: startedAt
         });
         continue;
@@ -463,49 +470,35 @@ export async function processQueuedReportEmails(
         continue;
       }
 
-      const reportId =
-        row.report_id ??
-        (typeof row.metadata?.reportId === "string" ? row.metadata.reportId : null);
+      const latestSuccessfulScan = await loadLatestSuccessfulScan(row.website_id);
 
-      if (!reportId) {
-        throw new Error("A generated report is required before scheduled email delivery can run.");
+      if (!latestSuccessfulScan) {
+        throw new Error("No successful scan is available to generate the scheduled PDF report.");
       }
 
-      const report = await loadReport(reportId);
-      if (!report?.pdf_url) {
-        throw new Error("A generated PDF report is required before scheduled email delivery can run.");
-      }
-
-      const delivery = await sendStoredReportEmail({
-        reportId,
-        skipAlreadySentRecipients: true,
-        deliveryMode: "scheduled"
+      const report = await generateAndStoreReport({
+        websiteId: row.website_id,
+        scanId: latestSuccessfulScan.id
       });
 
-      if (!delivery.deliveries.length) {
-        await updateQueueRow(row.id, {
-          report_id: reportId,
-          status: "skipped",
-          failure_reason: "already_sent",
-          last_error: "Duplicate prevention skipped this scheduled report because it was already delivered.",
-          last_attempt_at: startedAt,
-          sent_at: delivery.report.sent_at ?? new Date().toISOString()
-        });
-        continue;
-      }
-
       await updateQueueRow(row.id, {
-        report_id: reportId,
-        status: "sent",
+        report_id: report.id,
+        scan_id: latestSuccessfulScan.id,
+        status: "completed",
         failure_reason: null,
         last_error: null,
         last_attempt_at: startedAt,
-        sent_at: delivery.report.sent_at ?? new Date().toISOString()
+        completed_at: report.created_at ?? new Date().toISOString(),
+        metadata: {
+          ...row.metadata,
+          latestScanId: latestSuccessfulScan.id,
+          latestScanStatus: latestSuccessfulScan.scan_status
+        }
       });
-      sentReportIds.push(reportId);
+      generatedReportIds.push(report.id);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown report email queue failure.";
-      const failureReason = classifyEmailFailure(message);
+      const message = error instanceof Error ? error.message : "Unknown report PDF queue failure.";
+      const failureReason = classifyPdfFailure(message);
       const attemptCount = (row.attempt_count ?? 0) + 1;
 
       await updateQueueRow(row.id, {
@@ -518,12 +511,12 @@ export async function processQueuedReportEmails(
       });
 
       await logAdminError({
-        errorType: "email_failed",
+        errorType: "pdf_failed",
         errorMessage: message,
         websiteId: row.website_id,
         userId: row.user_id,
         context: {
-          queue: "report_email_queue",
+          queue: "report_generation_queue",
           queueId: row.id,
           failureReason
         },
@@ -533,8 +526,8 @@ export async function processQueuedReportEmails(
   }
 
   return {
-    sentReportIds,
-    processedCount: sentReportIds.length,
+    generatedReportIds,
+    processedCount: generatedReportIds.length,
     inspectedCount,
     hasMore: inspectedCount < rows.length || rows.length === limit
   };

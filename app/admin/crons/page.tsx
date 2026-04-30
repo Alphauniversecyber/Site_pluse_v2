@@ -52,7 +52,7 @@ export default async function AdminCronsPage({
     <div>
       <AdminPageHeader
         title="Crons"
-        description="Monitor GitHub Actions schedules, see how many website scans were required vs completed today, and manually kick off a job when you need to recover backlog or debug production behavior."
+        description="Monitor GitHub Actions schedules, see which websites are due for scans, and understand the difference between cron triggers, queue backlog, and completed downstream work."
       />
 
       <AdminErrorNotice message={data.error} />
@@ -82,19 +82,19 @@ export default async function AdminCronsPage({
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <AdminCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Required today</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Due websites today</p>
             <p className="mt-4 text-3xl font-semibold text-white">{monitoring.summary.requiredToday}</p>
             <p className="mt-2 text-sm text-zinc-500">Websites that should have been scanned in the current period.</p>
           </AdminCard>
           <AdminCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Completed today</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Scans completed today</p>
             <p className="mt-4 text-3xl font-semibold text-[#86EFAC]">{monitoring.summary.completedToday}</p>
-            <p className="mt-2 text-sm text-zinc-500">Queue jobs that finished successfully and stored a fresh scan result.</p>
+            <p className="mt-2 text-sm text-zinc-500">Due websites whose scan worker finished and stored a fresh scan result.</p>
           </AdminCard>
           <AdminCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Failed / Not executed</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Due but still unresolved</p>
             <p className="mt-4 text-3xl font-semibold text-[#FCA5A5]">{monitoring.summary.failedPendingToday}</p>
-            <p className="mt-2 text-sm text-zinc-500">Anything still missing because of backlog, timeout, API issues, or plan limits.</p>
+            <p className="mt-2 text-sm text-zinc-500">Includes queue backlog, timeouts, skipped sites, ineligible accounts, and plan-limited websites.</p>
           </AdminCard>
           <AdminCard>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Last scan cron</p>
@@ -114,6 +114,9 @@ export default async function AdminCronsPage({
                   <p className="text-sm font-semibold text-white">Today&apos;s scan progress</p>
                   <p className="mt-1 text-sm leading-6 text-zinc-400">
                     {monitoring.progress.completed} of {monitoring.progress.required} required scans are complete.
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-zinc-500">
+                    A green GitHub Actions run means the cron triggered and drained worker batches. It does not guarantee every due website finished scanning successfully.
                   </p>
                 </div>
                 <AdminBadge label={`${monitoring.progress.percent}% complete`} tone={monitoring.progress.percent >= 100 ? "green" : monitoring.progress.percent >= 50 ? "amber" : "red"} />
@@ -297,7 +300,7 @@ export default async function AdminCronsPage({
                 ) : null}
                 {row.queueBacked ? (
                   <p className="mt-2 text-xs leading-5 text-zinc-500">
-                    Queue-backed cron: this history shows trigger and drain runs, while the downstream work completes in the worker queue.
+                    Queue-backed cron: this card shows trigger and drain activity. The actual website/report work may still be pending or blocked in the downstream queue.
                   </p>
                 ) : null}
               </div>

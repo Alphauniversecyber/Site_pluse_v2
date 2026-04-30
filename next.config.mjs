@@ -23,7 +23,7 @@ const nextConfig = {
       "url-regex-safe"
     ],
     outputFileTracingIncludes: {
-      "/api/cron/process-reports": browserTracingIncludes,
+      "/api/cron/process-report-pdfs": browserTracingIncludes,
       "/api/reports/generate": browserTracingIncludes,
       "/api/cron/process-scans": browserTracingIncludes,
       "/api/preview-scan": browserTracingIncludes,

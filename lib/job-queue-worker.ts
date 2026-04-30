@@ -15,6 +15,7 @@ import {
   type JobQueuePayload,
   type JobQueueRow
 } from "@/lib/job-queue";
+import { enqueueDueReportPdfs, processQueuedReportPdfs } from "@/lib/report-pdf-queue";
 import { enqueueDueReportEmails, processQueuedReportEmails } from "@/lib/report-email-queue";
 import { enqueueDueScanJobs, processQueuedScanJobs } from "@/lib/scan-job-queue";
 import { processDailyUptimeChecksBatch } from "@/lib/uptime-monitoring";
@@ -22,7 +23,8 @@ import { processDailyUptimeChecksBatch } from "@/lib/uptime-monitoring";
 const SCAN_DISCOVERY_LIMIT = 25;
 const SCAN_QUEUE_LIMIT = 1;
 const REPORT_DISCOVERY_LIMIT = 25;
-const REPORT_QUEUE_LIMIT = 1;
+const REPORT_PDF_QUEUE_LIMIT = 1;
+const REPORT_EMAIL_QUEUE_LIMIT = 1;
 const UPTIME_LIMIT = 5;
 const COMPETITOR_DISCOVERY_LIMIT = 10;
 
@@ -75,15 +77,15 @@ async function processScanJob(job: JobQueueRow) {
   };
 }
 
-async function processReportJob(job: JobQueueRow) {
+async function processReportPdfJob(job: JobQueueRow) {
   const payload = job.payload ?? {};
   const mode = payload.mode === "process-queue" ? "process-queue" : "discover";
   const discoveryOffset = getNumber(payload.discoveryOffset, 0);
 
   if (mode === "discover") {
-    const enqueueResult = await enqueueDueReportEmails(REPORT_DISCOVERY_LIMIT, discoveryOffset);
+    const enqueueResult = await enqueueDueReportPdfs(REPORT_DISCOVERY_LIMIT, discoveryOffset);
 
-    await enqueueJob("process-reports", {
+    await enqueueJob("process-report-pdfs", {
       mode: enqueueResult.hasMoreCandidates ? "discover" : "process-queue",
       discoveryOffset: enqueueResult.hasMoreCandidates ? enqueueResult.nextOffset ?? 0 : 0,
       requestedAt: new Date().toISOString(),
@@ -99,10 +101,53 @@ async function processReportJob(job: JobQueueRow) {
     };
   }
 
-  const queueResult = await processQueuedReportEmails(REPORT_QUEUE_LIMIT);
+  const queueResult = await processQueuedReportPdfs(REPORT_PDF_QUEUE_LIMIT);
 
   if (queueResult.hasMore) {
-    await enqueueJob("process-reports", {
+    await enqueueJob("process-report-pdfs", {
+      mode: "process-queue",
+      requestedAt: new Date().toISOString(),
+      source: "worker-continuation"
+    });
+  }
+
+  return {
+    phase: "process-queue",
+    processedCount: queueResult.processedCount,
+    queueInspectedCount: queueResult.inspectedCount,
+    hasMore: queueResult.hasMore,
+    nextOffset: null
+  };
+}
+
+async function processReportEmailJob(job: JobQueueRow) {
+  const payload = job.payload ?? {};
+  const mode = payload.mode === "process-queue" ? "process-queue" : "discover";
+  const discoveryOffset = getNumber(payload.discoveryOffset, 0);
+
+  if (mode === "discover") {
+    const enqueueResult = await enqueueDueReportEmails(REPORT_DISCOVERY_LIMIT, discoveryOffset);
+
+    await enqueueJob("process-report-emails", {
+      mode: enqueueResult.hasMoreCandidates ? "discover" : "process-queue",
+      discoveryOffset: enqueueResult.hasMoreCandidates ? enqueueResult.nextOffset ?? 0 : 0,
+      requestedAt: new Date().toISOString(),
+      source: "worker-continuation"
+    });
+
+    return {
+      phase: "discover",
+      queuedCount: enqueueResult.queuedCount,
+      discoveredCount: enqueueResult.inspectedCount,
+      hasMore: true,
+      nextOffset: enqueueResult.nextOffset
+    };
+  }
+
+  const queueResult = await processQueuedReportEmails(REPORT_EMAIL_QUEUE_LIMIT);
+
+  if (queueResult.hasMore) {
+    await enqueueJob("process-report-emails", {
       mode: "process-queue",
       requestedAt: new Date().toISOString(),
       source: "worker-continuation"
@@ -194,8 +239,12 @@ async function processJob(job: JobQueueRow) {
     return processScanJob(job);
   }
 
-  if (job.job_type === "process-reports") {
-    return processReportJob(job);
+  if (job.job_type === "process-report-pdfs") {
+    return processReportPdfJob(job);
+  }
+
+  if (job.job_type === "process-report-emails") {
+    return processReportEmailJob(job);
   }
 
   if (job.job_type === "process-competitors") {
