@@ -185,6 +185,32 @@ function getRecipients(profile: UserProfile, website: Website, explicitEmail?: s
   return Array.from(new Set(recipients));
 }
 
+async function persistReportDeliveryState(admin: ReturnType<typeof createSupabaseAdminClient>, reportId: string, recipients: Set<string>, sentAt?: string | null) {
+  const updatePayload: {
+    sent_to_email: string;
+    sent_at?: string;
+  } = {
+    sent_to_email: Array.from(recipients).join(", ")
+  };
+
+  if (sentAt) {
+    updatePayload.sent_at = sentAt;
+  }
+
+  const { data, error } = await admin
+    .from("reports")
+    .update(updatePayload)
+    .eq("id", reportId)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Unable to update report delivery status.");
+  }
+
+  return data as Report;
+}
+
 export async function generateAndStoreReport(input: { websiteId: string; scanId: string }) {
   const admin = createSupabaseAdminClient();
   let website: Website | null = null;
@@ -392,19 +418,7 @@ export async function sendStoredReportEmail(input: {
 
     if (!recipients.length) {
       const sentAt = report.sent_at ?? new Date().toISOString();
-      const { data: alreadyComplete, error: alreadyCompleteError } = await admin
-        .from("reports")
-        .update({
-          sent_to_email: Array.from(alreadyDeliveredRecipients).join(", "),
-          sent_at: sentAt
-        })
-        .eq("id", report.id)
-        .select("*")
-        .single();
-
-      if (alreadyCompleteError || !alreadyComplete) {
-        throw new Error(alreadyCompleteError?.message ?? "Unable to update report delivery status.");
-      }
+      const alreadyComplete = await persistReportDeliveryState(admin, report.id, alreadyDeliveredRecipients, sentAt);
 
       return {
         report: alreadyComplete as Report,
@@ -471,20 +485,21 @@ export async function sendStoredReportEmail(input: {
             messageId: delivery.messageId,
             provider: delivery.provider
           });
+          alreadyDeliveredRecipients.add(recipient);
+          report = await persistReportDeliveryState(
+            admin,
+            report.id,
+            alreadyDeliveredRecipients,
+            report.sent_at ?? new Date().toISOString()
+          );
         } else {
           skippedRecipients.push(recipient);
         }
-        alreadyDeliveredRecipients.add(recipient);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown email delivery error.";
 
         if (alreadyDeliveredRecipients.size) {
-          await admin
-            .from("reports")
-            .update({
-              sent_to_email: Array.from(alreadyDeliveredRecipients).join(", ")
-            })
-            .eq("id", report.id);
+          report = await persistReportDeliveryState(admin, report.id, alreadyDeliveredRecipients, report.sent_at);
         }
 
         console.error("[reports:send] delivery_failed", {
@@ -503,19 +518,10 @@ export async function sendStoredReportEmail(input: {
       }
     }
 
-    const { data: updated, error } = await admin
-      .from("reports")
-      .update({
-        sent_to_email: Array.from(alreadyDeliveredRecipients).join(", "),
-        sent_at: new Date().toISOString()
-      })
-      .eq("id", report.id)
-      .select("*")
-      .single();
-
-    if (error || !updated) {
-      throw new Error(error?.message ?? "Unable to update report delivery status.");
-    }
+    const updated =
+      deliveries.length > 0
+        ? report
+        : await persistReportDeliveryState(admin, report.id, alreadyDeliveredRecipients, new Date().toISOString());
 
     if (deliveries.length) {
       await admin.from("notifications").insert({

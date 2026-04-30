@@ -117,14 +117,19 @@ async function loadProfiles(userIds: string[]) {
   >;
 }
 
-async function loadActiveWebsites(limit: number, offset: number) {
+async function loadActiveWebsites(limit?: number | null, offset = 0) {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("websites")
     .select("id,user_id,url,label,is_active,report_frequency,auto_email_reports,created_at")
     .eq("is_active", true)
-    .order("created_at", { ascending: true })
-    .range(offset, offset + Math.max(limit - 1, 0));
+    .order("created_at", { ascending: true });
+
+  if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
+    query = query.range(offset, offset + Math.max(limit - 1, 0));
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);
@@ -287,7 +292,7 @@ async function executeWebsiteScanWithTimeout(websiteId: string) {
   }
 }
 
-export async function enqueueDueScanJobs(limit = 250, offset = 0): Promise<EnqueueDueScanJobsResult> {
+export async function enqueueDueScanJobs(limit?: number | null, offset = 0): Promise<EnqueueDueScanJobsResult> {
   const websites = await loadActiveWebsites(limit, offset);
   const profiles = await loadProfiles(Array.from(new Set(websites.map((website) => website.user_id))));
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -389,7 +394,8 @@ export async function enqueueDueScanJobs(limit = 250, offset = 0): Promise<Enque
   const existingRows = await loadExistingQueueRows(candidates.map((row) => row.dedupe_key as string));
   const rowsToInsert = candidates.filter((row) => !existingRows.has(row.dedupe_key as string));
   await insertQueueRows(rowsToInsert);
-  const nextOffset = websites.length === limit ? offset + websites.length : null;
+  const hasPagedLimit = typeof limit === "number" && Number.isFinite(limit) && limit > 0;
+  const nextOffset = hasPagedLimit && websites.length === limit ? offset + websites.length : null;
 
   return {
     queuedCount: rowsToInsert.length,

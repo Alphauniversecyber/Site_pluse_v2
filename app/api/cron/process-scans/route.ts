@@ -1,6 +1,7 @@
 import { runLoggedCron } from "@/lib/admin/logging";
 import { apiError, apiSuccess } from "@/lib/api";
 import { enqueueJob, isAuthorizedCronRequest } from "@/lib/job-queue";
+import { enqueueDueScanJobs } from "@/lib/scan-job-queue";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -12,11 +13,11 @@ export async function GET(request: Request) {
 
   try {
     const result = await runLoggedCron("process-scans", async () => {
+      const enqueueResult = await enqueueDueScanJobs();
       const queued = await enqueueJob(
         "process-scans",
         {
-          mode: "discover",
-          discoveryOffset: 0,
+          mode: "process-queue",
           requestedAt: new Date().toISOString(),
           source: "cron"
         },
@@ -26,7 +27,9 @@ export async function GET(request: Request) {
       );
 
       return {
-        processedCount: queued.queued ? 1 : 0,
+        processedCount: enqueueResult.queuedCount,
+        queuedCount: enqueueResult.queuedCount,
+        discoveredCount: enqueueResult.inspectedCount,
         queued: queued.queued,
         jobId: queued.job.id
       };
