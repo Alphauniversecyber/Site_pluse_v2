@@ -63,6 +63,8 @@ export type ProcessQueuedScanJobsResult = {
   hasMore: boolean;
 };
 
+const SCAN_EXECUTION_TIMEOUT_MS = 45_000;
+
 function buildScanQueueDedupeKey(websiteId: string, frequency: ScanFrequency, periodKey: string) {
   return `scan-queue:${websiteId}:${frequency}:${periodKey}`;
 }
@@ -264,6 +266,25 @@ function toScanFrequency(value: ReportFrequency): ScanFrequency | null {
 
 function isCurrentPeriod(row: Pick<ScanJobQueueRow, "frequency" | "period_key" | "timezone">) {
   return row.period_key === getPeriodKey(row.frequency, new Date(), row.timezone);
+}
+
+async function executeWebsiteScanWithTimeout(websiteId: string) {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      executeWebsiteScan(websiteId),
+      new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error("timeout"));
+        }, SCAN_EXECUTION_TIMEOUT_MS);
+      })
+    ]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
 }
 
 export async function enqueueDueScanJobs(limit = 250, offset = 0): Promise<EnqueueDueScanJobsResult> {
@@ -486,7 +507,7 @@ export async function processQueuedScanJobs(
         continue;
       }
 
-      const result = await executeWebsiteScan(row.website_id);
+      const result = await executeWebsiteScanWithTimeout(row.website_id);
 
       await updateQueueRow(row.id, {
         scan_result_id: result.scan.id,

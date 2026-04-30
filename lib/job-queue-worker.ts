@@ -20,7 +20,7 @@ import { enqueueDueScanJobs, processQueuedScanJobs } from "@/lib/scan-job-queue"
 import { processDailyUptimeChecksBatch } from "@/lib/uptime-monitoring";
 
 const SCAN_DISCOVERY_LIMIT = 25;
-const SCAN_QUEUE_LIMIT = 5;
+const SCAN_QUEUE_LIMIT = 1;
 const REPORT_DISCOVERY_LIMIT = 25;
 const REPORT_QUEUE_LIMIT = 1;
 const UPTIME_LIMIT = 5;
