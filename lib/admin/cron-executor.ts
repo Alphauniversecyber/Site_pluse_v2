@@ -11,6 +11,7 @@ import { processUptimeRobotSync } from "@/lib/uptime-monitoring";
 
 const ADMIN_DRAIN_ITERATION_LIMITS = {
   "process-scans": 120,
+  "retry-failed-scans": 120,
   "process-report-pdfs": 120,
   "process-report-emails": 120,
   "process-uptime": 60,
@@ -88,6 +89,38 @@ export async function executeAdminCron(cronName: AdminCronName): Promise<Record<
         }
       });
       return { executed };
+    }
+    case "retry-failed-scans": {
+      const queued = await runLoggedCron("retry-failed-scans", async () => {
+        const { enqueueFailedScanRetryJobs } = await import("@/lib/scan-job-queue");
+        const retries = await enqueueFailedScanRetryJobs();
+        const job = await enqueueJob(
+          "process-scans",
+          {
+            mode: "process-queue",
+            requestedAt: new Date().toISOString(),
+            source: "admin-retry-failed-scans"
+          },
+          {
+            skipIfOpen: true
+          }
+        );
+        const drained = await drainQueue("process-scans", ADMIN_DRAIN_ITERATION_LIMITS["retry-failed-scans"]);
+
+        return {
+          processedCount: retries.queuedCount,
+          queuedCount: retries.queuedCount,
+          discoveredCount: retries.inspectedCount,
+          candidateCount: retries.candidateCount,
+          queued: job.queued,
+          jobId: job.job.id,
+          remaining: drained.remaining,
+          done: drained.done,
+          iterations: drained.iterations
+        };
+      });
+
+      return { queued };
     }
     case "process-report-pdfs": {
       const generated = await queueAndDrainCron({

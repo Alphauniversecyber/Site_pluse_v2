@@ -4,6 +4,7 @@ export const ADMIN_SUPABASE_EGRESS_THIS_MONTH = "6.48 / 5 GB";
 
 export type AdminCronName =
   | "process-scans"
+  | "retry-failed-scans"
   | "process-report-pdfs"
   | "process-report-emails"
   | "process-uptime"
@@ -41,6 +42,14 @@ export const ADMIN_CRON_DEFINITIONS: Record<
     schedule: "0 6 * * *",
     description:
       "Daily GitHub Actions job for due website scans. This cron enqueues work and the worker drains the queue separately, so scan completion is tracked in Scan Monitoring above.",
+    queueBacked: true
+  },
+  "retry-failed-scans": {
+    label: "retry-failed-scans",
+    path: "/api/cron/retry-failed-scans",
+    schedule: "0 6 * * *",
+    description:
+      "Runs right after process-scans in the same scheduler window. It finds websites whose latest saved scan result failed and queues one retry scan for each of them.",
     queueBacked: true
   },
   "process-report-pdfs": {

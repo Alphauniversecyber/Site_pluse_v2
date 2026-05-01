@@ -252,7 +252,7 @@ export type AdminCronsPageData = {
 };
 
 function getQueueMetricLabels(cronName: AdminCronName) {
-  if (cronName === "process-scans") {
+  if (cronName === "process-scans" || cronName === "retry-failed-scans") {
     return {
       completedLabel: "completed scans",
       remainingLabel: "scan backlog"
@@ -1218,6 +1218,10 @@ export async function getAdminCronsData(): Promise<AdminCronsPageData> {
         completedCount: scanCompletedTodayCount ?? 0,
         remainingCount: scanRemainingCount ?? 0
       },
+      "retry-failed-scans": {
+        completedCount: scanCompletedTodayCount ?? 0,
+        remainingCount: scanRemainingCount ?? 0
+      },
         "process-report-pdfs": {
           completedCount: reportPdfCompletedTodayCount ?? 0,
           remainingCount: reportPdfRemainingCount ?? 0
@@ -1573,6 +1577,28 @@ function getAdminCronSuccessMessage(cronName: AdminCronName, data: Record<string
       return result.done
         ? `process-scans ${queuedState}, processed ${processedCount} scan queue job(s), and drained the current backlog.`
         : `process-scans ${queuedState}, processed ${processedCount} scan queue job(s), and still has ${result.remaining ?? 0} worker job(s) remaining.`;
+    }
+  }
+
+  if (cronName === "retry-failed-scans") {
+    const result = data.queued as
+      | {
+          queuedCount?: number;
+          candidateCount?: number;
+          queued?: boolean;
+          remaining?: number;
+          done?: boolean;
+        }
+      | undefined;
+
+    if (result) {
+      const queuedCount = result.queuedCount ?? 0;
+      const candidateCount = result.candidateCount ?? 0;
+      const queuedState = result.queued ? "queued a new worker job" : "reused the existing open worker job";
+
+      return result.done
+        ? `retry-failed-scans found ${candidateCount} failed latest scan candidate(s), queued ${queuedCount} retry scan job(s), ${queuedState}, and drained the current scan backlog.`
+        : `retry-failed-scans found ${candidateCount} failed latest scan candidate(s), queued ${queuedCount} retry scan job(s), ${queuedState}, and still has ${result.remaining ?? 0} worker job(s) remaining.`;
     }
   }
 

@@ -22,6 +22,7 @@ on:
           - all
           - process-paddle-webhooks
           - process-scans
+          - retry-failed-scans
           - process-uptime
           - sync-uptimerobot
           - process-competitors
@@ -131,6 +132,73 @@ jobs:
           done
 
           echo "Scan worker queue still has pending jobs after 120 batches." >&2
+          exit 1
+
+      - name: Trigger retry-failed-scans
+        if: ${{ github.event.schedule == '0 6 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'retry-failed-scans')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+          echo "Triggering /api/cron/retry-failed-scans"
+          curl --fail --show-error --silent \
+            --location \
+            --location-trusted \
+            --request GET \
+            --header "Accept: application/json" \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${base_url}/api/cron/retry-failed-scans"
+          echo
+
+      - name: Drain queued retry scan jobs
+        if: ${{ github.event.schedule == '0 6 * * *' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'retry-failed-scans')) }}
+        run: |
+          set -euo pipefail
+          base_url="${SITE_URL%/}"
+
+          for iteration in $(seq 1 120); do
+            echo "Processing retry scan worker queue batch ${iteration}"
+            response_file="$(mktemp)"
+            http_status="$(curl --show-error --silent \
+              --location \
+              --location-trusted \
+              --request GET \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer ${CRON_SECRET}" \
+              --output "$response_file" \
+              --write-out "%{http_code}" \
+              "${base_url}/api/worker/process-queue?job=process-scans" || true)"
+
+            if [ "$http_status" = "504" ]; then
+              echo "Worker queue returned 504 Gateway Timeout; treating as soft error and retrying in 5 seconds." >&2
+              cat "$response_file"
+              echo
+              rm -f "$response_file"
+              sleep 5
+              continue
+            fi
+
+            if [ "${http_status:-000}" -ge 400 ]; then
+              echo "Worker queue request failed with HTTP ${http_status}." >&2
+              cat "$response_file" >&2
+              rm -f "$response_file"
+              exit 1
+            fi
+
+            response="$(cat "$response_file")"
+            rm -f "$response_file"
+            echo "$response"
+
+            done_flag="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Boolean(payload?.done)));" )"
+            remaining="$(printf '%s' "$response" | node -e "const fs = require('fs'); const payload = JSON.parse(fs.readFileSync(0, 'utf8')); process.stdout.write(String(Number(payload?.remaining ?? NaN)));" )"
+
+            if [ "$done_flag" = "true" ] || [ "$remaining" = "0" ]; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          echo "Retry scan worker queue still has pending jobs after 120 batches." >&2
           exit 1
 
       - name: Trigger process-uptime

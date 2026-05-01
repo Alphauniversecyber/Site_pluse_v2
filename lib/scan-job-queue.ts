@@ -63,10 +63,22 @@ export type ProcessQueuedScanJobsResult = {
   hasMore: boolean;
 };
 
+export type EnqueueFailedScanRetryJobsResult = {
+  queuedCount: number;
+  inspectedCount: number;
+  candidateCount: number;
+};
+
 const SCAN_EXECUTION_TIMEOUT_MS = 45_000;
+const FAILED_SCAN_RETRY_LOOKBACK_HOURS = 48;
+const FAILED_SCAN_RETRY_RECENT_SCAN_LIMIT = 600;
 
 function buildScanQueueDedupeKey(websiteId: string, frequency: ScanFrequency, periodKey: string) {
   return `scan-queue:${websiteId}:${frequency}:${periodKey}`;
+}
+
+function buildFailedScanRetryDedupeKey(websiteId: string, failedScanId: string) {
+  return `scan-retry:${websiteId}:${failedScanId}`;
 }
 
 function classifyScanFailure(message: string): ScanFailureReason {
@@ -87,6 +99,10 @@ function classifyScanFailure(message: string): ScanFailureReason {
   }
 
   return "queue_backlog";
+}
+
+function getFailedScanRetryLookbackIso() {
+  return new Date(Date.now() - FAILED_SCAN_RETRY_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
 }
 
 async function loadProfiles(userIds: string[]) {
@@ -130,6 +146,35 @@ async function loadActiveWebsites(limit?: number | null, offset = 0) {
   }
 
   const { data, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as Array<
+    Pick<
+      Website,
+      "id" | "user_id" | "url" | "label" | "is_active" | "report_frequency" | "auto_email_reports" | "created_at"
+    >
+  >;
+}
+
+async function loadActiveWebsitesByIds(websiteIds: string[]) {
+  if (!websiteIds.length) {
+    return [] as Array<
+      Pick<
+        Website,
+        "id" | "user_id" | "url" | "label" | "is_active" | "report_frequency" | "auto_email_reports" | "created_at"
+      >
+    >;
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("websites")
+    .select("id,user_id,url,label,is_active,report_frequency,auto_email_reports,created_at")
+    .eq("is_active", true)
+    .in("id", websiteIds);
 
   if (error) {
     throw new Error(error.message);
@@ -197,6 +242,28 @@ async function loadExistingQueueRows(dedupeKeys: string[]) {
   }
 
   return new Map(((data ?? []) as ScanJobQueueRow[]).map((row) => [row.dedupe_key, row]));
+}
+
+async function loadRecentScansForRetry(limit = FAILED_SCAN_RETRY_RECENT_SCAN_LIMIT) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("scan_results")
+    .select("id,website_id,scan_status,error_message,scanned_at")
+    .gte("scanned_at", getFailedScanRetryLookbackIso())
+    .order("scanned_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as Array<{
+    id: string;
+    website_id: string;
+    scan_status: "success" | "failed";
+    error_message: string | null;
+    scanned_at: string;
+  }>;
 }
 
 async function insertQueueRows(rows: Array<Partial<ScanJobQueueRow>>) {
@@ -402,6 +469,121 @@ export async function enqueueDueScanJobs(limit?: number | null, offset = 0): Pro
     inspectedCount: websites.length,
     nextOffset,
     hasMoreCandidates: nextOffset !== null
+  };
+}
+
+export async function enqueueFailedScanRetryJobs(): Promise<EnqueueFailedScanRetryJobsResult> {
+  const recentScans = await loadRecentScansForRetry();
+  const latestScanByWebsite = new Map<
+    string,
+    {
+      id: string;
+      website_id: string;
+      scan_status: "success" | "failed";
+      error_message: string | null;
+      scanned_at: string;
+    }
+  >();
+
+  for (const scan of recentScans) {
+    if (!latestScanByWebsite.has(scan.website_id)) {
+      latestScanByWebsite.set(scan.website_id, scan);
+    }
+  }
+
+  const failedLatestScans = Array.from(latestScanByWebsite.values()).filter(
+    (scan) => scan.scan_status === "failed"
+  );
+
+  const websites = await loadActiveWebsitesByIds(failedLatestScans.map((scan) => scan.website_id));
+  const websiteById = new Map(websites.map((website) => [website.id, website]));
+  const profiles = await loadProfiles(Array.from(new Set(websites.map((website) => website.user_id))));
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const activeWebsitesForUsers = await loadActiveWebsitesForUsers(
+    Array.from(new Set(websites.map((website) => website.user_id)))
+  );
+  const schedules = await loadSchedules(websites.map((website) => website.id));
+  const websitesByUser = activeWebsitesForUsers.reduce<Record<string, typeof activeWebsitesForUsers>>(
+    (accumulator, website) => {
+      accumulator[website.user_id] = accumulator[website.user_id] ?? [];
+      accumulator[website.user_id]?.push(website);
+      return accumulator;
+    },
+    {}
+  );
+  const now = new Date();
+  const candidates: Array<Partial<ScanJobQueueRow>> = [];
+
+  for (const failedScan of failedLatestScans) {
+    const website = websiteById.get(failedScan.website_id);
+    if (!website) {
+      continue;
+    }
+
+    const profile = profileById.get(website.user_id);
+    if (!profile || !hasScheduledAutomationAccess(profile)) {
+      continue;
+    }
+
+    const planLimits = PLAN_LIMITS[profile.plan];
+    if (!planLimits.emailReports || !website.auto_email_reports) {
+      continue;
+    }
+
+    const reportFrequency = website.report_frequency ?? "weekly";
+    const requestedFrequency = toScanFrequency(reportFrequency);
+    if (!requestedFrequency || !planLimits.scanFrequencies.includes(requestedFrequency)) {
+      continue;
+    }
+
+    const ownedWebsites = websitesByUser[website.user_id] ?? [];
+    const orderedWebsites = ownedWebsites
+      .slice()
+      .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime());
+    const websiteIndex = orderedWebsites.findIndex((item) => item.id === website.id);
+    if (websiteIndex >= planLimits.websiteLimit) {
+      continue;
+    }
+
+    const timezone = normalizeTimezone(profile.timezone);
+    const frequency = requestedFrequency;
+    const periodKey = getPeriodKey(frequency, now, timezone);
+
+    candidates.push({
+      user_id: profile.id,
+      website_id: website.id,
+      scan_result_id: failedScan.id,
+      frequency,
+      timezone,
+      period_key: periodKey,
+      dedupe_key: buildFailedScanRetryDedupeKey(website.id, failedScan.id),
+      scheduled_for: now.toISOString(),
+      next_attempt_at: now.toISOString(),
+      status: "pending",
+      failure_reason: null,
+      last_error: null,
+      metadata: {
+        source: "retry-failed-scans",
+        retryReason: "latest_scan_failed",
+        failedScanId: failedScan.id,
+        failedScanAt: failedScan.scanned_at,
+        failedScanError: failedScan.error_message,
+        userEmail: profile.email,
+        plan: profile.plan,
+        websiteUrl: website.url,
+        websiteLabel: website.label
+      }
+    });
+  }
+
+  const existingRows = await loadExistingQueueRows(candidates.map((row) => row.dedupe_key as string));
+  const rowsToInsert = candidates.filter((row) => !existingRows.has(row.dedupe_key as string));
+  await insertQueueRows(rowsToInsert);
+
+  return {
+    queuedCount: rowsToInsert.length,
+    inspectedCount: recentScans.length,
+    candidateCount: candidates.length
   };
 }
 
