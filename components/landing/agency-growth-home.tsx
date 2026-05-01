@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useUser } from "@/hooks/useUser";
+import { getPlanPricing, formatUsdPrice, type BillingPlanCatalog } from "@/lib/billing";
 import { marketingCopy, marketingFaq } from "@/lib/marketing-copy";
 
 const solutionPillars = [
@@ -78,9 +79,10 @@ const repositionedFeatures = [
   }
 ] as const;
 
-export function AgencyGrowthHome() {
+export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
   const { user } = useUser();
   const isAuthenticated = Boolean(user);
+  const growthMonthlyPrice = getPlanPricing("starter", "monthly", plans).salePrice;
   const proofStats = [
     {
       label: "Free scan preview",
@@ -221,11 +223,11 @@ export function AgencyGrowthHome() {
               Close one extra client and this pays for itself.
             </h2>
             <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
-              The real comparison is simple: one agency client can be worth $500 or more per month. SitePulse starts at $49 per month. If it helps you close one deal or retain one shaky account, the return is obvious.
+              The real comparison is simple: one agency client can be worth $500 or more per month. SitePulse starts at {formatUsdPrice(growthMonthlyPrice)} per month. If it helps you close one deal or retain one shaky account, the return is obvious.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Badge variant="outline">Close 1 client = $500+</Badge>
-              <Badge variant="outline">SitePulse = $49/month</Badge>
+              <Badge variant="outline">SitePulse = {formatUsdPrice(growthMonthlyPrice)}/month</Badge>
             </div>
 
             <div className="max-w-xl rounded-[1.6rem] border border-border/80 bg-card/75 p-5 md:p-6">
@@ -250,7 +252,7 @@ export function AgencyGrowthHome() {
           Position SitePulse as part of your revenue engine, not another software expense. Start with one free scan, then choose the plan that matches how you sell and scale.
         </p>
         <div className="mt-6">
-          <PricingGrid compact />
+          <PricingGrid plans={plans} compact />
         </div>
       </section>
 
