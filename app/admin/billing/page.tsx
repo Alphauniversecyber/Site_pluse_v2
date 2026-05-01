@@ -5,7 +5,11 @@ import { AdminErrorNotice } from "@/components/admin/admin-error-notice";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { requireAdminPageAccess } from "@/lib/admin/auth";
 import { getAdminBillingMonitoringData } from "@/lib/admin/billing-monitoring";
-import { formatAdminDate, formatCurrency } from "@/lib/admin/format";
+import { calculateDiscountPercentage, formatUsdPrice, getPlanPricing, PAID_PLAN_KEYS } from "@/lib/billing";
+import { getBillingPlans } from "@/lib/billing-config";
+import { formatAdminDate, formatCurrency, parseTextParam } from "@/lib/admin/format";
+
+import { runAdminBillingPricingAction } from "./actions";
 
 function getStatusTone(status: string) {
   if (status === "active" || status === "trialing") {
@@ -34,13 +38,14 @@ function prettifyLabel(value: string) {
 export default async function AdminBillingPage({
   searchParams
 }: {
-  searchParams?: {
-    search?: string;
-  };
+  searchParams?: Record<string, string | string[] | undefined>;
 }) {
   requireAdminPageAccess();
-  const search = searchParams?.search?.trim() ?? "";
+  const search = parseTextParam(searchParams?.search);
+  const actionStatus = parseTextParam(searchParams?.actionStatus);
+  const actionMessage = parseTextParam(searchParams?.actionMessage);
   const data = await getAdminBillingMonitoringData(search);
+  const billingPlans = await getBillingPlans();
 
   return (
     <div>
@@ -50,6 +55,106 @@ export default async function AdminBillingPage({
       />
 
       <AdminErrorNotice message={data.error} />
+
+      {actionMessage ? (
+        <div
+          className={`mb-6 rounded-2xl border px-4 py-3 text-sm ${
+            actionStatus === "success"
+              ? "border-[#14532D] bg-[#052E16] text-[#86EFAC]"
+              : "border-[#7F1D1D] bg-[#450A0A] text-[#FCA5A5]"
+          }`}
+        >
+          {actionMessage}
+        </div>
+      ) : null}
+
+      <AdminCard className="mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Plan pricing</h2>
+            <p className="mt-1 text-sm text-zinc-400">
+              Update original and sale prices here. Customer billing pages automatically calculate the discount percentage from these values.
+            </p>
+          </div>
+          <AdminBadge label="4 paid price points" tone="blue" />
+        </div>
+
+        <form action={runAdminBillingPricingAction} className="mt-5 space-y-5">
+          <div className="grid gap-4 xl:grid-cols-2">
+            {PAID_PLAN_KEYS.flatMap((planKey) =>
+              (["monthly", "yearly"] as const).map((billingCycle) => {
+                const snapshot = getPlanPricing(planKey, billingCycle, billingPlans);
+                const discountPercentage = calculateDiscountPercentage(
+                  snapshot.originalPrice,
+                  snapshot.salePrice
+                );
+
+                return (
+                  <div
+                    key={`${planKey}-${billingCycle}`}
+                    className="rounded-2xl border border-[#1F1F1F] bg-[#0D0D0D] p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{snapshot.displayName}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-zinc-500">
+                          {billingCycle}
+                        </p>
+                      </div>
+                      <AdminBadge
+                        label={discountPercentage > 0 ? `${discountPercentage}% off` : "No discount"}
+                        tone={discountPercentage > 0 ? "green" : "neutral"}
+                      />
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                          Original price
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          name={`${planKey}_${billingCycle}_original_price`}
+                          defaultValue={snapshot.originalPrice}
+                          className="mt-2 h-11 w-full rounded-2xl border border-[#222222] bg-[#111111] px-4 text-sm text-white outline-none"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                          Sale price
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          name={`${planKey}_${billingCycle}_sale_price`}
+                          defaultValue={snapshot.salePrice}
+                          className="mt-2 h-11 w-full rounded-2xl border border-[#222222] bg-[#111111] px-4 text-sm text-white outline-none"
+                        />
+                      </label>
+                    </div>
+
+                    <p className="mt-3 text-sm text-zinc-400">
+                      Customer pays {formatUsdPrice(snapshot.salePrice)} per{" "}
+                      {billingCycle === "yearly" ? "year" : "month"}
+                      {discountPercentage > 0 ? ` instead of ${formatUsdPrice(snapshot.originalPrice)}.` : "."}
+                    </p>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <button
+            type="submit"
+            className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+          >
+            Save package pricing
+          </button>
+        </form>
+      </AdminCard>
 
       <form className="mb-6" action="/admin/billing" method="get">
         <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">

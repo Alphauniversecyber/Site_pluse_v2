@@ -2,10 +2,12 @@ import "server-only";
 
 import crypto from "node:crypto";
 
+import { getBillingPlansState } from "@/lib/billing-config";
 import {
   getPaddlePlanName,
   getPlanPricing,
   isPaidPlan,
+  type PlanPriceSnapshot,
   type PaidPlanKey
 } from "@/lib/billing";
 import { getBaseUrl } from "@/lib/utils";
@@ -248,8 +250,8 @@ let cachedClientToken: string | null = null;
 const productIdCache = new Map<PaidPlanKey, string>();
 const priceIdCache = new Map<string, string>();
 
-function getCatalogCacheKey(plan: PaidPlanKey, billingCycle: BillingCycle) {
-  return `${plan}:${billingCycle}`;
+function getCatalogCacheKey(plan: PaidPlanKey, billingCycle: BillingCycle, salePrice: number) {
+  return `${plan}:${billingCycle}:${salePrice}`;
 }
 
 function normalizePaddleEnvironment(value: string | undefined): PaddleEnvironment {
@@ -595,8 +597,12 @@ async function createProduct(plan: PaidPlanKey) {
   }
 }
 
-async function createPrice(plan: PaidPlanKey, billingCycle: BillingCycle, productId: string) {
-  const snapshot = getPlanPricing(plan, billingCycle);
+async function createPrice(
+  plan: PaidPlanKey,
+  billingCycle: BillingCycle,
+  productId: string,
+  snapshot: PlanPriceSnapshot
+) {
   const response = await paddleRequest<PaddleApiResponse<PaddlePrice>>("/prices", {
     method: "POST",
     body: {
@@ -652,22 +658,31 @@ async function getOrCreateProductId(plan: PaidPlanKey) {
   return created.id;
 }
 
-async function getOrCreatePriceId(plan: PaidPlanKey, billingCycle: BillingCycle) {
-  const cacheKey = getCatalogCacheKey(plan, billingCycle);
+async function getOrCreatePriceId(
+  plan: PaidPlanKey,
+  billingCycle: BillingCycle,
+  input?: {
+    snapshot?: PlanPriceSnapshot;
+    preferConfiguredPrice?: boolean;
+  }
+) {
+  const state = input?.snapshot ? null : await getBillingPlansState();
+  const snapshot = input?.snapshot ?? getPlanPricing(plan, billingCycle, state?.plans);
+  const cacheKey = getCatalogCacheKey(plan, billingCycle, snapshot.salePrice);
   const cached = priceIdCache.get(cacheKey);
 
   if (cached) {
     return cached;
   }
 
-  const configuredPriceId = getConfiguredPriceId(plan, billingCycle);
+  const configuredPriceId =
+    input?.preferConfiguredPrice === false ? null : getConfiguredPriceId(plan, billingCycle);
   if (configuredPriceId) {
     priceIdCache.set(cacheKey, configuredPriceId.id);
     return configuredPriceId.id;
   }
 
   const productId = await getOrCreateProductId(plan);
-  const snapshot = getPlanPricing(plan, billingCycle);
   const prices = await listPrices(productId);
   const expectedAmount = toMinorUnits(snapshot.salePrice);
   const existing =
@@ -687,7 +702,7 @@ async function getOrCreatePriceId(plan: PaidPlanKey, billingCycle: BillingCycle)
     return existing.id;
   }
 
-  const created = await createPrice(plan, billingCycle, productId);
+  const created = await createPrice(plan, billingCycle, productId, snapshot);
   priceIdCache.set(cacheKey, created.id);
   return created.id;
 }
@@ -713,9 +728,11 @@ export async function getPaddleCheckoutConfig(input: {
   billingCycle: BillingCycle;
   userId: string;
 }) {
-  const snapshot = getPlanPricing(input.plan, input.billingCycle);
-  const configuredPrice = getConfiguredPriceId(input.plan, input.billingCycle);
-  const discountId = getConfiguredDiscountId(input.plan, input.billingCycle);
+  const billingPlansState = await getBillingPlansState();
+  const snapshot = getPlanPricing(input.plan, input.billingCycle, billingPlansState.plans);
+  const hasPriceOverride = billingPlansState.overrideKeys.has(`${input.plan}:${input.billingCycle}`);
+  const configuredPrice = hasPriceOverride ? null : getConfiguredPriceId(input.plan, input.billingCycle);
+  const discountId = hasPriceOverride ? null : getConfiguredDiscountId(input.plan, input.billingCycle);
 
   if (discountId && configuredPrice?.source !== "env") {
     throw new Error(
@@ -723,7 +740,12 @@ export async function getPaddleCheckoutConfig(input: {
     );
   }
 
-  const priceId = configuredPrice?.id ?? (await getOrCreatePriceId(input.plan, input.billingCycle));
+  const priceId =
+    configuredPrice?.id ??
+    (await getOrCreatePriceId(input.plan, input.billingCycle, {
+      snapshot,
+      preferConfiguredPrice: !hasPriceOverride
+    }));
 
   return {
     environment: getPaddleEnvironment(),
@@ -872,12 +894,18 @@ export function parsePaddleSelection(
 }
 
 export async function resolveSelectionFromPriceId(priceId: string) {
+  const billingPlansState = await getBillingPlansState();
+
   for (const plan of ["starter", "agency"] as PaidPlanKey[]) {
     for (const billingCycle of ["monthly", "yearly"] as BillingCycle[]) {
-      const knownPriceId = await getOrCreatePriceId(plan, billingCycle);
+      const snapshot = getPlanPricing(plan, billingCycle, billingPlansState.plans);
+      const hasPriceOverride = billingPlansState.overrideKeys.has(`${plan}:${billingCycle}`);
+      const knownPriceId = await getOrCreatePriceId(plan, billingCycle, {
+        snapshot,
+        preferConfiguredPrice: !hasPriceOverride
+      });
 
       if (knownPriceId === priceId) {
-        const snapshot = getPlanPricing(plan, billingCycle);
         return {
           plan,
           billingCycle,

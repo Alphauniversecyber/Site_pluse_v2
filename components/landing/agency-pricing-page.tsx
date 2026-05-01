@@ -4,6 +4,7 @@ import { PricingGrid } from "@/components/landing/pricing-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { getBillingPlans } from "@/lib/billing-config";
 import { marketingCopy } from "@/lib/marketing-copy";
 
 const pricingProof = [
@@ -12,7 +13,9 @@ const pricingProof = [
   "Retention proof can save a shaky account before it churns."
 ] as const;
 
-export function AgencyPricingPage() {
+export async function AgencyPricingPage() {
+  const plans = await getBillingPlans();
+
   return (
     <main className="container py-16 md:py-20">
       <div className="mx-auto max-w-4xl text-center">
@@ -32,7 +35,7 @@ export function AgencyPricingPage() {
       </div>
 
       <div className="mt-10">
-        <PricingGrid showToggle />
+        <PricingGrid plans={plans} showToggle />
       </div>
 
       <div className="mt-14 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">

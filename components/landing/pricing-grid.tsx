@@ -10,17 +10,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   BILLING_PLANS,
+  getDiscountPercentage,
   formatUsdPrice,
   getDisplayedMonthlyEquivalent,
   getDisplayedOriginalMonthlyEquivalent,
   getMonthlySavings,
   getYearlyBillingCopy,
+  getYearlySavingsLabel,
+  hasPlanDiscount,
+  type BillingPlanCatalog,
   isPaidPlan
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 import type { BillingCycle, PlanKey } from "@/types";
 
-const plans: Array<{
+const pricingCards: Array<{
   key: PlanKey;
   badge?: string;
   subtitle: string;
@@ -78,9 +82,11 @@ const yearlyTrialText =
 void [foundingPriceLockCopy, starterLockCopyCopy, foundingSaleUrgencyCopy];
 
 export function PricingGrid({
+  plans = BILLING_PLANS,
   compact = false,
   showToggle = false
 }: {
+  plans?: BillingPlanCatalog;
   compact?: boolean;
   showToggle?: boolean;
 }) {
@@ -95,13 +101,15 @@ export function PricingGrid({
       ) : null}
 
       <div className={cn("grid lg:grid-cols-3", compact ? "gap-4 xl:gap-5" : "gap-5 xl:gap-6")}>
-        {plans.map((plan) => {
-          const planDefinition = BILLING_PLANS[plan.key];
+        {pricingCards.map((plan) => {
+          const planDefinition = plans[plan.key];
           const yearlySelected = billingCycle === "yearly";
           const paidPlan = isPaidPlan(plan.key);
-          const displayedAmount = getDisplayedMonthlyEquivalent(plan.key, billingCycle);
-          const displayedOriginalAmount = getDisplayedOriginalMonthlyEquivalent(plan.key, billingCycle);
-          const monthlySavings = getMonthlySavings(plan.key, billingCycle);
+          const displayedAmount = getDisplayedMonthlyEquivalent(plan.key, billingCycle, plans);
+          const displayedOriginalAmount = getDisplayedOriginalMonthlyEquivalent(plan.key, billingCycle, plans);
+          const monthlySavings = getMonthlySavings(plan.key, billingCycle, plans);
+          const discountPercentage = getDiscountPercentage(plan.key, billingCycle, plans);
+          const hasDiscount = hasPlanDiscount(plan.key, billingCycle, plans);
 
           return (
             <article
@@ -139,7 +147,7 @@ export function PricingGrid({
                     {paidPlan ? planDefinition.marketingBadge : plan.badge}
                   </Badge>
 
-                  {yearlySelected && paidPlan && planDefinition.yearlySavingsLabel ? (
+                  {paidPlan && hasDiscount ? (
                     <Badge
                       className={cn(
                         compact
@@ -148,7 +156,20 @@ export function PricingGrid({
                         "border-transparent bg-emerald-600 text-white"
                       )}
                     >
-                      {planDefinition.yearlySavingsLabel}
+                      {discountPercentage}% off
+                    </Badge>
+                  ) : null}
+
+                  {yearlySelected && paidPlan && getYearlySavingsLabel(plan.key, plans) ? (
+                    <Badge
+                      className={cn(
+                        compact
+                          ? "w-fit px-3 py-1 text-xs tracking-normal normal-case"
+                          : "w-fit px-3.5 py-1.5 text-[13px] tracking-normal normal-case",
+                        "border-transparent bg-emerald-600 text-white"
+                      )}
+                    >
+                      {getYearlySavingsLabel(plan.key, plans)}
                     </Badge>
                   ) : null}
                 </div>
@@ -173,7 +194,7 @@ export function PricingGrid({
                     </span>
                   </div>
 
-                  {paidPlan ? (
+                  {paidPlan && hasDiscount ? (
                     <p
                       className={cn(
                         compact ? "mt-1 text-[13px] leading-6" : "mt-1.5 text-[14px] leading-6",
@@ -185,7 +206,7 @@ export function PricingGrid({
                     </p>
                   ) : null}
 
-                  {paidPlan ? (
+                  {paidPlan && hasDiscount ? (
                     <>
                       <p className="mt-1 text-[12px] leading-5 text-emerald-600 dark:text-emerald-300">
                         You save {formatUsdPrice(monthlySavings)}/mo
@@ -197,7 +218,7 @@ export function PricingGrid({
                             plan.theme === "dark" ? "text-slate-600 dark:text-slate-200" : "text-slate-500"
                           )}
                         >
-                          {getYearlyBillingCopy(plan.key)}
+                          {getYearlyBillingCopy(plan.key, plans)}
                         </p>
                       ) : null}
                       <p

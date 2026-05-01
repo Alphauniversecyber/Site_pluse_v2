@@ -122,6 +122,25 @@ create table if not exists public.subscriptions (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.billing_plan_prices (
+  id uuid primary key default gen_random_uuid(),
+  plan_key public.plan_tier not null,
+  billing_cycle public.billing_cycle not null,
+  original_price numeric(10,2) not null check (original_price >= 0),
+  sale_price numeric(10,2) not null check (sale_price >= 0 and sale_price <= original_price),
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (plan_key, billing_cycle)
+);
+
+insert into public.billing_plan_prices (plan_key, billing_cycle, original_price, sale_price)
+values
+  ('starter', 'monthly', 49, 19),
+  ('starter', 'yearly', 468, 187),
+  ('agency', 'monthly', 149, 59),
+  ('agency', 'yearly', 1428, 571)
+on conflict (plan_key, billing_cycle) do nothing;
+
 create table if not exists public.payment_logs (
   id uuid primary key default gen_random_uuid(),
   subscription_id uuid references public.subscriptions (id) on delete set null,
@@ -546,6 +565,8 @@ create index if not exists idx_websites_user_id on public.websites (user_id);
 create index if not exists idx_subscriptions_user_id on public.subscriptions (user_id);
 create index if not exists idx_subscriptions_status on public.subscriptions (status, updated_at desc);
 create index if not exists idx_subscriptions_email on public.subscriptions (lower(email));
+create index if not exists idx_billing_plan_prices_lookup
+  on public.billing_plan_prices (plan_key, billing_cycle);
 create index if not exists idx_users_timezone on public.users (timezone);
 create unique index if not exists idx_websites_magic_token
   on public.websites (magic_token)
@@ -687,6 +708,11 @@ create trigger subscriptions_updated_at
   before update on public.subscriptions
   for each row execute procedure public.handle_updated_at();
 
+drop trigger if exists billing_plan_prices_updated_at on public.billing_plan_prices;
+create trigger billing_plan_prices_updated_at
+  before update on public.billing_plan_prices
+  for each row execute procedure public.handle_updated_at();
+
 drop trigger if exists paddle_webhook_events_updated_at on public.paddle_webhook_events;
 create trigger paddle_webhook_events_updated_at
   before update on public.paddle_webhook_events
@@ -755,6 +781,7 @@ $$;
 
 alter table public.users enable row level security;
 alter table public.subscriptions enable row level security;
+alter table public.billing_plan_prices enable row level security;
 alter table public.payment_logs enable row level security;
 alter table public.paddle_webhook_events enable row level security;
 alter table public.agency_branding enable row level security;

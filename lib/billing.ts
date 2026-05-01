@@ -15,6 +15,8 @@ export interface PlanBillingDefinition {
   audience: string;
 }
 
+export type BillingPlanCatalog = Record<PlanKey, PlanBillingDefinition>;
+
 export interface PlanPriceSnapshot {
   plan: PlanKey;
   billingCycle: BillingCycle;
@@ -25,7 +27,10 @@ export interface PlanPriceSnapshot {
   monthlyEquivalent: number;
 }
 
-export const BILLING_PLANS: Record<PlanKey, PlanBillingDefinition> = {
+export const BILLING_PLAN_KEYS = ["free", "starter", "agency"] as const satisfies readonly PlanKey[];
+export const PAID_PLAN_KEYS = ["starter", "agency"] as const satisfies readonly PaidPlanKey[];
+
+export const BILLING_PLANS: BillingPlanCatalog = {
   free: {
     displayName: "Starter",
     internalPlan: "free",
@@ -44,7 +49,6 @@ export const BILLING_PLANS: Record<PlanKey, PlanBillingDefinition> = {
     monthlySalePrice: 19,
     yearlyOriginalPrice: 468,
     yearlySalePrice: 187,
-    yearlySavingsLabel: "Save 16%",
     marketingBadge: "\uD83D\uDD12 Founding Member Sale",
     trialDays: 14,
     audience: "For agencies managing multiple clients"
@@ -56,19 +60,30 @@ export const BILLING_PLANS: Record<PlanKey, PlanBillingDefinition> = {
     monthlySalePrice: 59,
     yearlyOriginalPrice: 1428,
     yearlySalePrice: 571,
-    yearlySavingsLabel: "Save 19%",
     marketingBadge: "\uD83D\uDD12 Founding Member Sale",
     trialDays: 14,
     audience: "For serious agencies scaling operations"
   }
 };
 
+function roundCurrency(amount: number) {
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
+}
+
+function getPlanCatalog(plans?: BillingPlanCatalog) {
+  return plans ?? BILLING_PLANS;
+}
+
 export function isPaidPlan(plan: PlanKey): plan is PaidPlanKey {
   return plan !== "free";
 }
 
-export function getPlanPricing(plan: PlanKey, billingCycle: BillingCycle): PlanPriceSnapshot {
-  const definition = BILLING_PLANS[plan];
+export function getPlanPricing(
+  plan: PlanKey,
+  billingCycle: BillingCycle,
+  plans?: BillingPlanCatalog
+): PlanPriceSnapshot {
+  const definition = getPlanCatalog(plans)[plan];
   const originalPrice =
     billingCycle === "yearly" ? definition.yearlyOriginalPrice : definition.monthlyOriginalPrice;
   const salePrice =
@@ -84,58 +99,96 @@ export function getPlanPricing(plan: PlanKey, billingCycle: BillingCycle): PlanP
         : `${definition.displayName} ${billingCycle === "yearly" ? "Yearly" : "Monthly"}`,
     originalPrice,
     salePrice,
-    monthlyEquivalent: billingCycle === "yearly" ? Math.round(salePrice / 12) : salePrice
+    monthlyEquivalent: billingCycle === "yearly" ? roundCurrency(salePrice / 12) : salePrice
   };
 }
 
-export function getPlanAmount(plan: PlanKey, billingCycle: BillingCycle) {
-  return getPlanPricing(plan, billingCycle).salePrice;
+export function getPlanAmount(plan: PlanKey, billingCycle: BillingCycle, plans?: BillingPlanCatalog) {
+  return getPlanPricing(plan, billingCycle, plans).salePrice;
 }
 
-export function getPlanOriginalAmount(plan: PlanKey, billingCycle: BillingCycle) {
-  return getPlanPricing(plan, billingCycle).originalPrice;
+export function getPlanOriginalAmount(plan: PlanKey, billingCycle: BillingCycle, plans?: BillingPlanCatalog) {
+  return getPlanPricing(plan, billingCycle, plans).originalPrice;
 }
 
-export function getDisplayedMonthlyEquivalent(plan: PlanKey, billingCycle: BillingCycle) {
-  return getPlanPricing(plan, billingCycle).monthlyEquivalent;
+export function getDisplayedMonthlyEquivalent(
+  plan: PlanKey,
+  billingCycle: BillingCycle,
+  plans?: BillingPlanCatalog
+) {
+  return getPlanPricing(plan, billingCycle, plans).monthlyEquivalent;
 }
 
-export function getDisplayedOriginalMonthlyEquivalent(plan: PlanKey, billingCycle: BillingCycle) {
+export function getDisplayedOriginalMonthlyEquivalent(
+  plan: PlanKey,
+  billingCycle: BillingCycle,
+  plans?: BillingPlanCatalog
+) {
+  const catalog = getPlanCatalog(plans);
   if (billingCycle === "monthly") {
-    return BILLING_PLANS[plan].monthlyOriginalPrice;
+    return catalog[plan].monthlyOriginalPrice;
   }
 
-  return Math.round(BILLING_PLANS[plan].yearlyOriginalPrice / 12);
+  return roundCurrency(catalog[plan].yearlyOriginalPrice / 12);
 }
 
-export function getMonthlySavings(plan: PlanKey, billingCycle: BillingCycle) {
+export function getMonthlySavings(plan: PlanKey, billingCycle: BillingCycle, plans?: BillingPlanCatalog) {
   if (plan === "free") {
     return 0;
   }
 
-  return getDisplayedOriginalMonthlyEquivalent(plan, billingCycle) - getDisplayedMonthlyEquivalent(plan, billingCycle);
+  return roundCurrency(
+    getDisplayedOriginalMonthlyEquivalent(plan, billingCycle, plans) -
+      getDisplayedMonthlyEquivalent(plan, billingCycle, plans)
+  );
 }
 
-export function getYearlyBillingCopy(plan: PlanKey) {
-  return `billed as ${formatUsdPrice(BILLING_PLANS[plan].yearlySalePrice)}/yr`;
+export function calculateDiscountPercentage(originalPrice: number, salePrice: number) {
+  if (originalPrice <= 0 || salePrice >= originalPrice) {
+    return 0;
+  }
+
+  return Math.round(((originalPrice - salePrice) / originalPrice) * 100);
+}
+
+export function getDiscountPercentage(plan: PlanKey, billingCycle: BillingCycle, plans?: BillingPlanCatalog) {
+  const snapshot = getPlanPricing(plan, billingCycle, plans);
+  return calculateDiscountPercentage(snapshot.originalPrice, snapshot.salePrice);
+}
+
+export function hasPlanDiscount(plan: PlanKey, billingCycle: BillingCycle, plans?: BillingPlanCatalog) {
+  return getDiscountPercentage(plan, billingCycle, plans) > 0;
+}
+
+export function getYearlySavingsLabel(plan: PlanKey, plans?: BillingPlanCatalog) {
+  const discountPercentage = getDiscountPercentage(plan, "yearly", plans);
+  return discountPercentage > 0 ? `Save ${discountPercentage}%` : undefined;
+}
+
+export function getYearlyBillingCopy(plan: PlanKey, plans?: BillingPlanCatalog) {
+  return `Billed as ${formatUsdPrice(getPlanCatalog(plans)[plan].yearlySalePrice)}/yr`;
 }
 
 export function formatUsdPrice(amount: number, options?: { maximumFractionDigits?: number }) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: options?.maximumFractionDigits ?? 0
+    maximumFractionDigits: options?.maximumFractionDigits ?? 2
   }).format(amount);
 }
 
-export function getBillingLine(plan: PlanKey, billingCycle: BillingCycle) {
-  return `${formatUsdPrice(getPlanAmount(plan, billingCycle))} / ${billingCycle === "yearly" ? "year" : "month"}`;
+export function getBillingLine(plan: PlanKey, billingCycle: BillingCycle, plans?: BillingPlanCatalog) {
+  return `${formatUsdPrice(getPlanAmount(plan, billingCycle, plans))} / ${
+    billingCycle === "yearly" ? "year" : "month"
+  }`;
 }
 
-export function getOriginalBillingLine(plan: PlanKey, billingCycle: BillingCycle) {
-  return `${formatUsdPrice(getPlanOriginalAmount(plan, billingCycle))} / ${billingCycle === "yearly" ? "year" : "month"}`;
+export function getOriginalBillingLine(plan: PlanKey, billingCycle: BillingCycle, plans?: BillingPlanCatalog) {
+  return `${formatUsdPrice(getPlanOriginalAmount(plan, billingCycle, plans))} / ${
+    billingCycle === "yearly" ? "year" : "month"
+  }`;
 }
 
-export function getPaddlePlanName(plan: PaidPlanKey, billingCycle: BillingCycle) {
-  return getPlanPricing(plan, billingCycle).planName;
+export function getPaddlePlanName(plan: PaidPlanKey, billingCycle: BillingCycle, plans?: BillingPlanCatalog) {
+  return getPlanPricing(plan, billingCycle, plans).planName;
 }
