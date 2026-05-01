@@ -47,9 +47,9 @@ export const ADMIN_CRON_DEFINITIONS: Record<
   "retry-failed-scans": {
     label: "retry-failed-scans",
     path: "/api/cron/retry-failed-scans",
-    schedule: "0 6 * * *",
+    schedule: "1 6 * * *",
     description:
-      "Runs right after process-scans in the same scheduler window. It finds websites whose latest saved scan result failed and queues one retry scan for each of them.",
+      "Runs right after process-scans in a separate scheduler window. GitHub Actions concurrency keeps it behind the main scan cron so failed latest scans are retried after the primary run.",
     queueBacked: true
   },
   "process-report-pdfs": {
