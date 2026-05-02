@@ -1,5 +1,5 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
-import { generateAndStoreReport } from "@/lib/report-service";
+import { generateAndStoreReport, generateAndStoreReportPdf } from "@/lib/report-service";
 import { canAccessFeature } from "@/lib/trial";
 import { reportGenerationSchema } from "@/lib/validation";
 import { resolveWorkspaceContext } from "@/lib/workspace";
@@ -11,6 +11,8 @@ export async function POST(request: Request) {
   if (errorResponse || !profile) {
     return errorResponse;
   }
+
+  const wantsPdf = request.headers.get("accept")?.includes("application/pdf") ?? false;
 
   const workspace = await resolveWorkspaceContext(profile);
 
@@ -36,6 +38,18 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (wantsPdf) {
+      const { pdfBuffer } = await generateAndStoreReportPdf(parsed.data);
+
+      return new Response(pdfBuffer, {
+        status: 201,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Cache-Control": "no-store"
+        }
+      });
+    }
+
     const report = await generateAndStoreReport(parsed.data);
     return apiSuccess(report, 201);
   } catch (error) {

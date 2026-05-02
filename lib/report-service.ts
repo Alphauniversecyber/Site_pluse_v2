@@ -339,6 +339,30 @@ export async function generateAndStoreReport(input: { websiteId: string; scanId:
   }
 }
 
+async function downloadStoredReportPdf(pdfPath: string) {
+  const admin = createSupabaseAdminClient();
+  const { data: file, error } = await admin.storage.from("reports").download(pdfPath);
+
+  if (error || !file) {
+    throw new Error(error?.message ?? "Unable to download report.");
+  }
+
+  return Buffer.from(await file.arrayBuffer());
+}
+
+export async function generateAndStoreReportPdf(input: { websiteId: string; scanId: string }) {
+  const report = await generateAndStoreReport(input);
+
+  if (!report.pdf_url) {
+    throw new Error("Generated report is missing a PDF file.");
+  }
+
+  return {
+    report,
+    pdfBuffer: await downloadStoredReportPdf(report.pdf_url)
+  };
+}
+
 export async function getSignedReportUrl(reportId: string) {
   const admin = createSupabaseAdminClient();
 
@@ -431,12 +455,7 @@ export async function sendStoredReportEmail(input: {
       };
     }
 
-    const { data: file, error: downloadError } = await admin.storage.from("reports").download(report.pdf_url);
-    if (downloadError || !file) {
-      throw new Error(downloadError?.message ?? "Unable to download report.");
-    }
-
-    const pdfBuffer = Buffer.from(await file.arrayBuffer());
+    const pdfBuffer = await downloadStoredReportPdf(report.pdf_url);
     const healthScore = buildHealthScore({
       scan,
       seoAudit,
