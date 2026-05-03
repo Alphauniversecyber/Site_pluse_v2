@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
+import { ContactForm } from "@/components/landing/contact-form";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata: Metadata = {
   title: "Contact SitePulse",
@@ -12,22 +12,6 @@ export const metadata: Metadata = {
     canonical: "https://www.trysitepulse.com/contact"
   }
 };
-
-const contactCards = [
-  {
-    title: "Sales and partnerships",
-    detail:
-      "Talk through agency fit, rollout plans, and how to position SitePulse in your service stack.",
-    href: "mailto:support@trysitepulse.com",
-    label: "support@trysitepulse.com"
-  },
-  {
-    title: "Privacy and data requests",
-    detail: "Use this address for account data access, deletion requests, or privacy-related questions.",
-    href: "mailto:privacy@trysitepulse.com",
-    label: "privacy@trysitepulse.com"
-  }
-] as const;
 
 export default function ContactPage() {
   return (
@@ -49,24 +33,7 @@ export default function ContactPage() {
             and privacy requests.
           </p>
 
-          <div className="mt-10 grid gap-6 md:grid-cols-2">
-            {contactCards.map((card) => (
-              <Card key={card.title} className="border-border/80">
-                <CardHeader>
-                  <CardTitle>{card.title}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm leading-7 text-muted-foreground">{card.detail}</p>
-                  <a
-                    href={card.href}
-                    className="text-sm font-medium text-primary transition-colors duration-150 ease-out hover:text-foreground"
-                  >
-                    {card.label}
-                  </a>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <ContactForm />
         </div>
       </main>
     </>

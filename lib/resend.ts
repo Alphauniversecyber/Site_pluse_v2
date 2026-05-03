@@ -44,6 +44,7 @@ type SharedEmailSendInput = {
   campaign: string;
   to: string;
   fromName: string;
+  fromEmail?: string;
   replyTo?: CreateEmailOptions["replyTo"];
   subject: string;
   html: string;
@@ -162,7 +163,7 @@ async function sendEmailWithConfirmation(input: SharedEmailSendInput) {
   }
 
   const resend = getResendClient();
-  const fromEmail = getConfiguredFromEmail(input.kind);
+  const fromEmail = input.fromEmail ?? getConfiguredFromEmail(input.kind);
   const maxAttempts = parsePositiveInt(process.env.RESEND_MAX_ATTEMPTS, 3);
   const websiteId = typeof input.metadata?.websiteId === "string" ? input.metadata.websiteId : null;
   const userId = typeof input.metadata?.userId === "string" ? input.metadata.userId : null;
@@ -1767,6 +1768,136 @@ export async function sendReportEmail(input: {
         content: input.pdfBuffer
       }
     ]
+  });
+}
+
+function getSupportFromEmail() {
+  const configured = process.env.SUPPORT_FROM_EMAIL?.trim() || "support@trysitepulse.com";
+
+  if (process.env.NODE_ENV === "production" && configured.toLowerCase().endsWith("@resend.dev")) {
+    throw new Error(
+      "SUPPORT_FROM_EMAIL must use a verified sender domain in production."
+    );
+  }
+
+  return configured;
+}
+
+function renderPlainTextHtml(value: string) {
+  return escapeHtml(value).replace(/\n/g, "<br />");
+}
+
+export async function sendContactNotificationEmail(input: {
+  messageId: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  createdAt: string;
+}) {
+  const baseUrl = ensureHttpsUrl(getBaseUrl()).replace(/\/$/, "");
+  const supportFromEmail = getSupportFromEmail();
+
+  return sendEmailWithConfirmation({
+    kind: "product",
+    templateId: "contact_message",
+    dedupeKey: `contact-message:${input.messageId}`,
+    campaign: "contact",
+    to: "hello@trysitepulse.com",
+    fromName: "SitePulse Contact",
+    fromEmail: supportFromEmail,
+    replyTo: input.email,
+    subject: `New contact message: ${input.subject}`,
+    triggeredAt: input.createdAt,
+    metadata: {
+      contactMessageId: input.messageId,
+      senderEmail: input.email,
+      senderName: input.name,
+      contactSubject: input.subject
+    },
+    html: renderEmailLayout({
+      preheader: `${input.name} sent a new contact message about ${input.subject}.`,
+      accent: "#2563EB",
+      eyebrow: "New contact message",
+      title: input.subject,
+      summary: `${input.name} sent a new message from the SitePulse contact page.`,
+      details: [
+        { label: "Name", value: input.name },
+        { label: "Email", value: input.email },
+        { label: "Received", value: formatDateTime(input.createdAt) }
+      ],
+      bodyHtml: `
+        <p style="margin:0 0 12px 0;font-size:15px;line-height:24px;color:#475569;">
+          ${renderPlainTextHtml(input.message)}
+        </p>
+      `,
+      ctaLabel: "Open admin inbox",
+      ctaUrl: `${baseUrl}/admin/messages`,
+      secondaryLabel: "Open contact page",
+      secondaryUrl: `${baseUrl}/contact`,
+      footerLinks: getEmailFooterLinks(baseUrl),
+      footerNote: "Reply directly from the admin inbox or from this email thread."
+    })
+  });
+}
+
+export async function sendContactReplyEmail(input: {
+  messageId: string;
+  to: string;
+  name: string;
+  subject: string;
+  reply: string;
+  originalMessage: string;
+  createdAt: string;
+}) {
+  const baseUrl = ensureHttpsUrl(getBaseUrl()).replace(/\/$/, "");
+  const supportFromEmail = getSupportFromEmail();
+
+  return sendEmailWithConfirmation({
+    kind: "product",
+    templateId: "contact_reply",
+    dedupeKey: `contact-reply:${input.messageId}`,
+    campaign: "contact",
+    to: input.to,
+    fromName: "SitePulse Support",
+    fromEmail: supportFromEmail,
+    replyTo: supportFromEmail,
+    subject: `Re: ${input.subject}`,
+    triggeredAt: new Date().toISOString(),
+    metadata: {
+      contactMessageId: input.messageId,
+      recipient: input.to,
+      contactSubject: input.subject
+    },
+    html: renderEmailLayout({
+      preheader: `Reply from SitePulse Support regarding ${input.subject}.`,
+      accent: "#22C55E",
+      eyebrow: "Support reply",
+      title: `Re: ${input.subject}`,
+      summary: `Hi ${input.name}, thanks for reaching out. A member of the SitePulse team has replied below.`,
+      bodyHtml: `
+        <div style="margin:0 0 20px 0;font-size:15px;line-height:24px;color:#475569;">
+          ${renderPlainTextHtml(input.reply)}
+        </div>
+        <div style="border:1px solid #E5E7EB;border-radius:12px;background:#F8FAFC;padding:18px;">
+          <p style="margin:0 0 8px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#64748B;font-weight:700;">
+            Original message
+          </p>
+          <p style="margin:0 0 10px 0;font-size:13px;line-height:20px;color:#64748B;">
+            Sent ${escapeHtml(formatDateTime(input.createdAt))}
+          </p>
+          <p style="margin:0;font-size:14px;line-height:22px;color:#475569;">
+            ${renderPlainTextHtml(input.originalMessage)}
+          </p>
+        </div>
+      `,
+      ctaLabel: "Visit SitePulse",
+      ctaUrl: baseUrl,
+      secondaryLabel: "Contact page",
+      secondaryUrl: `${baseUrl}/contact`,
+      footerLinks: getEmailFooterLinks(baseUrl),
+      footerNote: "You can reply directly to this email if you need anything else."
+    })
   });
 }
 

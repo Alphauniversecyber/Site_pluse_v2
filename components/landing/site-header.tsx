@@ -81,7 +81,8 @@ export function SiteHeader() {
     { href: { pathname: "/features" }, pathname: "/features", label: "Features" },
     { href: { pathname: "/pricing" }, pathname: "/pricing", label: "Pricing" },
     { href: { pathname: "/about" }, pathname: "/about", label: "About" },
-    { href: { pathname: "/blog" }, pathname: "/blog", label: "Blog" }
+    { href: { pathname: "/blog" }, pathname: "/blog", label: "Blog" },
+    { href: { pathname: "/contact" }, pathname: "/contact", label: "Contact" }
   ] as const;
 
   const myReportsHref = { pathname: "/dashboard/reports" } as const;

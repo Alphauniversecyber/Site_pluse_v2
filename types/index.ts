@@ -29,6 +29,8 @@ export type EmailTemplateId =
   | "report_weekly"
   | "report_monthly"
   | "report_manual"
+  | "contact_message"
+  | "contact_reply"
   | "alert_score_drop"
   | "alert_critical_score"
   | "alert_scan_failure"
@@ -56,6 +58,13 @@ export type PlainLanguageCategory = "Performance" | "SEO" | "Accessibility" | "S
 export type PlainLanguageDifficulty = "Easy" | "Medium" | "Complex";
 export type UptimeStatus = "up" | "down";
 export type UptimeSource = "vercel" | "uptimerobot";
+export type ContactSubject =
+  | "Sales & Partnerships"
+  | "Billing & Account"
+  | "Technical Support"
+  | "Privacy & Data Request"
+  | "Other";
+export type ContactMessageStatus = "unread" | "read" | "replied";
 
 export interface UserProfile {
   id: string;
@@ -177,6 +186,19 @@ export interface AgencyBranding {
   agency_website_url?: string | null;
   report_footer_text?: string | null;
   created_at: string;
+}
+
+export interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  subject: ContactSubject;
+  message: string;
+  status: ContactMessageStatus;
+  admin_reply: string | null;
+  replied_at: string | null;
+  created_at: string;
+  user_id: string | null;
 }
 
 export interface ScanIssue {

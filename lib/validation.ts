@@ -2,6 +2,13 @@ import { z } from "zod";
 
 const urlRegex = /^https?:\/\/.+/i;
 const reportFrequencySchema = z.enum(["daily", "weekly", "monthly", "never"]);
+const contactSubjectSchema = z.enum([
+  "Sales & Partnerships",
+  "Billing & Account",
+  "Technical Support",
+  "Privacy & Data Request",
+  "Other"
+]);
 
 export const loginSchema = z.object({
   email: z.string().email("Enter a valid email address."),
@@ -185,4 +192,16 @@ export const brandingSchema = z.object({
     .or(z.literal(""))
     .nullable(),
   report_footer_text: z.string().trim().max(200, "Keep the footer text under 200 characters.").optional().or(z.literal("")).nullable()
+});
+
+export const contactMessageSchema = z.object({
+  name: z.string().trim().min(2, "Name is required."),
+  email: z.string().trim().email("Enter a valid email address."),
+  subject: contactSubjectSchema,
+  message: z.string().trim().min(20, "Message must be at least 20 characters.")
+});
+
+export const adminContactReplySchema = z.object({
+  messageId: z.string().uuid("Invalid message id."),
+  reply: z.string().trim().min(10, "Reply must be at least 10 characters.")
 });

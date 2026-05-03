@@ -205,6 +205,25 @@ create table if not exists public.agency_branding (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.contact_messages (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text not null,
+  subject text not null,
+  message text not null,
+  status text not null default 'unread',
+  admin_reply text,
+  replied_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now()),
+  user_id uuid references auth.users (id) on delete set null
+);
+
+create index if not exists contact_messages_email_created_at_idx
+  on public.contact_messages (email, created_at desc);
+
+create index if not exists contact_messages_status_created_at_idx
+  on public.contact_messages (status, created_at desc);
+
 create table if not exists public.team_members (
   id uuid primary key default gen_random_uuid(),
   owner_user_id uuid not null references public.users (id) on delete cascade,
@@ -573,6 +592,21 @@ alter table public.websites alter column client_dashboard_enabled set not null;
 alter table public.agency_branding add column if not exists reply_to_email text;
 alter table public.agency_branding add column if not exists agency_website_url text;
 alter table public.agency_branding add column if not exists report_footer_text text;
+alter table public.contact_messages add column if not exists name text;
+alter table public.contact_messages add column if not exists email text;
+alter table public.contact_messages add column if not exists subject text;
+alter table public.contact_messages add column if not exists message text;
+alter table public.contact_messages add column if not exists status text;
+alter table public.contact_messages add column if not exists admin_reply text;
+alter table public.contact_messages add column if not exists replied_at timestamptz;
+alter table public.contact_messages add column if not exists created_at timestamptz;
+alter table public.contact_messages add column if not exists user_id uuid references auth.users (id) on delete set null;
+alter table public.contact_messages alter column created_at set default timezone('utc', now());
+alter table public.contact_messages alter column status set default 'unread';
+create index if not exists contact_messages_email_created_at_idx
+  on public.contact_messages (email, created_at desc);
+create index if not exists contact_messages_status_created_at_idx
+  on public.contact_messages (status, created_at desc);
 alter table public.users alter column subscription_status set default 'inactive';
 alter table public.users drop column if exists stripe_customer_id;
 alter table public.users drop column if exists stripe_subscription_id;
@@ -839,6 +873,7 @@ alter table public.payment_logs enable row level security;
 alter table public.manual_revenue_entries enable row level security;
 alter table public.paddle_webhook_events enable row level security;
 alter table public.agency_branding enable row level security;
+alter table public.contact_messages enable row level security;
 alter table public.team_members enable row level security;
 alter table public.team_invites enable row level security;
 alter table public.websites enable row level security;

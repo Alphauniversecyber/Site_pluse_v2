@@ -15,14 +15,15 @@ export type AdminCronName =
   | "process-paddle-webhooks";
 
 export const ADMIN_SIDEBAR_LINKS = [
-  { href: "/admin", label: "Overview", icon: "📊" },
-  { href: "/admin/users", label: "Users", icon: "👥" },
-  { href: "/admin/websites", label: "Websites", icon: "🌐" },
-  { href: "/admin/reports", label: "Reports", icon: "📄" },
-  { href: "/admin/crons", label: "Crons", icon: "⚙️" },
-  { href: "/admin/emails", label: "Emails", icon: "📧" },
-  { href: "/admin/billing", label: "Billing", icon: "💳" },
-  { href: "/admin/errors", label: "Errors", icon: "🚨" }
+  { href: "/admin", label: "Overview", icon: "\uD83D\uDCCA" },
+  { href: "/admin/users", label: "Users", icon: "\uD83D\uDC65" },
+  { href: "/admin/websites", label: "Websites", icon: "\uD83C\uDF10" },
+  { href: "/admin/reports", label: "Reports", icon: "\uD83D\uDCC4" },
+  { href: "/admin/messages", label: "Messages", icon: "\uD83D\uDCAC" },
+  { href: "/admin/crons", label: "Crons", icon: "\u2699\uFE0F" },
+  { href: "/admin/emails", label: "Emails", icon: "\uD83D\uDCE7" },
+  { href: "/admin/billing", label: "Billing", icon: "\uD83D\uDCB3" },
+  { href: "/admin/errors", label: "Errors", icon: "\uD83D\uDEA8" }
 ] as const;
 
 export const ADMIN_CRON_DEFINITIONS: Record<
@@ -30,10 +31,10 @@ export const ADMIN_CRON_DEFINITIONS: Record<
   {
     label: string;
     path: string;
-  schedule: string;
-  description: string;
-  queueBacked?: boolean;
-  hidden?: boolean;
+    schedule: string;
+    description: string;
+    queueBacked?: boolean;
+    hidden?: boolean;
   }
 > = {
   "process-scans": {
@@ -72,7 +73,8 @@ export const ADMIN_CRON_DEFINITIONS: Record<
     label: "process-uptime",
     path: "/api/cron/process-uptime",
     schedule: "0 7 * * *",
-    description: "Daily GitHub Actions job for uptime checks. This cron enqueues work and the worker drains the queue separately.",
+    description:
+      "Daily GitHub Actions job for uptime checks. This cron enqueues work and the worker drains the queue separately.",
     queueBacked: true
   },
   "sync-uptimerobot": {
@@ -104,7 +106,8 @@ export const ADMIN_CRON_DEFINITIONS: Record<
     label: "process-paddle-webhooks",
     path: "/api/cron/process-paddle-webhooks",
     schedule: "0 5 * * *",
-    description: "Daily GitHub Actions job for queued Paddle webhooks, alongside immediate kicks from the live webhook endpoint."
+    description:
+      "Daily GitHub Actions job for queued Paddle webhooks, alongside immediate kicks from the live webhook endpoint."
   }
 };
 

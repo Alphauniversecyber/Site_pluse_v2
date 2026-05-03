@@ -2,19 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Route } from "next";
 import { Menu } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { fetchJson } from "@/lib/api-client";
 import { ADMIN_SIDEBAR_LINKS } from "@/lib/admin/constants";
 
 function AdminSidebarContent({
   pathname,
+  unreadCount,
   onNavigate
 }: {
   pathname: string;
+  unreadCount: number;
   onNavigate?: () => void;
 }) {
   return (
@@ -46,7 +49,14 @@ function AdminSidebarContent({
               }`}
             >
               <span>{item.icon}</span>
-              <span>{item.label}</span>
+              <span className="flex items-center gap-2">
+                <span>{item.label}</span>
+                {item.href === "/admin/messages" && unreadCount > 0 ? (
+                  <span className="inline-flex min-w-6 items-center justify-center rounded-full border border-[#7F1D1D] bg-[#450A0A] px-2 py-0.5 text-[11px] font-semibold text-[#FCA5A5]">
+                    {unreadCount}
+                  </span>
+                ) : null}
+              </span>
             </Link>
           );
         })}
@@ -59,6 +69,41 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLoginPage = pathname === "/admin/login";
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (isLoginPage) {
+      return;
+    }
+
+    let active = true;
+
+    void fetchJson<{ unreadCount: number }>("/api/admin/contact")
+      .then((result) => {
+        if (active) {
+          setUnreadCount(result.unreadCount);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setUnreadCount(0);
+        }
+      });
+
+    const handleUnreadCountUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ unreadCount?: number }>).detail;
+      if (typeof detail?.unreadCount === "number") {
+        setUnreadCount(detail.unreadCount);
+      }
+    };
+
+    window.addEventListener("admin-contact-unread-count", handleUnreadCountUpdate);
+
+    return () => {
+      active = false;
+      window.removeEventListener("admin-contact-unread-count", handleUnreadCountUpdate);
+    };
+  }, [isLoginPage, pathname]);
 
   if (isLoginPage) {
     return <div className="min-h-screen bg-[#0A0A0A] text-white">{children}</div>;
@@ -68,7 +113,7 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-[#0A0A0A] text-white">
       <div className="flex min-h-screen">
         <aside className="hidden w-72 shrink-0 border-r border-[#1F1F1F] bg-[#111111] px-5 py-6 lg:block">
-          <AdminSidebarContent pathname={pathname} />
+          <AdminSidebarContent pathname={pathname} unreadCount={unreadCount} />
         </aside>
 
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
@@ -80,7 +125,11 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
               <SheetTitle>SitePulse Admin Navigation</SheetTitle>
               <SheetDescription>Admin dashboard links and navigation.</SheetDescription>
             </SheetHeader>
-            <AdminSidebarContent pathname={pathname} onNavigate={() => setMobileNavOpen(false)} />
+            <AdminSidebarContent
+              pathname={pathname}
+              unreadCount={unreadCount}
+              onNavigate={() => setMobileNavOpen(false)}
+            />
           </SheetContent>
         </Sheet>
 
