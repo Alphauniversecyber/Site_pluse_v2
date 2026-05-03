@@ -70,10 +70,12 @@ export function getAdminAuthorizationHeader() {
 
 export function requireAdminApiAuthorization(request: Request) {
   const authorization = request.headers.get("authorization");
-  const cookieValue = getCookieValueFromHeader(
+  const cookieValueFromHeader = getCookieValueFromHeader(
     request.headers.get("cookie"),
     ADMIN_COOKIE_NAME
   );
+  const cookieValueFromStore = getAdminCookieValue();
+  const cookieValue = cookieValueFromHeader ?? cookieValueFromStore;
 
   if (
     !isAdminSecretValid(authorization?.replace(/^Bearer\s+/i, "")) &&
