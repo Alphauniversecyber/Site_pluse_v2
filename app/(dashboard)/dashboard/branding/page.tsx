@@ -3,13 +3,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { Expand } from "lucide-react";
 import { toast } from "sonner";
 
-import { BrandingPreviewPanel } from "@/components/dashboard/branding-preview-panel";
+import { BrandingPreviewPanel, type BrandingPreviewTab } from "@/components/dashboard/branding-preview-panel";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +29,8 @@ export default function BrandingPage() {
   const workspace = useWorkspace();
   const { branding, loading, refetch } = useBranding();
   const [saving, setSaving] = useState(false);
+  const [fullPreviewOpen, setFullPreviewOpen] = useState(false);
+  const [previewTab, setPreviewTab] = useState<BrandingPreviewTab>("pdf");
   const form = useForm({
     resolver: zodResolver(brandingSchema),
     mode: "onChange",
@@ -122,7 +126,7 @@ export default function BrandingPage() {
         description="Upload your agency logo, set a brand color, customize report sender details, and preview how client-facing reports will look."
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_0.92fr] min-[1800px]:grid-cols-[1.05fr_0.95fr]">
+      <div className="grid gap-6 xl:grid-cols-[1fr_0.92fr] xl:items-stretch min-[1800px]:grid-cols-[1.05fr_0.95fr]">
         <Card>
           <CardHeader>
             <CardTitle>Brand settings</CardTitle>
@@ -239,11 +243,20 @@ export default function BrandingPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
+        <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
             <CardTitle>Report preview</CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0"
+              onClick={() => setFullPreviewOpen(true)}
+            >
+              <Expand className="h-4 w-4" />
+              Open full preview
+            </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-h-0 flex-1 overflow-hidden">
             <BrandingPreviewPanel
               agencyName={previewValues.agency_name || "Your Agency"}
               brandColor={previewValues.brand_color || "#3B82F6"}
@@ -252,10 +265,40 @@ export default function BrandingPage() {
               replyToEmail={previewValues.reply_to_email || ""}
               agencyWebsiteUrl={previewValues.agency_website_url || ""}
               reportFooterText={previewValues.report_footer_text || ""}
+              value={previewTab}
+              onValueChange={setPreviewTab}
+              variant="panel"
+              className="h-full"
             />
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={fullPreviewOpen} onOpenChange={setFullPreviewOpen}>
+        <DialogContent className="flex h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none flex-col overflow-hidden p-0 sm:rounded-[2rem]">
+          <DialogHeader className="border-b border-border px-6 py-5 pr-14">
+            <DialogTitle>Report preview</DialogTitle>
+            <DialogDescription>
+              Review the full branded PDF and email previews with live updates as you edit your settings.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-hidden px-6 pb-6">
+            <BrandingPreviewPanel
+              agencyName={previewValues.agency_name || "Your Agency"}
+              brandColor={previewValues.brand_color || "#3B82F6"}
+              emailFromName={previewValues.email_from_name || previewValues.agency_name || "Your Agency"}
+              logoUrl={previewValues.logo_url || ""}
+              replyToEmail={previewValues.reply_to_email || ""}
+              agencyWebsiteUrl={previewValues.agency_website_url || ""}
+              reportFooterText={previewValues.report_footer_text || ""}
+              value={previewTab}
+              onValueChange={setPreviewTab}
+              variant="dialog"
+              className="h-full"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
