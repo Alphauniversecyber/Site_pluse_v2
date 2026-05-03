@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import type { NotificationItem } from "@/types";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { fetchJson } from "@/lib/api-client";
@@ -140,6 +141,7 @@ function getNotificationTone(item: NotificationItem) {
 
 export function NotificationBell({ notifications }: { notifications: NotificationItem[] }) {
   const pathname = usePathname();
+  const workspace = useWorkspace();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(notifications);
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>("all");
@@ -202,6 +204,7 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
   }
 
   const unreadCount = items.filter((item) => !item.is_read).length;
+  const canManageWorkspace = workspace.activeWorkspace.role !== "viewer";
   const filteredItems = items.filter((item) => {
     if (activeFilter === "high") {
       return item.severity === "high";
@@ -276,7 +279,7 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
                 type="button"
                 className="rounded-md border border-[#1E3A5F] px-2.5 py-1 text-[12px] font-medium text-[#64748B] transition hover:border-[#EF4444] hover:text-[#EF4444] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[#1E3A5F] disabled:hover:text-[#64748B]"
                 onClick={clearNotifications}
-                disabled={!items.length || isPending}
+                disabled={!items.length || isPending || !canManageWorkspace}
               >
                 {isPending ? "Clearing..." : "Clear all"}
               </button>

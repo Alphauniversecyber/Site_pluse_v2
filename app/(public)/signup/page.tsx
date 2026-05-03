@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 export default async function SignupPage({
   searchParams
 }: {
-  searchParams: { next?: string };
+  searchParams: { next?: string; invite_token?: string; email?: string };
 }) {
   await redirectIfAuthenticated(searchParams.next ?? "/dashboard");
   const isPreviewUnlock = (searchParams.next ?? "").startsWith("/unlock-preview/");
@@ -58,7 +58,11 @@ export default async function SignupPage({
           </div>
         </div>
         <div className="order-1 lg:order-2">
-          <SignupForm nextPath={searchParams.next ?? "/dashboard"} />
+          <SignupForm
+            nextPath={searchParams.next ?? "/dashboard"}
+            inviteToken={searchParams.invite_token}
+            defaultEmail={searchParams.email}
+          />
         </div>
       </main>
     </>

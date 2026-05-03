@@ -9,12 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useScans } from "@/hooks/useScans";
-import { useUser } from "@/hooks/useUser";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 export default function WebsiteScansPage({ params }: { params: { id: string } }) {
   const [page, setPage] = useState(1);
   const { scans, total, pageSize, loading } = useScans(params.id, page, 10);
-  const { user } = useUser();
+  const workspace = useWorkspace();
 
   const csv = useMemo(() => {
     const rows = [
@@ -39,7 +39,7 @@ export default function WebsiteScansPage({ params }: { params: { id: string } })
         title="Full scan history"
         description="Paginated history for this site, including performance, SEO, accessibility, and best-practice scores."
         actions={
-          user?.plan === "agency" ? (
+          workspace.workspaceProfile.plan === "agency" ? (
             <Button
               variant="outline"
               onClick={() => {

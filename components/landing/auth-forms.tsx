@@ -38,9 +38,12 @@ function buildAuthHref(pathname: "/login" | "/signup", nextPath: string): Route 
   return `${pathname}?next=${encodeURIComponent(nextPath)}` as Route;
 }
 
-function buildAuthCallbackUrl(nextPath: string) {
+function buildAuthCallbackUrl(nextPath: string, inviteToken?: string) {
   const callback = new URL("/auth/callback", window.location.origin);
-  callback.searchParams.set("next", nextPath);
+  callback.searchParams.set(
+    "next",
+    inviteToken ? `/api/team/invite/accept?token=${encodeURIComponent(inviteToken)}` : nextPath
+  );
   return callback.toString();
 }
 
@@ -147,7 +150,15 @@ export function LoginForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
   );
 }
 
-export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
+export function SignupForm({
+  nextPath = "/dashboard",
+  inviteToken,
+  defaultEmail
+}: {
+  nextPath?: string;
+  inviteToken?: string;
+  defaultEmail?: string;
+}) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const isPreviewUnlock = nextPath.startsWith("/unlock-preview/");
@@ -156,7 +167,7 @@ export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
     mode: "onChange",
     defaultValues: {
       fullName: "",
-      email: "",
+      email: defaultEmail ?? "",
       password: "",
       confirmPassword: ""
     }
@@ -185,12 +196,12 @@ export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
             const supabase = createSupabaseBrowserClient();
             const { data, error } = await supabase.auth.signUp({
               email: values.email,
-              password: values.password,
-              options: {
-                emailRedirectTo: buildAuthCallbackUrl(nextPath),
-                data: {
-                  full_name: values.fullName,
-                  agency_name: values.fullName
+                password: values.password,
+                options: {
+                emailRedirectTo: buildAuthCallbackUrl(nextPath, inviteToken),
+                  data: {
+                    full_name: values.fullName,
+                    agency_name: values.fullName
                 }
               }
             });
@@ -205,12 +216,21 @@ export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
 
             if (data.session) {
               toast.success("Account created.");
+              if (inviteToken) {
+                window.location.href = `/api/team/invite/accept?token=${encodeURIComponent(inviteToken)}`;
+                return;
+              }
+
               router.push(nextPath as Route);
               router.refresh();
               return;
             }
 
-            toast.success("Account created. Check your inbox to confirm your email.");
+            toast.success(
+              inviteToken
+                ? "Account created. Check your inbox to confirm your email and finish joining the workspace."
+                : "Account created. Check your inbox to confirm your email."
+            );
             router.push(buildAuthHref("/login", nextPath));
           })}
         >
@@ -233,12 +253,17 @@ export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
               id="signup-email"
               type="email"
               placeholder="you@agency.com"
+              disabled={Boolean(inviteToken && defaultEmail)}
               aria-invalid={Boolean(form.formState.errors.email)}
               {...form.register("email")}
             />
             <FieldMessage
               error={form.formState.errors.email?.message}
-              hint="Use your agency email so invites, reports, and billing stay in one place."
+              hint={
+                inviteToken && defaultEmail
+                  ? "This invite is tied to the email address above."
+                  : "Use your agency email so invites, reports, and billing stay in one place."
+              }
             />
           </div>
           <div className="space-y-2.5">

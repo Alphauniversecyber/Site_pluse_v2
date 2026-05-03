@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { BillingCycleToggle } from "@/components/pricing/billing-cycle-toggle";
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useUser } from "@/hooks/useUser";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { fetchJson } from "@/lib/api-client";
 import {
   BILLING_PLANS,
@@ -117,6 +119,7 @@ function isActiveYearlyPaidTrial(user: Pick<UserProfile, "subscription_status" |
 
 export default function BillingPage() {
   const { user, loading, refetch } = useUser();
+  const workspace = useWorkspace();
   const searchParams = useSearchParams();
   const [planCatalog, setPlanCatalog] = useState<BillingPlanCatalog>(BILLING_PLANS);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
@@ -408,6 +411,17 @@ export default function BillingPage() {
 
   if (loading || !user) {
     return <p className="text-muted-foreground">Loading billing...</p>;
+  }
+
+  if (!workspace.activeWorkspace.isOwner) {
+    return (
+      <EmptyState
+        title="Billing is owner-only"
+        description="Only the workspace owner can open billing while this shared workspace is active."
+        actionLabel="Open settings"
+        actionHref="/dashboard/settings"
+      />
+    );
   }
 
   const currentPlanLabel = user.plan === "free" ? "Starter" : getPlanDisplayName(user.plan);

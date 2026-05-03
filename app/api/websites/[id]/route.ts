@@ -1,5 +1,6 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { buildHealthScore } from "@/lib/health-score";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { PLAN_LIMITS } from "@/lib/utils";
 import { websiteUpdateSchema } from "@/lib/validation";
 import {
@@ -7,65 +8,67 @@ import {
   isMissingWebsiteNotificationColumnsError,
   normalizeWebsiteNotificationFields
 } from "@/lib/website-notification-compat";
-import { resolveWorkspaceContext } from "@/lib/workspace";
+import { canManageWorkspace, resolveWorkspaceContext } from "@/lib/workspace";
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
-  const { supabase, errorResponse } = await requireApiUser();
-  if (errorResponse) {
+  const { profile, errorResponse } = await requireApiUser();
+  if (errorResponse || !profile) {
     return errorResponse;
   }
+  const workspace = await resolveWorkspaceContext(profile);
+  const admin = createSupabaseAdminClient();
 
   const [{ data: website, error }, { data: schedule }, { data: scans }, { data: sslCheck }, { data: securityHeaders }, { data: seoAudit }, { data: cruxData }, { data: brokenLinks }, { data: uptimeChecks }, { data: competitorScans }] = await Promise.all([
-    supabase.from("websites").select("*").eq("id", params.id).single(),
-    supabase.from("scan_schedules").select("*").eq("website_id", params.id).maybeSingle(),
-    supabase
+    admin.from("websites").select("*").eq("id", params.id).eq("user_id", workspace.workspaceOwnerId).single(),
+    admin.from("scan_schedules").select("*").eq("website_id", params.id).maybeSingle(),
+    admin
       .from("scan_results")
       .select("*")
       .eq("website_id", params.id)
       .order("scanned_at", { ascending: false })
       .limit(10),
-    supabase
+    admin
       .from("ssl_checks")
       .select("*")
       .eq("website_id", params.id)
       .order("checked_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
+    admin
       .from("security_headers")
       .select("*")
       .eq("website_id", params.id)
       .order("checked_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
+    admin
       .from("seo_audit")
       .select("*")
       .eq("website_id", params.id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
+    admin
       .from("crux_data")
       .select("*")
       .eq("website_id", params.id)
       .order("fetched_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
+    admin
       .from("broken_links")
       .select("*")
       .eq("website_id", params.id)
       .order("scanned_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
+    admin
       .from("uptime_checks")
       .select("*")
       .eq("website_id", params.id)
       .order("checked_at", { ascending: false })
       .limit(120),
-    supabase
+    admin
       .from("competitor_scans")
       .select("*")
       .eq("website_id", params.id)
@@ -99,12 +102,16 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 }
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  const { supabase, profile, errorResponse } = await requireApiUser();
+  const { profile, errorResponse } = await requireApiUser();
   if (errorResponse || !profile) {
     return errorResponse;
   }
 
   const workspace = await resolveWorkspaceContext(profile);
+  if (!canManageWorkspace(workspace)) {
+    return apiError("Viewer access is read-only.", 403);
+  }
+  const admin = createSupabaseAdminClient();
 
   const body = await request.json().catch(() => null);
   const parsed = websiteUpdateSchema.safeParse(body);
@@ -143,10 +150,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     websiteUpdates.competitor_urls = parsed.data.competitor_urls.slice(0, 3);
   }
 
-  let updateResult = await supabase
+  let updateResult = await admin
     .from("websites")
     .update(websiteUpdates)
     .eq("id", params.id)
+    .eq("user_id", workspace.workspaceOwnerId)
     .select("*")
     .single();
 
@@ -167,10 +175,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         : {})
     };
 
-    updateResult = await supabase
+    updateResult = await admin
       .from("websites")
       .update(legacyUpdates)
       .eq("id", params.id)
+      .eq("user_id", workspace.workspaceOwnerId)
       .select("*")
       .single();
   }
@@ -182,7 +191,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 
   if (parsed.data.frequency) {
-    await supabase
+    await admin
       .from("scan_schedules")
       .upsert({
         website_id: params.id,
@@ -196,12 +205,21 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 }
 
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
-  const { supabase, errorResponse } = await requireApiUser();
-  if (errorResponse) {
+  const { profile, errorResponse } = await requireApiUser();
+  if (errorResponse || !profile) {
     return errorResponse;
   }
+  const workspace = await resolveWorkspaceContext(profile);
+  if (!canManageWorkspace(workspace)) {
+    return apiError("Viewer access is read-only.", 403);
+  }
+  const admin = createSupabaseAdminClient();
 
-  const { error } = await supabase.from("websites").delete().eq("id", params.id);
+  const { error } = await admin
+    .from("websites")
+    .delete()
+    .eq("id", params.id)
+    .eq("user_id", workspace.workspaceOwnerId);
 
   if (error) {
     return apiError(error.message, 500);

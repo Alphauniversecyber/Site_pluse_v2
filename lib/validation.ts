@@ -143,6 +143,15 @@ export const teamMemberSchema = z.object({
   role: z.enum(["admin", "viewer"]).default("viewer")
 });
 
+export const teamInviteSchema = z.object({
+  email: z.string().trim().email("Enter a valid teammate email."),
+  role: z.enum(["admin", "viewer"]).default("viewer")
+});
+
+export const workspaceSwitchSchema = z.object({
+  ownerUserId: z.string().uuid("Invalid workspace id.")
+});
+
 export const brandingSchema = z.object({
   agency_name: z.string().trim().min(2, "Agency name is required."),
   brand_color: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "Use a valid hex color."),

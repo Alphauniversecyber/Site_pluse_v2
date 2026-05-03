@@ -21,6 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { buildPortfolioImpactSummary } from "@/lib/business-impact";
 import { createSupabaseServerClient, requireAuthenticatedUser } from "@/lib/supabase-server";
 import { PLAN_LIMITS, cn, formatDateTime, formatRelativeTime, getPlanDisplayName } from "@/lib/utils";
+import { resolveWorkspaceContext } from "@/lib/workspace";
 import type { ScanResult, ScanSchedule, Website } from "@/types";
 
 function compactUrl(url: string) {
@@ -163,27 +164,39 @@ function OverviewHeroMetric({
 
 export default async function DashboardOverviewPage() {
   const { profile } = await requireAuthenticatedUser();
+  const workspace = await resolveWorkspaceContext(profile);
+  const workspaceProfile = workspace.workspaceProfile;
   const supabase = createSupabaseServerClient();
-
-  const [{ data: websitesData }, { data: scansData }, { count: scanCount }, { data: schedulesData }] =
-    await Promise.all([
-      supabase
-        .from("websites")
-        .select("id,url,label,is_active,created_at,updated_at")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("scan_results")
-        .select("id,website_id,performance_score,scanned_at")
-        .order("scanned_at", { ascending: false })
-        .limit(50),
-      supabase
-        .from("scan_results")
-        .select("*", { count: "exact", head: true })
-        .gte("scanned_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
-      supabase.from("scan_schedules").select("website_id,frequency")
-    ]);
+  const { data: websitesData } = await supabase
+    .from("websites")
+    .select("id,user_id,url,label,is_active,created_at,updated_at")
+    .eq("user_id", workspace.workspaceOwnerId)
+    .order("created_at", { ascending: false });
 
   const websites = (websitesData ?? []) as Website[];
+  const websiteIds = websites.map((website) => website.id);
+
+  const [{ data: scansData }, { count: scanCount }, { data: schedulesData }] = await Promise.all([
+    websiteIds.length
+      ? supabase
+          .from("scan_results")
+          .select("id,website_id,performance_score,scanned_at")
+          .in("website_id", websiteIds)
+          .order("scanned_at", { ascending: false })
+          .limit(50)
+      : Promise.resolve({ data: [] }),
+    websiteIds.length
+      ? supabase
+          .from("scan_results")
+          .select("*", { count: "exact", head: true })
+          .in("website_id", websiteIds)
+          .gte("scanned_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString())
+      : Promise.resolve({ count: 0 }),
+    websiteIds.length
+      ? supabase.from("scan_schedules").select("website_id,frequency").in("website_id", websiteIds)
+      : Promise.resolve({ data: [] })
+  ]);
+
   const scans = (scansData ?? []) as ScanResult[];
   const schedules = (schedulesData ?? []) as ScanSchedule[];
 
@@ -225,7 +238,7 @@ export default async function DashboardOverviewPage() {
     ? Math.round(scoredSites.reduce((sum, site) => sum + (site.score ?? 0), 0) / scoredSites.length)
     : averagePerformance;
   const activeSites = websites.filter((website) => website.is_active).length;
-  const websiteCapacity = PLAN_LIMITS[profile.plan]?.websiteLimit ?? Math.max(websites.length, 1);
+  const websiteCapacity = PLAN_LIMITS[workspaceProfile.plan]?.websiteLimit ?? Math.max(websites.length, 1);
   const urgentSites = scoredSites.filter((site) => (site.score ?? 0) < 60).length;
   const watchSites = scoredSites.filter(
     (site) => (site.score ?? 0) >= 60 && (site.score ?? 0) < 85
@@ -313,19 +326,21 @@ export default async function DashboardOverviewPage() {
                   <Button asChild variant="outline" className="min-w-[9.75rem]">
                     <Link href="/dashboard/reports">Open reports</Link>
                   </Button>
-                  <AddWebsiteButton
-                    profile={profile}
-                    websiteCount={websites.length}
-                    style={{ minWidth: "9.75rem" }}
-                  >
-                    Add website
-                  </AddWebsiteButton>
+                  {workspace.role !== "viewer" ? (
+                    <AddWebsiteButton
+                      profile={workspaceProfile}
+                      websiteCount={websites.length}
+                      style={{ minWidth: "9.75rem" }}
+                    >
+                      Add website
+                    </AddWebsiteButton>
+                  ) : null}
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <Badge variant={profile.plan === "agency" ? "success" : profile.plan === "starter" ? "default" : "outline"}>
-                  {getPlanDisplayName(profile.plan)} plan
+                <Badge variant={workspaceProfile.plan === "agency" ? "success" : workspaceProfile.plan === "starter" ? "default" : "outline"}>
+                  {getPlanDisplayName(workspaceProfile.plan)} plan
                 </Badge>
                 <Badge variant={urgentSites ? "warning" : "success"}>
                   {urgentSites ? `${urgentSites} sites need review` : "No urgent client sites"}
@@ -376,8 +391,8 @@ export default async function DashboardOverviewPage() {
                 </p>
                 <CardTitle className="mt-2 text-2xl">Monitoring cadence stays live</CardTitle>
               </div>
-              <Badge variant={profile.plan === "agency" ? "success" : profile.plan === "starter" ? "default" : "outline"}>
-                {getPlanDisplayName(profile.plan)}
+              <Badge variant={workspaceProfile.plan === "agency" ? "success" : workspaceProfile.plan === "starter" ? "default" : "outline"}>
+                {getPlanDisplayName(workspaceProfile.plan)}
               </Badge>
             </div>
             <CardDescription>
@@ -398,7 +413,7 @@ export default async function DashboardOverviewPage() {
               note={
                 activeSites === websites.length
                   ? websites.length < websiteCapacity
-                    ? `${websiteCapacity - websites.length} of your ${getPlanDisplayName(profile.plan)} slots are still open.`
+                    ? `${websiteCapacity - websites.length} of your ${getPlanDisplayName(workspaceProfile.plan)} slots are still open.`
                     : "All plan slots are currently in use."
                   : "Some sites are paused or still onboarding."
               }
@@ -663,13 +678,15 @@ export default async function DashboardOverviewPage() {
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
                   Add a client website to begin scans, build performance history, and generate agency-ready reporting.
                 </p>
-                <AddWebsiteButton
-                  profile={profile}
-                  websiteCount={websites.length}
-                  style={{ marginTop: "24px" }}
-                >
-                  Add website
-                </AddWebsiteButton>
+                {workspace.role !== "viewer" ? (
+                  <AddWebsiteButton
+                    profile={workspaceProfile}
+                    websiteCount={websites.length}
+                    style={{ marginTop: "24px" }}
+                  >
+                    Add website
+                  </AddWebsiteButton>
+                ) : null}
               </div>
             </div>
           )}

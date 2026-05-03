@@ -1,5 +1,6 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { buildHealthScore } from "@/lib/health-score";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { PLAN_LIMITS, normalizeUrl } from "@/lib/utils";
 import { websiteSchema } from "@/lib/validation";
 import {
@@ -7,15 +8,16 @@ import {
   isMissingWebsiteNotificationColumnsError,
   normalizeWebsiteNotificationFields
 } from "@/lib/website-notification-compat";
-import { resolveWorkspaceContext, syncWorkspaceWebsiteOwnership } from "@/lib/workspace";
+import { canManageWorkspace, resolveWorkspaceContext, syncWorkspaceWebsiteOwnership } from "@/lib/workspace";
 
 export async function GET(request: Request) {
-  const { supabase, profile, errorResponse } = await requireApiUser();
+  const { profile, errorResponse } = await requireApiUser();
   if (errorResponse || !profile) {
     return errorResponse;
   }
 
   const workspace = await resolveWorkspaceContext(profile);
+  const admin = createSupabaseAdminClient();
   await syncWorkspaceWebsiteOwnership({
     workspaceOwnerId: workspace.workspaceOwnerId,
     actorUserId: profile.id
@@ -27,15 +29,17 @@ export async function GET(request: Request) {
   let websitesQuery: {
     data: Record<string, unknown>[] | null;
     error: { message: string } | null;
-  } = await supabase
+  } = await admin
     .from("websites")
     .select("id,user_id,url,label,is_active,report_frequency,extra_recipients,auto_email_reports,email_notifications,created_at,updated_at")
+    .eq("user_id", workspace.workspaceOwnerId)
     .order("created_at", { ascending: false });
 
   if (websitesQuery.error && isMissingWebsiteNotificationColumnsError(websitesQuery.error.message)) {
-    websitesQuery = await supabase
+    websitesQuery = await admin
       .from("websites")
       .select("id,user_id,url,label,is_active,email_reports_enabled,email_report_frequency,report_recipients,created_at,updated_at")
+      .eq("user_id", workspace.workspaceOwnerId)
       .order("created_at", { ascending: false });
   }
 
@@ -61,10 +65,10 @@ export async function GET(request: Request) {
     { data: brokenLinks }
   ] = await Promise.all([
     websiteIds.length
-      ? supabase.from("scan_schedules").select("website_id,frequency,next_scan_at,last_scan_at").in("website_id", websiteIds)
+      ? admin.from("scan_schedules").select("website_id,frequency,next_scan_at,last_scan_at").in("website_id", websiteIds)
       : Promise.resolve({ data: [] }),
     websiteIds.length
-      ? supabase
+      ? admin
           .from("scan_results")
           .select(
             "id,website_id,performance_score,seo_score,accessibility_score,best_practices_score,lcp,issues,scan_status,error_message,scanned_at"
@@ -73,7 +77,7 @@ export async function GET(request: Request) {
           .order("scanned_at", { ascending: false })
       : Promise.resolve({ data: [] }),
     websiteIds.length
-      ? supabase
+      ? admin
           .from("seo_audit")
           .select(
             "website_id,title_tag,meta_description,headings,images_missing_alt,og_tags,twitter_tags,canonical,schema_present,created_at"
@@ -82,21 +86,21 @@ export async function GET(request: Request) {
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
     websiteIds.length
-      ? supabase
+      ? admin
           .from("ssl_checks")
           .select("website_id,grade,checked_at")
           .in("website_id", websiteIds)
           .order("checked_at", { ascending: false })
       : Promise.resolve({ data: [] }),
     websiteIds.length
-      ? supabase
+      ? admin
           .from("security_headers")
           .select("website_id,grade,checked_at")
           .in("website_id", websiteIds)
           .order("checked_at", { ascending: false })
       : Promise.resolve({ data: [] }),
     websiteIds.length
-      ? supabase
+      ? admin
           .from("uptime_checks")
           .select("website_id,status,checked_at")
           .in("website_id", websiteIds)
@@ -104,7 +108,7 @@ export async function GET(request: Request) {
           .limit(300)
       : Promise.resolve({ data: [] }),
     websiteIds.length
-      ? supabase
+      ? admin
           .from("broken_links")
           .select("website_id,broken_links,scanned_at")
           .in("website_id", websiteIds)
@@ -179,12 +183,16 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { supabase, profile, errorResponse } = await requireApiUser();
+  const { profile, errorResponse } = await requireApiUser();
   if (errorResponse || !profile) {
     return errorResponse;
   }
 
   const workspace = await resolveWorkspaceContext(profile);
+  if (!canManageWorkspace(workspace)) {
+    return apiError("Viewer access is read-only.", 403);
+  }
+  const admin = createSupabaseAdminClient();
 
   const body = await request.json().catch(() => null);
   const parsed = websiteSchema.safeParse(body);
@@ -193,7 +201,7 @@ export async function POST(request: Request) {
     return apiError(parsed.error.issues[0]?.message ?? "Invalid website payload.", 422);
   }
 
-  const { count, error: countError } = await supabase
+  const { count, error: countError } = await admin
     .from("websites")
     .select("*", { count: "exact", head: true })
     .eq("user_id", workspace.workspaceOwnerId);
@@ -208,7 +216,7 @@ export async function POST(request: Request) {
 
   const normalizedUrl = normalizeUrl(parsed.data.url);
   const defaultFrequency = PLAN_LIMITS[workspace.workspaceProfile.plan].scanFrequencies[0];
-  let insertResult = await supabase
+  let insertResult = await admin
     .from("websites")
     .insert({
       user_id: workspace.workspaceOwnerId,
@@ -227,7 +235,7 @@ export async function POST(request: Request) {
     insertResult.error &&
     isMissingWebsiteNotificationColumnsError(insertResult.error.message)
   ) {
-    insertResult = await supabase
+    insertResult = await admin
       .from("websites")
       .insert({
         user_id: workspace.workspaceOwnerId,
@@ -250,7 +258,7 @@ export async function POST(request: Request) {
     return apiError(insertResult.error?.message ?? "Unable to create website.", 500);
   }
 
-  const { error: scheduleError } = await supabase.from("scan_schedules").insert({
+  const { error: scheduleError } = await admin.from("scan_schedules").insert({
     website_id: website.id,
     frequency: defaultFrequency,
     next_scan_at: new Date().toISOString()

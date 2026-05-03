@@ -1,12 +1,13 @@
 import { apiError, apiSuccess, requireApiUserFromRequest } from "@/lib/api";
 import { executeWebsiteScan } from "@/lib/scan-service";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { PLAN_LIMITS, normalizeUrl } from "@/lib/utils";
 import { authenticatedScanSchema } from "@/lib/validation";
 import {
   buildLegacyWebsiteNotificationPayload,
   isMissingWebsiteNotificationColumnsError
 } from "@/lib/website-notification-compat";
-import { resolveWorkspaceContext } from "@/lib/workspace";
+import { canManageWorkspace, resolveWorkspaceContext } from "@/lib/workspace";
 
 function deriveWebsiteLabel(url: string) {
   try {
@@ -20,12 +21,16 @@ function deriveWebsiteLabel(url: string) {
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const { supabase, profile, errorResponse } = await requireApiUserFromRequest(request);
+  const { profile, errorResponse } = await requireApiUserFromRequest(request);
   if (errorResponse || !profile) {
     return errorResponse;
   }
 
   const workspace = await resolveWorkspaceContext(profile);
+  if (!canManageWorkspace(workspace)) {
+    return apiError("Viewer access is read-only.", 403);
+  }
+  const admin = createSupabaseAdminClient();
 
   const body = await request.json().catch(() => null);
   const parsed = authenticatedScanSchema.safeParse(body);
@@ -36,7 +41,7 @@ export async function POST(request: Request) {
 
   const normalizedUrl = normalizeUrl(parsed.data.url);
 
-  const { data: existingWebsite } = await supabase
+  const { data: existingWebsite } = await admin
     .from("websites")
     .select("*")
     .eq("user_id", workspace.workspaceOwnerId)
@@ -46,7 +51,7 @@ export async function POST(request: Request) {
   let website = existingWebsite;
 
   if (!website) {
-    const { count, error: countError } = await supabase
+    const { count, error: countError } = await admin
       .from("websites")
       .select("*", { count: "exact", head: true })
       .eq("user_id", workspace.workspaceOwnerId);
@@ -60,7 +65,7 @@ export async function POST(request: Request) {
     }
 
     const defaultFrequency = PLAN_LIMITS[workspace.workspaceProfile.plan].scanFrequencies[0];
-    let createWebsiteResult = await supabase
+    let createWebsiteResult = await admin
       .from("websites")
       .insert({
         user_id: workspace.workspaceOwnerId,
@@ -79,7 +84,7 @@ export async function POST(request: Request) {
       createWebsiteResult.error &&
       isMissingWebsiteNotificationColumnsError(createWebsiteResult.error.message)
     ) {
-      createWebsiteResult = await supabase
+      createWebsiteResult = await admin
         .from("websites")
         .insert({
           user_id: workspace.workspaceOwnerId,
@@ -105,7 +110,7 @@ export async function POST(request: Request) {
 
     website = createdWebsite;
 
-    const { error: scheduleError } = await supabase.from("scan_schedules").insert({
+    const { error: scheduleError } = await admin.from("scan_schedules").insert({
       website_id: website.id,
       frequency: defaultFrequency,
       next_scan_at: new Date().toISOString()

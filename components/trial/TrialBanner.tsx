@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { getTrialDaysRemaining, isTrialActive, isTrialExpired } from "@/lib/trial";
 import type { UserProfile } from "@/types";
 
-export function TrialBanner({ profile }: { profile: UserProfile }) {
+export function TrialBanner({
+  profile,
+  canManageBilling = true
+}: {
+  profile: UserProfile;
+  canManageBilling?: boolean;
+}) {
   const router = useRouter();
 
   if (!profile.is_trial) return null;
@@ -30,22 +36,24 @@ export function TrialBanner({ profile }: { profile: UserProfile }) {
         <span style={{ color: "#991B1B", fontSize: "14px", fontWeight: 500 }}>
           Your free trial has ended. Upgrade to keep using SitePulse premium features.
         </span>
-        <button
-          type="button"
-          onClick={() => router.push("/dashboard/billing")}
-          style={{
-            background: "#DC2626",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            padding: "6px 16px",
-            fontSize: "13px",
-            fontWeight: 600,
-            cursor: "pointer"
-          }}
-        >
-          Upgrade Now
-        </button>
+        {canManageBilling ? (
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard/billing")}
+            style={{
+              background: "#DC2626",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              padding: "6px 16px",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: "pointer"
+            }}
+          >
+            Upgrade Now
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -73,22 +81,24 @@ export function TrialBanner({ profile }: { profile: UserProfile }) {
         Trial ends in {daysRemaining} day{daysRemaining !== 1 ? "s" : ""}.
         {daysRemaining <= 7 ? " Don't lose premium access." : ""}
       </span>
-      <button
-        type="button"
-        onClick={() => router.push("/dashboard/billing")}
-        style={{
-          background: urgency,
-          color: "white",
-          border: "none",
-          borderRadius: "6px",
-          padding: "6px 16px",
-          fontSize: "13px",
-          fontWeight: 600,
-          cursor: "pointer"
-        }}
-      >
-        Upgrade Now
-      </button>
+      {canManageBilling ? (
+        <button
+          type="button"
+          onClick={() => router.push("/dashboard/billing")}
+          style={{
+            background: urgency,
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            padding: "6px 16px",
+            fontSize: "13px",
+            fontWeight: 600,
+            cursor: "pointer"
+          }}
+        >
+          Upgrade Now
+        </button>
+      ) : null}
     </div>
   );
 }

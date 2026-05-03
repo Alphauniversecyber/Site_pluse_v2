@@ -3,6 +3,7 @@ export type BillingCycle = "monthly" | "yearly";
 export type ScanFrequency = "daily" | "weekly" | "monthly";
 export type ReportFrequency = ScanFrequency | "never";
 export type Severity = "low" | "medium" | "high";
+export type WorkspaceRole = "owner" | "admin" | "viewer";
 export type SubscriptionStatus =
   | "inactive"
   | "approval_pending"
@@ -49,7 +50,8 @@ export type EmailTemplateId =
   | "first_scan_ready"
   | "score_improved"
   | "new_issue_found"
-  | "issue_fixed";
+  | "issue_fixed"
+  | "team_invite";
 export type PlainLanguageCategory = "Performance" | "SEO" | "Accessibility" | "Security";
 export type PlainLanguageDifficulty = "Easy" | "Medium" | "Complex";
 export type UptimeStatus = "up" | "down";
@@ -390,6 +392,46 @@ export interface TeamMember {
   role: "owner" | "admin" | "viewer";
   status: "invited" | "active";
   invited_at: string;
+  joined_at?: string | null;
+}
+
+export interface TeamInvite {
+  id: string;
+  workspace_owner_id: string;
+  invited_email: string;
+  role: "admin" | "viewer";
+  token: string;
+  status: "pending" | "accepted" | "declined";
+  created_at: string;
+  accepted_at: string | null;
+}
+
+export interface TeamAccessEntry {
+  id: string;
+  email: string;
+  name: string | null;
+  role: "admin" | "viewer";
+  type: "member" | "invite";
+  status: "active" | "invited";
+  joinedAt: string | null;
+  createdAt: string | null;
+}
+
+export interface WorkspaceSummary {
+  ownerUserId: string;
+  name: string;
+  email: string;
+  role: WorkspaceRole;
+  isOwner: boolean;
+  plan: PlanKey;
+  isTrial: boolean;
+  trialEndsAt: string | null;
+}
+
+export interface WorkspaceClientState {
+  activeWorkspace: WorkspaceSummary;
+  workspaces: WorkspaceSummary[];
+  workspaceProfile: UserProfile;
 }
 
 export interface DashboardOverview {

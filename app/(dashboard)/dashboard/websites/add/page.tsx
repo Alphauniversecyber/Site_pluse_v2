@@ -6,18 +6,21 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { fetchJson } from "@/lib/api-client";
 import { websiteSchema } from "@/lib/validation";
 import type { Website } from "@/types";
 
 export default function AddWebsitePage() {
   const router = useRouter();
+  const workspace = useWorkspace();
   const [submitting, setSubmitting] = useState(false);
   const [competitorText, setCompetitorText] = useState("");
   const form = useForm({
@@ -27,6 +30,17 @@ export default function AddWebsitePage() {
       label: ""
     }
   });
+
+  if (workspace.activeWorkspace.role === "viewer") {
+    return (
+      <EmptyState
+        title="Viewer access is read-only"
+        description="Switch to a workspace you own or have admin access to before adding websites."
+        actionLabel="Back to websites"
+        actionHref="/dashboard/websites"
+      />
+    );
+  }
 
   return (
     <div className="space-y-8">

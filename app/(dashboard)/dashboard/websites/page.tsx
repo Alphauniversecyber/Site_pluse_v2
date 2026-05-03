@@ -20,14 +20,17 @@ import type { Website } from "@/types";
 import { fetchJson } from "@/lib/api-client";
 import { buildSiteBusinessImpact } from "@/lib/business-impact";
 import { getFriendlyScanFailureMessage } from "@/lib/scan-errors";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { useWebsites } from "@/hooks/useWebsites";
 import type { ScanResult } from "@/types";
 
 export default function WebsitesPage() {
   const { websites, loading, error, refetch } = useWebsites();
+  const workspace = useWorkspace();
   const [search, setSearch] = useState("");
   const [scanningWebsiteId, setScanningWebsiteId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const canManageWorkspace = workspace.activeWorkspace.role !== "viewer";
 
   const filtered = useMemo(
     () =>
@@ -93,12 +96,14 @@ export default function WebsitesPage() {
         title="Protect every client account from one operating board"
         description="See which sites are at risk, where business value is leaking, and what your team should act on next."
         actions={
-          <AddWebsiteButton websiteCount={websites.length}>
+          canManageWorkspace ? (
+          <AddWebsiteButton profile={workspace.workspaceProfile} websiteCount={websites.length}>
             <>
               <Plus className="mr-2 h-4 w-4" />
               Add website
             </>
           </AddWebsiteButton>
+          ) : null
         }
       />
 
@@ -219,58 +224,62 @@ export default function WebsitesPage() {
                           View
                         </Link>
                       </Button>
-                      <Button
-                        variant="default"
-                        onClick={() => runScan(website.id)}
-                        disabled={isPending}
-                        className="h-11 rounded-2xl px-4 text-sm shadow-[0_22px_54px_-34px_rgba(59,130,246,0.82)]"
-                      >
-                        <WandSparkles className="h-4 w-4 shrink-0" />
-                        {isScanning ? "Scanning..." : "Scan now"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => updateWebsite(website.id, { is_active: !website.is_active })}
-                        disabled={isPending}
-                        className="h-10 rounded-2xl border-border/70 bg-background/55 px-4 text-sm text-foreground/80 hover:text-foreground"
-                      >
-                        {website.is_active ? (
-                          <>
-                            <PauseCircle className="h-4 w-4 shrink-0" />
-                            Pause
-                          </>
-                        ) : (
-                          <>
-                            <PlayCircle className="h-4 w-4 shrink-0" />
-                            Resume
-                          </>
-                        )}
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
+                      {canManageWorkspace ? (
+                        <>
+                          <Button
+                            variant="default"
+                            onClick={() => runScan(website.id)}
+                            disabled={isPending}
+                            className="h-11 rounded-2xl px-4 text-sm shadow-[0_22px_54px_-34px_rgba(59,130,246,0.82)]"
+                          >
+                            <WandSparkles className="h-4 w-4 shrink-0" />
+                            {isScanning ? "Scanning..." : "Scan now"}
+                          </Button>
                           <Button
                             variant="outline"
+                            onClick={() => updateWebsite(website.id, { is_active: !website.is_active })}
+                            disabled={isPending}
                             className="h-10 rounded-2xl border-border/70 bg-background/55 px-4 text-sm text-foreground/80 hover:text-foreground"
                           >
-                            <Trash2 className="h-4 w-4 shrink-0" />
-                            Delete
+                            {website.is_active ? (
+                              <>
+                                <PauseCircle className="h-4 w-4 shrink-0" />
+                                Pause
+                              </>
+                            ) : (
+                              <>
+                                <PlayCircle className="h-4 w-4 shrink-0" />
+                                Resume
+                              </>
+                            )}
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete {website.label}?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This removes the website, its scan history, reports, and schedules. This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => deleteWebsite(website.id)}>
-                              Delete website
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className="h-10 rounded-2xl border-border/70 bg-background/55 px-4 text-sm text-foreground/80 hover:text-foreground"
+                              >
+                                <Trash2 className="h-4 w-4 shrink-0" />
+                                Delete
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete {website.label}?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This removes the website, its scan history, reports, and schedules. This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteWebsite(website.id)}>
+                                  Delete website
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </>
+                      ) : null}
                     </div>
                   </div>
 
@@ -354,12 +363,14 @@ export default function WebsitesPage() {
           title="No websites match that search"
           description="Try another client name or add a new website to start sending white-label reports automatically."
           action={
-            <AddWebsiteButton websiteCount={websites.length}>
+            canManageWorkspace ? (
+            <AddWebsiteButton profile={workspace.workspaceProfile} websiteCount={websites.length}>
               <>
                 <Plus className="h-4 w-4" />
                 Add website
               </>
             </AddWebsiteButton>
+            ) : undefined
           }
         />
       )}

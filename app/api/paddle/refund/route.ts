@@ -3,6 +3,7 @@ import {
   getPaddleRefundEligibility,
   refundUserPaddlePayment
 } from "@/lib/paddle-subscriptions";
+import { canAccessWorkspaceBilling, resolveWorkspaceContext } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,10 @@ export async function GET() {
   const { profile, errorResponse } = await requireApiUser();
   if (errorResponse || !profile) {
     return errorResponse;
+  }
+  const workspace = await resolveWorkspaceContext(profile);
+  if (!canAccessWorkspaceBilling(workspace)) {
+    return apiError("Only the workspace owner can manage billing.", 403);
   }
 
   try {
@@ -27,6 +32,10 @@ export async function POST() {
   const { profile, errorResponse } = await requireApiUser();
   if (errorResponse || !profile) {
     return errorResponse;
+  }
+  const workspace = await resolveWorkspaceContext(profile);
+  if (!canAccessWorkspaceBilling(workspace)) {
+    return apiError("Only the workspace owner can manage billing.", 403);
   }
 
   try {

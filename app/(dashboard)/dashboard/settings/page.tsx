@@ -19,14 +19,18 @@ import { buildStoragePath } from "@/lib/utils";
 import { settingsSchema } from "@/lib/validation";
 import { fetchJson } from "@/lib/api-client";
 import { useUser } from "@/hooks/useUser";
-import type { TeamMember } from "@/types";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import type { TeamAccessEntry } from "@/types";
 
 export default function SettingsPage() {
   const { user, loading, refetch } = useUser();
+  const workspace = useWorkspace();
   const [saving, setSaving] = useState(false);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamAccessEntry[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "viewer">("viewer");
+  const [inviting, setInviting] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const form = useForm({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
@@ -53,16 +57,17 @@ export default function SettingsPage() {
   }, [form, user]);
 
   useEffect(() => {
-    if (!user || user.plan !== "agency") {
+    if (!user || !workspace.isOwner || workspace.workspaceProfile.plan !== "agency") {
+      setTeamMembers([]);
       return;
     }
 
-    void fetchJson<TeamMember[]>("/api/team")
+    void fetchJson<TeamAccessEntry[]>("/api/team/members")
       .then(setTeamMembers)
       .catch(() => {
         setTeamMembers([]);
       });
-  }, [user]);
+  }, [user, workspace.activeWorkspace.ownerUserId, workspace.isOwner, workspace.workspaceProfile.plan]);
 
   const uploadProfilePhoto = async (file: File) => {
     if (!user) {
@@ -240,7 +245,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {user.plan === "agency" ? (
+      {workspace.isOwner && workspace.workspaceProfile.plan === "agency" ? (
         <Card>
           <CardContent className="space-y-6 p-6">
             <div>
@@ -262,13 +267,14 @@ export default function SettingsPage() {
                 </SelectContent>
               </Select>
               <Button
-                disabled={!inviteEmail.trim()}
+                disabled={!inviteEmail.trim() || inviting}
                 onClick={async () => {
+                  setInviting(true);
                   try {
-                    const member = await fetchJson<TeamMember>("/api/team", {
+                    const member = await fetchJson<TeamAccessEntry>("/api/team/invite", {
                       method: "POST",
                       body: JSON.stringify({
-                        member_email: inviteEmail,
+                        email: inviteEmail,
                         role: inviteRole
                       })
                     });
@@ -277,10 +283,12 @@ export default function SettingsPage() {
                     toast.success("Team member invited.");
                   } catch (error) {
                     toast.error(error instanceof Error ? error.message : "Unable to invite team member.");
+                  } finally {
+                    setInviting(false);
                   }
                 }}
               >
-                Invite member
+                {inviting ? "Inviting..." : "Invite member"}
               </Button>
             </div>
 
@@ -289,25 +297,67 @@ export default function SettingsPage() {
                 teamMembers.map((member) => (
                   <div key={member.id} className="flex flex-col gap-3 rounded-2xl border border-border bg-background p-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="font-medium">{member.member_email}</p>
+                      <p className="font-medium">{member.email}</p>
+                      {member.name ? <p className="text-sm text-muted-foreground">{member.name}</p> : null}
                       <p className="text-sm text-muted-foreground">
                         {member.role} - {member.status}
                       </p>
                     </div>
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        try {
-                          await fetchJson(`/api/team/${member.id}`, { method: "DELETE" });
-                          setTeamMembers((current) => current.filter((item) => item.id !== member.id));
-                          toast.success("Team member removed.");
-                        } catch (error) {
-                          toast.error(error instanceof Error ? error.message : "Unable to remove team member.");
-                        }
-                      }}
-                    >
-                      Remove
-                    </Button>
+                    {member.type === "member" ? (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" disabled={removingId === member.id}>
+                            {removingId === member.id ? "Removing..." : "Remove"}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remove active member?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This removes their access to the workspace immediately.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={async () => {
+                                setRemovingId(member.id);
+                                try {
+                                  await fetchJson(`/api/team/members/${member.id}`, { method: "DELETE" });
+                                  setTeamMembers((current) => current.filter((item) => item.id !== member.id));
+                                  toast.success("Team member removed.");
+                                } catch (error) {
+                                  toast.error(error instanceof Error ? error.message : "Unable to remove team member.");
+                                } finally {
+                                  setRemovingId(null);
+                                }
+                              }}
+                            >
+                              Remove member
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        disabled={removingId === member.id}
+                        onClick={async () => {
+                          setRemovingId(member.id);
+                          try {
+                            await fetchJson(`/api/team/invite/${member.id}`, { method: "DELETE" });
+                            setTeamMembers((current) => current.filter((item) => item.id !== member.id));
+                            toast.success("Invite removed.");
+                          } catch (error) {
+                            toast.error(error instanceof Error ? error.message : "Unable to remove invite.");
+                          } finally {
+                            setRemovingId(null);
+                          }
+                        }}
+                      >
+                        {removingId === member.id ? "Removing..." : "Remove"}
+                      </Button>
+                    )}
                   </div>
                 ))
               ) : (

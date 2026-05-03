@@ -210,7 +210,19 @@ create table if not exists public.team_members (
   role public.team_role not null default 'viewer',
   status public.team_status not null default 'invited',
   invited_at timestamptz not null default timezone('utc', now()),
+  joined_at timestamptz,
   unique (owner_user_id, member_email)
+);
+
+create table if not exists public.team_invites (
+  id uuid primary key default gen_random_uuid(),
+  workspace_owner_id uuid not null references public.users (id) on delete cascade,
+  invited_email text not null,
+  role text not null check (role in ('viewer', 'admin')),
+  token uuid not null unique,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined')),
+  created_at timestamptz not null default timezone('utc', now()),
+  accepted_at timestamptz
 );
 
 create table if not exists public.websites (
@@ -600,6 +612,9 @@ create index if not exists idx_preview_scan_sessions_url_expires on public.previ
 create index if not exists idx_preview_scan_sessions_claimed_by on public.preview_scan_sessions (claimed_by_user_id);
 create index if not exists idx_notifications_user_id_created_at on public.notifications (user_id, created_at desc);
 create index if not exists idx_team_members_owner on public.team_members (owner_user_id);
+create index if not exists idx_team_members_owner_joined on public.team_members (owner_user_id, joined_at desc);
+create index if not exists idx_team_invites_owner_status on public.team_invites (workspace_owner_id, status, created_at desc);
+create index if not exists idx_team_invites_email_status on public.team_invites (invited_email, status);
 create index if not exists idx_ssl_checks_website_checked_at on public.ssl_checks (website_id, checked_at desc);
 create index if not exists idx_security_headers_website_checked_at on public.security_headers (website_id, checked_at desc);
 create index if not exists idx_seo_audit_website_created_at on public.seo_audit (website_id, created_at desc);
@@ -815,6 +830,7 @@ alter table public.manual_revenue_entries enable row level security;
 alter table public.paddle_webhook_events enable row level security;
 alter table public.agency_branding enable row level security;
 alter table public.team_members enable row level security;
+alter table public.team_invites enable row level security;
 alter table public.websites enable row level security;
 alter table public.scan_results enable row level security;
 alter table public.reports enable row level security;
@@ -872,6 +888,17 @@ create policy "Owners can manage team members"
   on public.team_members for all
   using (auth.uid() = owner_user_id)
   with check (auth.uid() = owner_user_id);
+
+drop policy if exists "Owners can view team invites" on public.team_invites;
+create policy "Owners can view team invites"
+  on public.team_invites for select
+  using (auth.uid() = workspace_owner_id);
+
+drop policy if exists "Owners can manage team invites" on public.team_invites;
+create policy "Owners can manage team invites"
+  on public.team_invites for all
+  using (auth.uid() = workspace_owner_id)
+  with check (auth.uid() = workspace_owner_id);
 
 drop policy if exists "Users can view accessible websites" on public.websites;
 create policy "Users can view accessible websites"

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { CreditCard, FileText, Gauge, Globe2, Menu, Palette, Settings } from "lucide-react";
 
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { SitePulseLogo } from "@/components/brand/sitepulse-logo";
 import { LogoutButton } from "@/components/dashboard/logout-button";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
@@ -12,6 +13,7 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import type { NotificationItem, UserProfile } from "@/types";
 import { cn, getPlanAudience, getPlanDisplayName } from "@/lib/utils";
@@ -37,6 +39,7 @@ export function DashboardShell({
 }) {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { activeWorkspace, workspaces, switchWorkspace, isSwitching } = useWorkspace();
   const initials =
     profile.full_name
       ?.split(" ")
@@ -51,6 +54,10 @@ export function DashboardShell({
 
   const isActive = (href: string) =>
     pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
+
+  const navigationItems = activeWorkspace.isOwner
+    ? navigation
+    : navigation.filter((item) => item.href !== "/dashboard/billing");
 
   const renderNavLink = (item: (typeof navigation)[number]) => {
     const Icon = item.icon;
@@ -75,7 +82,7 @@ export function DashboardShell({
 
   const navItems = (
     <nav className="space-y-2 xl:space-y-2.5 [@media(max-height:900px)]:space-y-1.5 [@media(max-height:820px)]:space-y-1">
-      {navigation.map((item) => renderNavLink(item))}
+      {navigationItems.map((item) => renderNavLink(item))}
     </nav>
   );
 
@@ -108,10 +115,19 @@ export function DashboardShell({
                   >
                     {profile.email}
                   </p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.18em] text-foreground/56">
+                    Viewing {activeWorkspace.name}
+                  </p>
                 </div>
               </div>
-              <Badge className="mt-4" variant={profile.plan === "agency" ? "success" : profile.plan === "starter" ? "default" : "outline"}>
-                {getPlanDisplayName(profile.plan)} plan
+              <Badge
+                className="mt-4"
+                variant={activeWorkspace.plan === "agency" ? "success" : activeWorkspace.plan === "starter" ? "default" : "outline"}
+              >
+                {getPlanDisplayName(activeWorkspace.plan)} plan
+              </Badge>
+              <Badge className="mt-2" variant={activeWorkspace.role === "owner" ? "success" : "outline"}>
+                {activeWorkspace.role}
               </Badge>
             </div>
 
@@ -119,6 +135,22 @@ export function DashboardShell({
               <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-foreground/56">
                 Workspace
               </p>
+              {workspaces.length > 1 ? (
+                <div className="mt-4 px-1">
+                  <Select value={activeWorkspace.ownerUserId} onValueChange={switchWorkspace} disabled={isSwitching}>
+                    <SelectTrigger className="h-11 rounded-2xl border-border bg-background">
+                      <SelectValue placeholder="Choose workspace" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workspaces.map((workspace) => (
+                        <SelectItem key={workspace.ownerUserId} value={workspace.ownerUserId}>
+                          {workspace.name} ({workspace.role})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
               <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1 [@media(max-height:900px)]:mt-3 [@media(max-height:820px)]:mt-2.5">
                 {navItems}
               </div>
@@ -166,13 +198,32 @@ export function DashboardShell({
                       </div>
                       <Badge
                         className="mt-4"
-                        variant={profile.plan === "agency" ? "success" : profile.plan === "starter" ? "default" : "outline"}
+                        variant={activeWorkspace.plan === "agency" ? "success" : activeWorkspace.plan === "starter" ? "default" : "outline"}
                       >
-                        {getPlanDisplayName(profile.plan)} plan
+                        {getPlanDisplayName(activeWorkspace.plan)} plan
+                      </Badge>
+                      <Badge className="mt-2" variant={activeWorkspace.role === "owner" ? "success" : "outline"}>
+                        {activeWorkspace.role}
                       </Badge>
                     </div>
 
                     <div className="mt-6">
+                      {workspaces.length > 1 ? (
+                        <div className="mb-4">
+                          <Select value={activeWorkspace.ownerUserId} onValueChange={switchWorkspace} disabled={isSwitching}>
+                            <SelectTrigger className="h-11 rounded-2xl border-border bg-background">
+                              <SelectValue placeholder="Choose workspace" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {workspaces.map((workspace) => (
+                                <SelectItem key={workspace.ownerUserId} value={workspace.ownerUserId}>
+                                  {workspace.name} ({workspace.role})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : null}
                       {navItems}
                     </div>
 
@@ -190,7 +241,7 @@ export function DashboardShell({
                 <div className="hidden min-w-0 lg:block">
                   <p className="text-xs uppercase tracking-[0.24em] text-primary">Agency growth system</p>
                   <p className="text-sm text-foreground/66 xl:text-[15px]">
-                    {getPlanAudience(profile.plan)}
+                    {activeWorkspace.isOwner ? getPlanAudience(activeWorkspace.plan) : `Viewing ${activeWorkspace.name} as ${activeWorkspace.role}`}
                   </p>
                 </div>
               </div>

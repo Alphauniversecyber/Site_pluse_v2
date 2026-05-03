@@ -35,7 +35,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useTrialPaywall } from "@/hooks/useTrialPaywall";
-import { useUser } from "@/hooks/useUser";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import type {
   BrokenLinkRecord,
   CompetitorScanRecord,
@@ -524,6 +524,7 @@ function WebsiteHealthSignalsCard(input: {
   onCompetitorInputChange: (value: string) => void;
   onSaveCompetitors: () => void;
   isPending: boolean;
+  canManageWorkspace: boolean;
   healthScore: Website["health_score"] | null;
   healthSignalsSyncing: boolean;
   hasCurrentScan: boolean;
@@ -537,11 +538,12 @@ function WebsiteHealthSignalsCard(input: {
     cruxData,
     uptimeSummary,
     competitorEntries,
-    competitorInput,
-    onCompetitorInputChange,
-    onSaveCompetitors,
-    isPending,
-    healthScore,
+      competitorInput,
+      onCompetitorInputChange,
+      onSaveCompetitors,
+      isPending,
+      canManageWorkspace,
+      healthScore,
     healthSignalsSyncing,
     hasCurrentScan
   } = input;
@@ -813,11 +815,14 @@ function WebsiteHealthSignalsCard(input: {
                       value={competitorInput}
                       onChange={(event) => onCompetitorInputChange(event.target.value)}
                       placeholder="https://competitor-one.com&#10;https://competitor-two.com"
+                      disabled={!canManageWorkspace}
                     />
                   </div>
-                  <Button onClick={onSaveCompetitors} disabled={isPending} className="shrink-0">
-                    Save competitors
-                  </Button>
+                  {canManageWorkspace ? (
+                    <Button onClick={onSaveCompetitors} disabled={isPending} className="shrink-0">
+                      Save competitors
+                    </Button>
+                  ) : null}
                 </div>
               </div>
 
@@ -868,7 +873,7 @@ function WebsiteHealthSignalsCard(input: {
 }
 
 export default function WebsiteDetailPage({ params }: { params: { id: string } }) {
-  const { user } = useUser();
+  const workspace = useWorkspace();
   const [data, setData] = useState<WebsiteDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [plainLanguage, setPlainLanguage] = useState<WebsiteScanPlainEnglish | null>(null);
@@ -881,7 +886,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const [autoEmailReports, setAutoEmailReports] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [isPending, startTransition] = useTransition();
-  const { paywallFeature, isExpired, closePaywall, requireAccess } = useTrialPaywall(user);
+  const { paywallFeature, isExpired, closePaywall, requireAccess } = useTrialPaywall(workspace.workspaceProfile);
+  const canManageWorkspace = workspace.activeWorkspace.role !== "viewer";
   const healthSignalAttemptCountsRef = useRef(new Map<string, number>());
   const healthSignalRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1013,7 +1019,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   }, [currentScan?.id, currentScanFailed]);
 
   useEffect(() => {
-    if (!currentScan || currentScanFailed) {
+    if (!canManageWorkspace || !currentScan || currentScanFailed) {
       clearHealthSignalRetryTimeout();
       return;
     }
@@ -1114,7 +1120,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
     return () => {
       cancelled = true;
     };
-  }, [brokenLinks, currentScan, currentScanFailed, healthSignalRetryTick, params.id, seoAudit]);
+  }, [brokenLinks, canManageWorkspace, currentScan, currentScanFailed, healthSignalRetryTick, params.id, seoAudit]);
 
   const runScan = () =>
     startTransition(async () => {
@@ -1303,6 +1309,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
         title={data.label}
         description={data.url}
         actions={
+          canManageWorkspace ? (
           <div className="w-full rounded-[1.5rem] border border-slate-200/90 bg-white/80 p-2 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.16)] backdrop-blur dark:border-white/8 dark:bg-card/70 dark:shadow-[0_18px_48px_-28px_rgba(15,23,42,0.58)] xl:w-auto">
             <div className="grid w-full gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-3">
               <Button
@@ -1333,6 +1340,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
               </Button>
             </div>
           </div>
+          ) : null
         }
       />
 
@@ -1391,11 +1399,15 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             <div className="grid gap-5 xl:grid-cols-[240px_minmax(0,1fr)]">
               <div className="space-y-2">
                 <Label htmlFor="website-report-frequency">Report frequency</Label>
-                <Select value={reportFrequency} onValueChange={(value) => setReportFrequency(value as ReportFrequency)}>
+                <Select
+                  value={reportFrequency}
+                  onValueChange={(value) => setReportFrequency(value as ReportFrequency)}
+                  disabled={!canManageWorkspace}
+                >
                   <SelectTrigger
                     id="website-report-frequency"
                     className="h-11 rounded-xl border-border bg-background"
-                    disabled={isPending}
+                    disabled={isPending || !canManageWorkspace}
                   >
                     <SelectValue placeholder="Select report frequency" />
                   </SelectTrigger>
@@ -1420,6 +1432,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                   onChange={(event) => setExtraRecipientsText(event.target.value)}
                   placeholder="client@example.com, owner@example.com"
                   className="min-h-[112px]"
+                  disabled={!canManageWorkspace}
                 />
                 <p className="text-sm text-muted-foreground">
                   Separate emails with commas. Your account email still receives reports for this site.
@@ -1435,7 +1448,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                     Send scheduled reports automatically for this website.
                   </p>
                 </div>
-                <Switch checked={autoEmailReports} onCheckedChange={setAutoEmailReports} disabled={isPending} />
+                <Switch checked={autoEmailReports} onCheckedChange={setAutoEmailReports} disabled={isPending || !canManageWorkspace} />
               </div>
 
               <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-background px-4 py-4">
@@ -1445,15 +1458,17 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                     Alert when scores drop, scans fail, or monitoring detects trouble on this website.
                   </p>
                 </div>
-                <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} disabled={isPending} />
+                <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} disabled={isPending || !canManageWorkspace} />
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end">
-              <Button type="button" onClick={saveReportSettings} disabled={isPending}>
-                Save settings
-              </Button>
-            </div>
+            {canManageWorkspace ? (
+              <div className="mt-5 flex justify-end">
+                <Button type="button" onClick={saveReportSettings} disabled={isPending}>
+                  Save settings
+                </Button>
+              </div>
+            ) : null}
           </div>
         </CardContent>
       </Card>
@@ -1559,10 +1574,12 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                       </p>
                     </div>
                   </div>
-                  <Button variant="outline" onClick={runScan} disabled={isPending} className="h-11 w-full shrink-0 sm:w-auto">
-                    <WandSparkles className="h-4 w-4" />
-                    Retry scan
-                  </Button>
+                  {canManageWorkspace ? (
+                    <Button variant="outline" onClick={runScan} disabled={isPending} className="h-11 w-full shrink-0 sm:w-auto">
+                      <WandSparkles className="h-4 w-4" />
+                      Retry scan
+                    </Button>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -1993,14 +2010,15 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             securityHeaders={securityHeaders}
             cruxData={cruxData}
             uptimeSummary={uptimeSummary}
-            competitorEntries={competitorEntries}
-            competitorInput={competitorInput}
-            onCompetitorInputChange={setCompetitorInput}
-            onSaveCompetitors={saveCompetitors}
-            isPending={isPending}
-            healthScore={healthScore}
-            healthSignalsSyncing={healthSignalsSyncing}
-            hasCurrentScan={Boolean(currentScan)}
+              competitorEntries={competitorEntries}
+              competitorInput={competitorInput}
+              onCompetitorInputChange={setCompetitorInput}
+              onSaveCompetitors={saveCompetitors}
+              isPending={isPending}
+              canManageWorkspace={canManageWorkspace}
+              healthScore={healthScore}
+              healthSignalsSyncing={healthSignalsSyncing}
+              hasCurrentScan={Boolean(currentScan)}
           />
 
           <Card>
@@ -2048,14 +2066,15 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             securityHeaders={securityHeaders}
             cruxData={cruxData}
             uptimeSummary={uptimeSummary}
-            competitorEntries={competitorEntries}
-            competitorInput={competitorInput}
-            onCompetitorInputChange={setCompetitorInput}
-            onSaveCompetitors={saveCompetitors}
-            isPending={isPending}
-            healthScore={healthScore}
-            healthSignalsSyncing={healthSignalsSyncing}
-            hasCurrentScan={Boolean(currentScan)}
+              competitorEntries={competitorEntries}
+              competitorInput={competitorInput}
+              onCompetitorInputChange={setCompetitorInput}
+              onSaveCompetitors={saveCompetitors}
+              isPending={isPending}
+              canManageWorkspace={canManageWorkspace}
+              healthScore={healthScore}
+              healthSignalsSyncing={healthSignalsSyncing}
+              hasCurrentScan={Boolean(currentScan)}
           />
         </>
       )}

@@ -1,13 +1,14 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { generateAndStoreReport, generateAndStoreReportPdf } from "@/lib/report-service";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { canAccessFeature } from "@/lib/trial";
 import { reportGenerationSchema } from "@/lib/validation";
-import { resolveWorkspaceContext } from "@/lib/workspace";
+import { canManageWorkspace, resolveWorkspaceContext } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const { supabase, profile, errorResponse } = await requireApiUser();
+  const { profile, errorResponse } = await requireApiUser();
   if (errorResponse || !profile) {
     return errorResponse;
   }
@@ -15,6 +16,10 @@ export async function POST(request: Request) {
   const wantsPdf = request.headers.get("accept")?.includes("application/pdf") ?? false;
 
   const workspace = await resolveWorkspaceContext(profile);
+  if (!canManageWorkspace(workspace)) {
+    return apiError("Viewer access is read-only.", 403);
+  }
+  const admin = createSupabaseAdminClient();
 
   if (!canAccessFeature(workspace.workspaceProfile, "download_report")) {
     return apiError("Upgrade to keep generating PDF reports.", 403);
@@ -27,9 +32,10 @@ export async function POST(request: Request) {
     return apiError(parsed.error.issues[0]?.message ?? "Invalid report request.", 422);
   }
 
-  const { data: website } = await supabase
+  const { data: website } = await admin
     .from("websites")
     .select("id")
+    .eq("user_id", workspace.workspaceOwnerId)
     .eq("id", parsed.data.websiteId)
     .single();
 

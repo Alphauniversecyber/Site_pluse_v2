@@ -1,7 +1,8 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { isTrialActive } from "@/lib/trial";
 import { brandingSchema } from "@/lib/validation";
-import { resolveWorkspaceContext } from "@/lib/workspace";
+import { canManageWorkspace, resolveWorkspaceContext } from "@/lib/workspace";
 
 export async function GET() {
   const { supabase, profile, errorResponse } = await requireApiUser();
@@ -31,6 +32,9 @@ export async function PUT(request: Request) {
   }
 
   const workspace = await resolveWorkspaceContext(profile);
+  if (!canManageWorkspace(workspace)) {
+    return apiError("Viewer access is read-only.", 403);
+  }
 
   if (workspace.workspaceProfile.plan !== "agency" && !isTrialActive(workspace.workspaceProfile)) {
     return apiError("White-label branding is available on the Agency plan.", 403);
@@ -43,7 +47,8 @@ export async function PUT(request: Request) {
     return apiError(parsed.error.issues[0]?.message ?? "Invalid branding payload.", 422);
   }
 
-  const { data: branding, error } = await supabase
+  const admin = createSupabaseAdminClient();
+  const { data: branding, error } = await admin
     .from("agency_branding")
     .upsert(
       {

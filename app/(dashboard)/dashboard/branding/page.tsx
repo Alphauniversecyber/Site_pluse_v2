@@ -19,9 +19,11 @@ import { brandingSchema } from "@/lib/validation";
 import { fetchJson } from "@/lib/api-client";
 import { useBranding } from "@/hooks/useBranding";
 import { useUser } from "@/hooks/useUser";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 export default function BrandingPage() {
   const { user, loading: userLoading } = useUser();
+  const workspace = useWorkspace();
   const { branding, loading, refetch } = useBranding();
   const [saving, setSaving] = useState(false);
   const form = useForm({
@@ -54,7 +56,7 @@ export default function BrandingPage() {
     }
 
     const supabase = createSupabaseBrowserClient();
-    const path = buildStoragePath(user.id, file.name);
+    const path = buildStoragePath(workspace.workspaceProfile.id, file.name);
     const { error } = await supabase.storage.from("branding-assets").upload(path, file, {
       upsert: true
     });
@@ -81,7 +83,18 @@ export default function BrandingPage() {
     );
   }
 
-  if (user.plan !== "agency" && !isTrialActive(user)) {
+  if (workspace.activeWorkspace.role === "viewer") {
+    return (
+      <EmptyState
+        title="Viewer access is read-only"
+        description="Switch to a workspace you own or have admin access to before editing branding."
+        actionLabel="Back to dashboard"
+        actionHref="/dashboard"
+      />
+    );
+  }
+
+  if (workspace.workspaceProfile.plan !== "agency" && !isTrialActive(workspace.workspaceProfile)) {
     return (
       <EmptyState
         title="White-label branding is on the Agency plan"

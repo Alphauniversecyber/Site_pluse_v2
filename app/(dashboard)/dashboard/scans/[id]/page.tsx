@@ -6,8 +6,10 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient, requireAuthenticatedUser } from "@/lib/supabase-server";
 import { formatDateTime, formatRelativeTime } from "@/lib/utils";
+import { resolveWorkspaceContext } from "@/lib/workspace";
 import type { ScanResult, Website } from "@/types";
 
 function compactUrl(url: string) {
@@ -33,7 +35,9 @@ function tone(score: number) {
 
 export default async function DashboardScanDetailPage({ params }: { params: { id: string } }) {
   const { profile } = await requireAuthenticatedUser();
+  const workspace = await resolveWorkspaceContext(profile);
   const supabase = createSupabaseServerClient();
+  const admin = createSupabaseAdminClient();
 
   const { data: scan } = await supabase
     .from("scan_results")
@@ -50,9 +54,10 @@ export default async function DashboardScanDetailPage({ params }: { params: { id
     );
   }
 
-  const { data: website } = await supabase
+  const { data: website } = await admin
     .from("websites")
     .select("*")
+    .eq("user_id", workspace.workspaceOwnerId)
     .eq("id", scan.website_id)
     .single<Website>();
 

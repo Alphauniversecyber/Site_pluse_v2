@@ -1,6 +1,7 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { getPaddleCheckoutConfig } from "@/lib/paddle";
 import { paddleCheckoutSchema } from "@/lib/validation";
+import { canAccessWorkspaceBilling, resolveWorkspaceContext } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 
@@ -8,6 +9,10 @@ export async function POST(request: Request) {
   const { profile, errorResponse } = await requireApiUser();
   if (errorResponse || !profile) {
     return errorResponse;
+  }
+  const workspace = await resolveWorkspaceContext(profile);
+  if (!canAccessWorkspaceBilling(workspace)) {
+    return apiError("Only the workspace owner can manage billing.", 403);
   }
 
   const body = await request.json().catch(() => null);

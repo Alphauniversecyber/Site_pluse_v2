@@ -14,8 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useTrialPaywall } from "@/hooks/useTrialPaywall";
-import { useUser } from "@/hooks/useUser";
 import { useWebsites } from "@/hooks/useWebsites";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { fetchJson } from "@/lib/api-client";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { Report } from "@/types";
@@ -91,12 +91,13 @@ function MetricPill({
 
 export default function ReportsPage() {
   const { websites } = useWebsites({ view: "summary" });
-  const { user } = useUser();
+  const workspace = useWorkspace();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [isPending, startTransition] = useTransition();
-  const { paywallFeature, isExpired, closePaywall, requireAccess } = useTrialPaywall(user);
+  const { paywallFeature, isExpired, closePaywall, requireAccess } = useTrialPaywall(workspace.workspaceProfile);
+  const canManageWorkspace = workspace.activeWorkspace.role !== "viewer";
 
   const websiteLabels = useMemo(
     () =>
@@ -327,14 +328,16 @@ export default function ReportsPage() {
                           <Download className="h-4 w-4" />
                           Download PDF
                         </Button>
-                        <Button
-                          className="h-11 justify-center rounded-2xl"
-                          onClick={() => sendReport(report.id)}
-                          disabled={isPending}
-                        >
-                          <Mail className="h-4 w-4" />
-                          Send report
-                        </Button>
+                        {canManageWorkspace ? (
+                          <Button
+                            className="h-11 justify-center rounded-2xl"
+                            onClick={() => sendReport(report.id)}
+                            disabled={isPending}
+                          >
+                            <Mail className="h-4 w-4" />
+                            Send report
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -432,17 +435,19 @@ export default function ReportsPage() {
                                   </span>
                                   <ArrowUpRight className="h-4 w-4" />
                                 </Button>
-                                <Button
-                                  className="h-11 justify-between rounded-2xl px-4"
-                                  onClick={() => sendReport(report.id)}
-                                  disabled={isPending}
-                                >
-                                  <span className="flex items-center gap-2">
-                                    <Mail className="h-4 w-4" />
-                                    Send
-                                  </span>
-                                  <ArrowUpRight className="h-4 w-4" />
-                                </Button>
+                                {canManageWorkspace ? (
+                                  <Button
+                                    className="h-11 justify-between rounded-2xl px-4"
+                                    onClick={() => sendReport(report.id)}
+                                    disabled={isPending}
+                                  >
+                                    <span className="flex items-center gap-2">
+                                      <Mail className="h-4 w-4" />
+                                      Send
+                                    </span>
+                                    <ArrowUpRight className="h-4 w-4" />
+                                  </Button>
+                                ) : null}
                               </div>
                             </TableCell>
                           </TableRow>

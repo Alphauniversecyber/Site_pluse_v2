@@ -77,14 +77,14 @@ export function SiteHeader() {
   }, [isAuthenticated]);
 
   const mainLinks = [
-    { href: "/", label: "Home" },
-    { href: "/features", label: "Features" },
-    { href: "/pricing", label: "Pricing" },
-    { href: "/about", label: "About" },
-    { href: "/blog", label: "Blog" }
+    { href: { pathname: "/" }, pathname: "/", label: "Home" },
+    { href: { pathname: "/features" }, pathname: "/features", label: "Features" },
+    { href: { pathname: "/pricing" }, pathname: "/pricing", label: "Pricing" },
+    { href: { pathname: "/about" }, pathname: "/about", label: "About" },
+    { href: { pathname: "/blog" }, pathname: "/blog", label: "Blog" }
   ] as const;
 
-  const myReportsHref = "/dashboard/reports";
+  const myReportsHref = { pathname: "/dashboard/reports" } as const;
 
   function handleLogout() {
     startLogoutTransition(async () => {
@@ -111,11 +111,11 @@ export function SiteHeader() {
         <nav aria-label="Main navigation" className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
           {mainLinks.map((item) => (
             <Link
-              key={item.href}
+              key={item.pathname}
               href={item.href}
               className={cn(
                 "premium-link",
-                pathname === item.href ? "text-foreground" : ""
+                pathname === item.pathname ? "text-foreground" : ""
               )}
             >
               <span className="relative inline-flex items-center gap-2">{item.label}</span>
@@ -257,11 +257,11 @@ export function SiteHeader() {
             <nav aria-label="Mobile navigation" className="mt-8 space-y-2">
               {mainLinks.map((item) => (
                 <Link
-                  key={item.href}
+                  key={item.pathname}
                   href={item.href}
                   className={cn(
                     "flex items-center rounded-2xl px-4 py-3 text-sm transition duration-200",
-                    pathname === item.href
+                    pathname === item.pathname
                       ? "bg-card text-foreground"
                       : "text-muted-foreground hover:bg-card hover:text-foreground"
                   )}

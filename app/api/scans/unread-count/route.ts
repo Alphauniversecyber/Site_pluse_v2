@@ -1,4 +1,6 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { resolveWorkspaceContext } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 
@@ -15,15 +17,18 @@ const UNREAD_NOTIFICATION_TYPES = [
 ] as const;
 
 export async function GET() {
-  const { supabase, user, errorResponse } = await requireApiUser();
-  if (errorResponse || !user) {
+  const { profile, errorResponse } = await requireApiUser();
+  if (errorResponse || !profile) {
     return errorResponse;
   }
 
-  const { count, error } = await supabase
+  const workspace = await resolveWorkspaceContext(profile);
+  const admin = createSupabaseAdminClient();
+
+  const { count, error } = await admin
     .from("notifications")
     .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
+    .eq("user_id", workspace.workspaceOwnerId)
     .eq("is_read", false)
     .in("type", [...UNREAD_NOTIFICATION_TYPES]);
 
