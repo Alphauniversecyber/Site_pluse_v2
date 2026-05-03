@@ -47,7 +47,9 @@ export function AgencyFeaturesPage() {
       <div className="grid gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
         <div>
           <Badge>Agency growth features</Badge>
-          <h1 className="mt-6 font-display text-5xl font-semibold">{marketingCopy.tagline}</h1>
+          <h1 className="mt-6 font-display text-5xl font-semibold">
+            SEO Audit Features Built for Agencies
+          </h1>
           <p className="mt-6 text-lg leading-8 text-muted-foreground">{marketingCopy.positioning}</p>
           <p className="mt-4 text-base leading-7 text-muted-foreground">
             Every feature is designed to help agencies close more clients, retain them longer, and look more premium while doing it.

@@ -105,7 +105,7 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
             Client acquisition and retention system for agencies
           </Badge>
           <h1 className="mt-6 font-display text-4xl font-semibold leading-[0.98] sm:text-5xl lg:text-[4.4rem]">
-            {marketingCopy.tagline}
+            The SEO Audit Tool Built for Agencies
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
             {marketingCopy.subTagline}

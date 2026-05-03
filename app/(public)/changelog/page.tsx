@@ -1,5 +1,16 @@
+import type { Metadata } from "next";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+export const metadata: Metadata = {
+  title: "SitePulse Product Changelog",
+  description:
+    "Read the latest SitePulse product updates, including new SEO audit workflows, reporting improvements, billing changes, and agency features.",
+  alternates: {
+    canonical: "https://www.trysitepulse.com/changelog"
+  }
+};
 
 const updates = [
   {
@@ -28,7 +39,7 @@ export default function ChangelogPage() {
       <div className="mx-auto max-w-4xl">
         <Badge>Product updates</Badge>
         <h1 className="mt-6 font-display text-4xl font-semibold tracking-tight md:text-5xl">
-          Changelog
+          SitePulse Product Changelog
         </h1>
         <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
           Follow the latest improvements across monitoring, reporting, billing, and client-delivery

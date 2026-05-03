@@ -7,8 +7,10 @@ const browserTracingIncludes = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  compress: true,
   experimental: {
     typedRoutes: true,
+    optimizePackageImports: ["lucide-react", "@radix-ui/react-icons"],
     serverComponentsExternalPackages: [
       "@sparticuz/chromium",
       "puppeteer",
@@ -37,6 +39,44 @@ const nextConfig = {
         hostname: "**.supabase.co"
       }
     ]
+  },
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "trysitepulse.com" }],
+        destination: "https://www.trysitepulse.com/:path*",
+        permanent: true
+      },
+      {
+        source: "/:path*",
+        has: [{ type: "header", key: "x-forwarded-proto", value: "http" }],
+        destination: "https://www.trysitepulse.com/:path*",
+        permanent: true
+      }
+    ];
+  },
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+          }
+        ]
+      },
+      {
+        source: "/_next/static/(.*)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable"
+          }
+        ]
+      }
+    ];
   }
 };
 

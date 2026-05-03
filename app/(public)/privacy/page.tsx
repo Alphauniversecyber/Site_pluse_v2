@@ -3,8 +3,12 @@ import type { Metadata } from "next";
 import { LegalPageShell } from "@/components/legal/legal-page-shell";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy",
-  description: "SitePulse privacy policy covering personal data, usage, cookies, Paddle payments, and user rights."
+  title: "SitePulse Privacy Policy",
+  description:
+    "Read the SitePulse Privacy Policy to understand how we collect, use, store, and protect customer data across our SEO audit platform.",
+  alternates: {
+    canonical: "https://www.trysitepulse.com/privacy"
+  }
 };
 
 const lastUpdated = "April 8, 2026";
@@ -13,7 +17,7 @@ export default function PrivacyPage() {
   return (
     <LegalPageShell
       eyebrow="Legal"
-      title="Privacy Policy"
+      title="SitePulse Privacy Policy"
       intro="This Privacy Policy explains what personal data SitePulse collects, how we use it, how it is stored, and what rights you have in relation to your information."
       lastUpdated={lastUpdated}
       sections={[

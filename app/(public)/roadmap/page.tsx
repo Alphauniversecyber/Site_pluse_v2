@@ -1,5 +1,16 @@
+import type { Metadata } from "next";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+export const metadata: Metadata = {
+  title: "SitePulse Product Roadmap",
+  description:
+    "See the SitePulse product roadmap for upcoming SEO audit, reporting, retention, and agency workflow improvements.",
+  alternates: {
+    canonical: "https://www.trysitepulse.com/roadmap"
+  }
+};
 
 const roadmapItems = [
   {
@@ -28,7 +39,7 @@ export default function RoadmapPage() {
       <div className="mx-auto max-w-4xl">
         <Badge>What&apos;s next</Badge>
         <h1 className="mt-6 font-display text-4xl font-semibold tracking-tight md:text-5xl">
-          Product Roadmap
+          SitePulse Product Roadmap
         </h1>
         <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
           The roadmap is focused on making SitePulse more valuable as an agency growth system, not

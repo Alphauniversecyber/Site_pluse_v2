@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getBillingPlans } from "@/lib/billing-config";
-import { marketingCopy } from "@/lib/marketing-copy";
 
 const pricingProof = [
   "Close 1 client = $500+ in monthly revenue for many agencies.",
@@ -20,7 +19,9 @@ export async function AgencyPricingPage() {
     <main className="container py-16 md:py-20">
       <div className="mx-auto max-w-4xl text-center">
         <Badge>ROI-first pricing</Badge>
-        <h1 className="mt-6 font-display text-5xl font-semibold">{marketingCopy.tagline}</h1>
+        <h1 className="mt-6 font-display text-5xl font-semibold">
+          SEO Audit Tool Pricing for Agencies
+        </h1>
         <p className="mt-6 text-lg leading-8 text-muted-foreground">
           Price SitePulse like a revenue tool, not a software expense. Every plan is framed around how agencies test value, grow retainers, and scale operations.
         </p>

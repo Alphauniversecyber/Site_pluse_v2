@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -5,6 +6,25 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { claimPreviewScanSession } from "@/lib/preview-scan";
 import { getCurrentUserProfile } from "@/lib/supabase-server";
+
+export async function generateMetadata({
+  params
+}: {
+  params: { id: string };
+}): Promise<Metadata> {
+  return {
+    title: "Unlock Your Free SEO Audit Report",
+    description:
+      "Unlock your SitePulse preview report to claim a free SEO audit and continue into the full client-ready dashboard experience.",
+    alternates: {
+      canonical: `https://www.trysitepulse.com/unlock-preview/${params.id}`
+    },
+    robots: {
+      index: false,
+      follow: false
+    }
+  };
+}
 
 export default async function UnlockPreviewPage({ params }: { params: { id: string } }) {
   const nextPath = `/unlock-preview/${params.id}`;

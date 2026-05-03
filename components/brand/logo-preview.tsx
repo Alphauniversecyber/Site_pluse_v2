@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ImageIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -36,10 +37,13 @@ export function LogoPreview({
       )}
     >
       {showImage ? (
-        <img
+        <Image
           src={src ?? ""}
           alt={alt}
           onError={() => setHasError(true)}
+          width={320}
+          height={128}
+          unoptimized
           className={cn("block max-h-16 max-w-full object-contain object-left", imageClassName)}
         />
       ) : (

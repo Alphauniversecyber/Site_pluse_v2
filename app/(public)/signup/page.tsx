@@ -1,5 +1,16 @@
+import type { Metadata } from "next";
+
 import { SignupForm } from "@/components/landing/auth-forms";
 import { redirectIfAuthenticated } from "@/lib/supabase-server";
+
+export const metadata: Metadata = {
+  title: "Start Your SEO Audit Free Trial",
+  description:
+    "Start your 14-day SitePulse free trial to run SEO audits, generate white-label client reports, and turn website findings into paying clients.",
+  alternates: {
+    canonical: "https://www.trysitepulse.com/signup"
+  }
+};
 
 export default async function SignupPage({
   searchParams
@@ -17,8 +28,8 @@ export default async function SignupPage({
         </p>
         <h1 className="mt-4 font-display text-4xl font-semibold">
           {isPreviewUnlock
-            ? "Claim the free audit you just ran and turn it into a client-ready growth report."
-            : "Start with one free scan, then scale into a repeatable client-closing workflow."}
+            ? "Sign up to unlock your free SEO audit report."
+            : "Start your SitePulse SEO audit free trial."}
         </h1>
         <div className="mt-6 space-y-4 text-sm text-muted-foreground">
           {isPreviewUnlock ? (
@@ -33,7 +44,7 @@ export default async function SignupPage({
           ) : (
             <>
               <p>Create the workspace once, run a client-ready scan immediately, and turn technical findings into a sales and retention asset your team can reuse.</p>
-              <p>Upgrade when you want more coverage, stronger white-label delivery, and a more scalable way to prove your agency's value every month.</p>
+              <p>Upgrade when you want more coverage, stronger white-label delivery, and a more scalable way to prove your agency&apos;s value every month.</p>
             </>
           )}
         </div>

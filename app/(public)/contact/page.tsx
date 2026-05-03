@@ -1,10 +1,22 @@
+import type { Metadata } from "next";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+export const metadata: Metadata = {
+  title: "Contact SitePulse",
+  description:
+    "Contact SitePulse for sales, partnerships, support, privacy requests, and questions about our SEO audit and reporting platform for agencies.",
+  alternates: {
+    canonical: "https://www.trysitepulse.com/contact"
+  }
+};
 
 const contactCards = [
   {
     title: "Sales and partnerships",
-    detail: "Talk through agency fit, rollout plans, and how to position SitePulse in your service stack.",
+    detail:
+      "Talk through agency fit, rollout plans, and how to position SitePulse in your service stack.",
     href: "mailto:support@trysitepulse.com",
     label: "support@trysitepulse.com"
   },
@@ -22,7 +34,7 @@ export default function ContactPage() {
       <div className="mx-auto max-w-4xl">
         <Badge>Contact</Badge>
         <h1 className="mt-6 font-display text-4xl font-semibold tracking-tight md:text-5xl">
-          Get in touch
+          Contact SitePulse
         </h1>
         <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
           Reach out if you need help evaluating SitePulse, setting up billing, or handling account

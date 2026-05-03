@@ -3,8 +3,12 @@ import type { Metadata } from "next";
 import { LegalPageShell } from "@/components/legal/legal-page-shell";
 
 export const metadata: Metadata = {
-  title: "Refund Policy",
-  description: "SitePulse refund policy covering the 14-day free trial, automatic billing, and Paddle refund processing."
+  title: "SitePulse Refund Policy",
+  description:
+    "Review the SitePulse Refund Policy for 14-day trial billing, first-charge refund eligibility, cancellations, and Paddle payment processing.",
+  alternates: {
+    canonical: "https://www.trysitepulse.com/refund"
+  }
 };
 
 const lastUpdated = "April 8, 2026";
@@ -13,7 +17,7 @@ export default function RefundPage() {
   return (
     <LegalPageShell
       eyebrow="Legal"
-      title="Refund Policy"
+      title="SitePulse Refund Policy"
       intro="This Refund Policy explains how free trials, first charges, and refunds work for SitePulse subscriptions. All payments and refunds are processed through Paddle, which acts as Merchant of Record."
       lastUpdated={lastUpdated}
       sections={[

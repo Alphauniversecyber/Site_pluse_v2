@@ -1,4 +1,15 @@
+import type { Metadata } from "next";
+
 import { ResetPasswordForm } from "@/components/landing/auth-forms";
+
+export const metadata: Metadata = {
+  title: "Reset Your SitePulse Password",
+  description:
+    "Reset your SitePulse password securely and regain access to your agency SEO audit dashboard, client reports, and website monitoring workspace.",
+  alternates: {
+    canonical: "https://www.trysitepulse.com/reset-password"
+  }
+};
 
 export default function ResetPasswordPage({
   searchParams
@@ -12,7 +23,7 @@ export default function ResetPasswordPage({
           Password recovery
         </p>
         <h1 className="mt-4 font-display text-4xl font-semibold">
-          Reset your password and get back into your workspace.
+          Reset your SitePulse password.
         </h1>
         <div className="mt-6 space-y-4 text-sm text-muted-foreground">
           <p>

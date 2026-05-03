@@ -1,5 +1,16 @@
+import type { Metadata } from "next";
+
 import { LoginForm } from "@/components/landing/auth-forms";
 import { redirectIfAuthenticated } from "@/lib/supabase-server";
+
+export const metadata: Metadata = {
+  title: "Login to Your SEO Audit Dashboard",
+  description:
+    "Log in to SitePulse to access your agency SEO audit dashboard, client reports, alerts, and website monitoring workspace in one place.",
+  alternates: {
+    canonical: "https://www.trysitepulse.com/login"
+  }
+};
 
 export default async function LoginPage({
   searchParams
@@ -17,8 +28,8 @@ export default async function LoginPage({
         </p>
         <h1 className="mt-4 font-display text-4xl font-semibold">
           {isPreviewUnlock
-            ? "Log back in and open the full client-ready report instantly."
-            : "Stay ahead of client risk without rebuilding the proof every week."}
+            ? "Log in to unlock your free SEO audit report instantly."
+            : "Log in to your SitePulse SEO audit dashboard."}
         </h1>
         <div className="mt-6 space-y-4 text-sm text-muted-foreground">
           {isPreviewUnlock ? (

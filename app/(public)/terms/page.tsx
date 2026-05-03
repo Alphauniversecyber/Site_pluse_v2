@@ -3,8 +3,12 @@ import type { Metadata } from "next";
 import { LegalPageShell } from "@/components/legal/legal-page-shell";
 
 export const metadata: Metadata = {
-  title: "Terms of Service",
-  description: "SitePulse terms of service covering subscriptions, billing, acceptable use, and Paddle payment processing."
+  title: "SitePulse Terms of Service",
+  description:
+    "Read the SitePulse Terms of Service covering subscriptions, billing, acceptable use, reporting workflows, and payment processing.",
+  alternates: {
+    canonical: "https://www.trysitepulse.com/terms"
+  }
 };
 
 const lastUpdated = "April 8, 2026";
@@ -13,7 +17,7 @@ export default function TermsPage() {
   return (
     <LegalPageShell
       eyebrow="Legal"
-      title="Terms of Service"
+      title="SitePulse Terms of Service"
       intro="These Terms of Service govern your use of SitePulse, a SaaS platform that helps agencies scan websites, monitor website health, generate client-ready reports, and manage recurring proof of value for their clients."
       lastUpdated={lastUpdated}
       sections={[
