@@ -1,6 +1,10 @@
 import { MetadataRoute } from "next";
 
+import { getAllBlogPosts } from "@/lib/blog-posts";
+
 export default function sitemap(): MetadataRoute.Sitemap {
+  const posts = getAllBlogPosts();
+
   return [
     {
       url: "https://www.trysitepulse.com",
@@ -45,6 +49,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.6
     },
     {
+      url: "https://www.trysitepulse.com/blog",
+      lastModified: new Date(posts[0]?.publishedAt ?? Date.now()),
+      changeFrequency: "monthly",
+      priority: 0.7
+    },
+    {
       url: "https://www.trysitepulse.com/changelog",
       lastModified: new Date(),
       changeFrequency: "monthly",
@@ -73,6 +83,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: new Date(),
       changeFrequency: "yearly",
       priority: 0.6
-    }
+    },
+    ...posts.map((post) => ({
+      url: `https://www.trysitepulse.com/blog/${post.slug}`,
+      lastModified: new Date(post.publishedAt),
+      changeFrequency: "monthly" as const,
+      priority: 0.65
+    }))
   ];
 }

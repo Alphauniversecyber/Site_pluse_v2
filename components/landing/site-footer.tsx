@@ -16,6 +16,7 @@ const productLinks: Array<{ href: string; label: string }> = [
 ];
 
 const companyLinks: Array<{ href: string; label: string }> = [
+  { href: "/blog", label: "Blog" },
   { href: "/terms", label: "Terms" },
   { href: "/privacy", label: "Privacy" },
   { href: "/refund", label: "Refunds" },

@@ -85,6 +85,14 @@ export function SiteHeader() {
     { href: { pathname: "/contact" }, pathname: "/contact", label: "Contact" }
   ] as const;
 
+  function isActivePath(targetPath: string) {
+    if (targetPath === "/") {
+      return pathname === "/";
+    }
+
+    return pathname === targetPath || pathname.startsWith(`${targetPath}/`);
+  }
+
   const myReportsHref = { pathname: "/dashboard/reports" } as const;
 
   function handleLogout() {
@@ -116,7 +124,7 @@ export function SiteHeader() {
               href={item.href}
               className={cn(
                 "premium-link",
-                pathname === item.pathname ? "text-foreground" : ""
+                isActivePath(item.pathname) ? "text-foreground" : ""
               )}
             >
               <span className="relative inline-flex items-center gap-2">{item.label}</span>
@@ -262,7 +270,7 @@ export function SiteHeader() {
                   href={item.href}
                   className={cn(
                     "flex items-center rounded-2xl px-4 py-3 text-sm transition duration-200",
-                    pathname === item.pathname
+                    isActivePath(item.pathname)
                       ? "bg-card text-foreground"
                       : "text-muted-foreground hover:bg-card hover:text-foreground"
                   )}
