@@ -275,14 +275,14 @@ export default function BrandingPage() {
       </div>
 
       <Dialog open={fullPreviewOpen} onOpenChange={setFullPreviewOpen}>
-        <DialogContent className="flex h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none flex-col overflow-hidden p-0 sm:rounded-[2rem]">
+        <DialogContent className="h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none gap-0 overflow-y-auto p-0 sm:rounded-[2rem]">
           <DialogHeader className="border-b border-border px-6 py-5 pr-14">
             <DialogTitle>Report preview</DialogTitle>
             <DialogDescription>
               Review the full branded PDF and email previews with live updates as you edit your settings.
             </DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-hidden px-6 pb-6">
+          <div className="px-6 pb-6">
             <BrandingPreviewPanel
               agencyName={previewValues.agency_name || "Your Agency"}
               brandColor={previewValues.brand_color || "#3B82F6"}
@@ -294,7 +294,6 @@ export default function BrandingPage() {
               value={previewTab}
               onValueChange={setPreviewTab}
               variant="dialog"
-              className="h-full"
             />
           </div>
         </DialogContent>

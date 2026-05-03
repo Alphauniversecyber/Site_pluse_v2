@@ -100,11 +100,19 @@ export function BrandingPreviewPanel(props: BrandingPreviewPanelProps) {
           email: 0.58
         };
 
+  const tabContentClassName =
+    variant === "dialog"
+      ? "mt-0 pt-4"
+      : "mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 pt-4";
+
   return (
     <Tabs
       value={activeTab}
       onValueChange={(value) => props.onValueChange?.(value as BrandingPreviewTab)}
-      className={cn("flex min-h-0 flex-col", props.className)}
+      className={cn(
+        variant === "dialog" ? "flex flex-col" : "flex min-h-0 flex-col",
+        props.className
+      )}
     >
       <div className="sticky top-0 z-10 border-b border-border bg-background/95 pb-4 backdrop-blur">
         <TabsList className="grid w-full grid-cols-2">
@@ -117,7 +125,7 @@ export function BrandingPreviewPanel(props: BrandingPreviewPanelProps) {
         value="pdf"
         forceMount
         className={cn(
-          "mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 pt-4",
+          tabContentClassName,
           activeTab !== "pdf" && "hidden"
         )}
       >
@@ -143,7 +151,7 @@ export function BrandingPreviewPanel(props: BrandingPreviewPanelProps) {
         value="email"
         forceMount
         className={cn(
-          "mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 pt-4",
+          tabContentClassName,
           activeTab !== "email" && "hidden"
         )}
       >
