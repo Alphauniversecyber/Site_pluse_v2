@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ScanFrequency, ScanResult, UserProfile, Website } from "@/types";
 import { logAdminError } from "@/lib/admin/logging";
+import { logFailedTask } from "@/lib/failed-tasks";
 import type { CronExecutionGuard } from "@/lib/cron";
 import { generateAndStoreReport } from "@/lib/report-service";
 import { getPeriodKey, getRetryAt, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
@@ -207,15 +208,20 @@ async function loadExistingQueueRows(dedupeKeys: string[]) {
 
 async function insertQueueRows(rows: Array<Partial<ReportPdfQueueRow>>) {
   if (!rows.length) {
-    return;
+    return [] as ReportPdfQueueRow[];
   }
 
   const admin = createSupabaseAdminClient();
-  const { error } = await admin.from("report_generation_queue").insert(rows);
+  const { data, error } = await admin
+    .from("report_generation_queue")
+    .insert(rows)
+    .select("*");
 
   if (error) {
     throw new Error(error.message);
   }
+
+  return (data ?? []) as ReportPdfQueueRow[];
 }
 
 async function updateQueueRow(id: string, payload: Partial<ReportPdfQueueRow>) {
@@ -309,6 +315,21 @@ async function loadLatestSuccessfulScan(websiteId: string) {
   return data ?? null;
 }
 
+async function loadQueueRowById(queueId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("report_generation_queue")
+    .select("*")
+    .eq("id", queueId)
+    .maybeSingle<ReportPdfQueueRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? null;
+}
+
 export async function enqueueDueReportPdfs(limit = 200, offset = 0): Promise<EnqueueDueReportPdfsResult> {
   const profiles = await loadEligibleProfiles(limit, offset);
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -382,7 +403,24 @@ export async function enqueueDueReportPdfs(limit = 200, offset = 0): Promise<Enq
   const existingRows = await loadExistingQueueRows(candidates.map((row) => row.dedupe_key));
   const rowsToInsert = candidates.filter((row) => !existingRows.has(row.dedupe_key));
 
-  await insertQueueRows(rowsToInsert);
+  const insertedRows = await insertQueueRows(rowsToInsert);
+
+  for (const row of insertedRows.filter((item) => item.status === "failed")) {
+    await logFailedTask({
+      cronName: "process-report-pdfs",
+      taskType: "generate-report",
+      userId: row.user_id,
+      siteId: row.website_id,
+      errorMessage: row.last_error ?? "Scheduled PDF generation failed before queue processing.",
+      payload: {
+        queueId: row.id,
+        userId: row.user_id,
+        websiteId: row.website_id,
+        scanId: row.scan_id,
+        frequency: row.frequency
+      }
+    });
+  }
 
   const nextOffset = profiles.length === limit ? offset + profiles.length : null;
 
@@ -392,6 +430,149 @@ export async function enqueueDueReportPdfs(limit = 200, offset = 0): Promise<Enq
     nextOffset,
     hasMoreCandidates: nextOffset !== null
   };
+}
+
+async function processReportPdfQueueRow(row: ReportPdfQueueRow) {
+  const startedAt = new Date().toISOString();
+
+  try {
+    const website = await loadWebsite(row.website_id);
+    const profile = await loadUser(row.user_id);
+
+    if (
+      !website ||
+      !profile ||
+      !PLAN_LIMITS[profile.plan]?.emailReports ||
+      !hasScheduledAutomationAccess(profile) ||
+      !website.auto_email_reports ||
+      website.report_frequency === "never"
+    ) {
+      const message =
+        !profile || !hasScheduledAutomationAccess(profile)
+          ? "Scheduled reports are no longer enabled for this account."
+          : "Report generation is no longer enabled for this website.";
+      await updateQueueRow(row.id, {
+        status: "skipped",
+        failure_reason: !profile || !hasScheduledAutomationAccess(profile) ? "account_ineligible" : "frequency_mismatch",
+        last_error: message,
+        last_attempt_at: startedAt
+      });
+
+      return {
+        status: "skipped" as const,
+        message
+      };
+    }
+
+    if ((website.report_frequency ?? "weekly") !== row.frequency) {
+      const message = "The website report frequency changed after this queue item was created.";
+      await updateQueueRow(row.id, {
+        status: "skipped",
+        failure_reason: "frequency_mismatch",
+        last_error: message,
+        last_attempt_at: startedAt
+      });
+
+      return {
+        status: "skipped" as const,
+        message
+      };
+    }
+
+    const claimed = await claimQueueRow(row, startedAt);
+    if (!claimed) {
+      return {
+        status: "skipped" as const,
+        message: "This queue row was claimed by another worker."
+      };
+    }
+
+    const latestSuccessfulScan = await loadLatestSuccessfulScan(row.website_id);
+
+    if (!latestSuccessfulScan) {
+      throw new Error("No successful scan is available to generate the scheduled PDF report.");
+    }
+
+    const report = await generateAndStoreReport({
+      websiteId: row.website_id,
+      scanId: latestSuccessfulScan.id
+    });
+
+    await updateQueueRow(row.id, {
+      report_id: report.id,
+      scan_id: latestSuccessfulScan.id,
+      status: "completed",
+      failure_reason: null,
+      last_error: null,
+      last_attempt_at: startedAt,
+      completed_at: report.created_at ?? new Date().toISOString(),
+      metadata: {
+        ...row.metadata,
+        latestScanId: latestSuccessfulScan.id,
+        latestScanStatus: latestSuccessfulScan.scan_status
+      }
+    });
+
+    return {
+      status: "completed" as const,
+      reportId: report.id
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown report PDF queue failure.";
+    const failureReason = classifyPdfFailure(message);
+    const attemptCount = (row.attempt_count ?? 0) + 1;
+
+    await updateQueueRow(row.id, {
+      status: "failed",
+      failure_reason: failureReason,
+      last_error: message,
+      last_attempt_at: startedAt,
+      next_attempt_at: getRetryAt(Math.min(60, attemptCount * 10)),
+      attempt_count: attemptCount
+    });
+
+    await logAdminError({
+      errorType: "pdf_failed",
+      errorMessage: message,
+      websiteId: row.website_id,
+      userId: row.user_id,
+      context: {
+        queue: "report_generation_queue",
+        queueId: row.id,
+        failureReason
+      },
+      dedupeWindowMinutes: 30
+    });
+    await logFailedTask({
+      cronName: "process-report-pdfs",
+      taskType: "generate-report",
+      userId: row.user_id,
+      siteId: row.website_id,
+      errorMessage: message,
+      payload: {
+        queueId: row.id,
+        userId: row.user_id,
+        websiteId: row.website_id,
+        scanId: row.scan_id,
+        frequency: row.frequency
+      }
+    });
+
+    return {
+      status: "failed" as const,
+      message
+    };
+  }
+}
+
+export async function retryReportPdfQueueTask(input: { queueId: string }) {
+  const row = await loadQueueRowById(input.queueId);
+
+  if (!row) {
+    throw new Error("Report generation queue row not found.");
+  }
+
+  return processReportPdfQueueRow(row);
 }
 
 export async function processQueuedReportPdfs(
@@ -428,100 +609,9 @@ export async function processQueuedReportPdfs(
     }
 
     inspectedCount += 1;
-
-    const startedAt = new Date().toISOString();
-
-    try {
-      const website = await loadWebsite(row.website_id);
-      const profile = await loadUser(row.user_id);
-
-      if (
-        !website ||
-        !profile ||
-        !PLAN_LIMITS[profile.plan]?.emailReports ||
-        !hasScheduledAutomationAccess(profile) ||
-        !website.auto_email_reports ||
-        website.report_frequency === "never"
-      ) {
-        await updateQueueRow(row.id, {
-          status: "skipped",
-          failure_reason: !profile || !hasScheduledAutomationAccess(profile) ? "account_ineligible" : "frequency_mismatch",
-          last_error:
-            !profile || !hasScheduledAutomationAccess(profile)
-              ? "Scheduled reports are no longer enabled for this account."
-              : "Report generation is no longer enabled for this website.",
-          last_attempt_at: startedAt
-        });
-        continue;
-      }
-
-      if ((website.report_frequency ?? "weekly") !== row.frequency) {
-        await updateQueueRow(row.id, {
-          status: "skipped",
-          failure_reason: "frequency_mismatch",
-          last_error: "The website report frequency changed after this queue item was created.",
-          last_attempt_at: startedAt
-        });
-        continue;
-      }
-
-      const claimed = await claimQueueRow(row, startedAt);
-      if (!claimed) {
-        continue;
-      }
-
-      const latestSuccessfulScan = await loadLatestSuccessfulScan(row.website_id);
-
-      if (!latestSuccessfulScan) {
-        throw new Error("No successful scan is available to generate the scheduled PDF report.");
-      }
-
-      const report = await generateAndStoreReport({
-        websiteId: row.website_id,
-        scanId: latestSuccessfulScan.id
-      });
-
-      await updateQueueRow(row.id, {
-        report_id: report.id,
-        scan_id: latestSuccessfulScan.id,
-        status: "completed",
-        failure_reason: null,
-        last_error: null,
-        last_attempt_at: startedAt,
-        completed_at: report.created_at ?? new Date().toISOString(),
-        metadata: {
-          ...row.metadata,
-          latestScanId: latestSuccessfulScan.id,
-          latestScanStatus: latestSuccessfulScan.scan_status
-        }
-      });
-      generatedReportIds.push(report.id);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown report PDF queue failure.";
-      const failureReason = classifyPdfFailure(message);
-      const attemptCount = (row.attempt_count ?? 0) + 1;
-
-      await updateQueueRow(row.id, {
-        status: "failed",
-        failure_reason: failureReason,
-        last_error: message,
-        last_attempt_at: startedAt,
-        next_attempt_at: getRetryAt(Math.min(60, attemptCount * 10)),
-        attempt_count: attemptCount
-      });
-
-      await logAdminError({
-        errorType: "pdf_failed",
-        errorMessage: message,
-        websiteId: row.website_id,
-        userId: row.user_id,
-        context: {
-          queue: "report_generation_queue",
-          queueId: row.id,
-          failureReason
-        },
-        dedupeWindowMinutes: 30
-      });
+    const result = await processReportPdfQueueRow(row);
+    if (result.status === "completed" && result.reportId) {
+      generatedReportIds.push(result.reportId);
     }
   }
 

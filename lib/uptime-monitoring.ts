@@ -1,8 +1,10 @@
 import "server-only";
 
 import type { ScanResult, UptimeCheckRecord, UserProfile, Website } from "@/types";
+import { logAdminError } from "@/lib/admin/logging";
 import { createCronExecutionGuard, getCronBatchLimit, type CronExecutionGuard } from "@/lib/cron";
 import { buildEmailDedupeKey } from "@/lib/email-utils";
+import { logFailedTask } from "@/lib/failed-tasks";
 import { trySendCriticalAlertEmail } from "@/lib/resend";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -405,6 +407,40 @@ export async function processDailyUptimeChecks(limit = getCronBatchLimit("UPTIME
   });
 }
 
+export async function retryDailyUptimeCheckTask(input: { websiteId: string }) {
+  const admin = createSupabaseAdminClient();
+  const { data: website, error: websiteError } = await admin
+    .from("websites")
+    .select("*")
+    .eq("id", input.websiteId)
+    .maybeSingle<Website>();
+
+  if (websiteError) {
+    throw new Error(websiteError.message);
+  }
+
+  if (!website) {
+    throw new Error("Website not found.");
+  }
+
+  const { data: profile, error: profileError } = await admin
+    .from("users")
+    .select("*")
+    .eq("id", website.user_id)
+    .maybeSingle<UserProfile>();
+
+  if (profileError) {
+    throw new Error(profileError.message);
+  }
+
+  return ensureDailyVercelUptimeCheck({
+    websiteId: website.id,
+    url: website.url,
+    profile: profile ?? null,
+    website
+  });
+}
+
 export async function processDailyUptimeChecksBatch(input: { limit?: number; offset?: number }) {
   const admin = createSupabaseAdminClient();
   const guard = createCronExecutionGuard("process-uptime", 240_000);
@@ -439,13 +475,40 @@ export async function processDailyUptimeChecksBatch(input: { limit?: number; off
       .eq("id", website.user_id)
       .maybeSingle<UserProfile>();
 
-    await ensureDailyVercelUptimeCheck({
-      websiteId: website.id,
-      url: website.url,
-      profile,
-      website
-    });
-    processed.push(website.id);
+    try {
+      await ensureDailyVercelUptimeCheck({
+        websiteId: website.id,
+        url: website.url,
+        profile,
+        website
+      });
+      processed.push(website.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to run uptime check.";
+
+      await logAdminError({
+        errorType: "cron_failed",
+        errorMessage: message,
+        websiteId: website.id,
+        userId: website.user_id,
+        context: {
+          cronName: "process-uptime",
+          taskType: "run-uptime-check"
+        },
+        dedupeWindowMinutes: 30
+      });
+      await logFailedTask({
+        cronName: "process-uptime",
+        taskType: "run-uptime-check",
+        userId: website.user_id,
+        siteId: website.id,
+        errorMessage: message,
+        payload: {
+          userId: website.user_id,
+          websiteId: website.id
+        }
+      });
+    }
   }
 
   const rows = (websites ?? []) as Website[];
@@ -464,6 +527,38 @@ export async function processUptimeRobotSync(limit = getCronBatchLimit("UPTIMERO
   return processUptimeRobotSyncBatch({
     limit,
     offset: 0
+  });
+}
+
+export async function retryUptimeRobotSyncUserTask(input: { userId: string }) {
+  const admin = createSupabaseAdminClient();
+  const { data: profile, error: profileError } = await admin
+    .from("users")
+    .select("*")
+    .eq("id", input.userId)
+    .maybeSingle<UserProfile>();
+
+  if (profileError) {
+    throw new Error(profileError.message);
+  }
+
+  if (!profile) {
+    throw new Error("User profile not found.");
+  }
+
+  const { data: websites, error: websitesError } = await admin
+    .from("websites")
+    .select("*")
+    .eq("user_id", profile.id)
+    .eq("is_active", true);
+
+  if (websitesError) {
+    throw new Error(websitesError.message);
+  }
+
+  return syncUptimeRobotForUser({
+    profile,
+    websites: (websites ?? []) as Website[]
   });
 }
 
@@ -502,14 +597,38 @@ export async function processUptimeRobotSyncBatch(input: { limit?: number; offse
       .eq("user_id", profile.id)
       .eq("is_active", true);
 
-    await syncUptimeRobotForUser({
-      profile,
-      websites: (websites ?? []) as Website[],
-      guard,
-      syncedCount: synced.length
-    });
+    try {
+      await syncUptimeRobotForUser({
+        profile,
+        websites: (websites ?? []) as Website[],
+        guard,
+        syncedCount: synced.length
+      });
 
-    synced.push(profile.id);
+      synced.push(profile.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to sync UptimeRobot data.";
+
+      await logAdminError({
+        errorType: "cron_failed",
+        errorMessage: message,
+        userId: profile.id,
+        context: {
+          cronName: "sync-uptimerobot",
+          taskType: "sync-uptimerobot-user"
+        },
+        dedupeWindowMinutes: 30
+      });
+      await logFailedTask({
+        cronName: "sync-uptimerobot",
+        taskType: "sync-uptimerobot-user",
+        userId: profile.id,
+        errorMessage: message,
+        payload: {
+          userId: profile.id
+        }
+      });
+    }
   }
 
   const rows = (profiles ?? []) as UserProfile[];

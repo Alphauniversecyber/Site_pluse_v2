@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Report, ScanFrequency, UserProfile, Website } from "@/types";
 import { logAdminError } from "@/lib/admin/logging";
+import { logFailedTask } from "@/lib/failed-tasks";
 import type { CronExecutionGuard } from "@/lib/cron";
 import { sendStoredReportEmail } from "@/lib/report-service";
 import { getPeriodKey, getRetryAt, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
@@ -283,6 +284,21 @@ async function claimQueueRow(row: ReportEmailQueueRow, startedAt: string) {
   return Boolean(data?.id);
 }
 
+async function loadQueueRowById(queueId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("report_email_queue")
+    .select("*")
+    .eq("id", queueId)
+    .maybeSingle<ReportEmailQueueRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? null;
+}
+
 export async function enqueueDueReportEmails(limit = 200, offset = 0): Promise<EnqueueDueReportEmailsResult> {
   const profiles = await loadEligibleProfiles(limit, offset);
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -373,6 +389,182 @@ export async function enqueueDueReportEmails(limit = 200, offset = 0): Promise<E
   };
 }
 
+async function processReportEmailQueueRow(row: ReportEmailQueueRow) {
+  const startedAt = new Date().toISOString();
+
+  try {
+    const adminNow = createSupabaseAdminClient();
+    const { data: website } = await adminNow
+      .from("websites")
+      .select("id,user_id,url,label,auto_email_reports,report_frequency")
+      .eq("id", row.website_id)
+      .maybeSingle<Website>();
+    const { data: profile } = await adminNow
+      .from("users")
+      .select("id,email,plan,timezone,subscription_status,is_trial,trial_ends_at")
+      .eq("id", row.user_id)
+      .maybeSingle<
+        Pick<
+          UserProfile,
+          "id" | "email" | "plan" | "timezone" | "subscription_status" | "is_trial" | "trial_ends_at"
+        >
+      >();
+
+    if (
+      !website ||
+      !profile ||
+      !PLAN_LIMITS[profile.plan]?.emailReports ||
+      !hasScheduledAutomationAccess(profile) ||
+      !website.auto_email_reports ||
+      website.report_frequency === "never"
+    ) {
+      const message =
+        !profile || !hasScheduledAutomationAccess(profile)
+          ? "Scheduled reports are no longer enabled for this account."
+          : "Report emails are no longer enabled for this website.";
+      await updateQueueRow(row.id, {
+        status: "skipped",
+        failure_reason: !profile || !hasScheduledAutomationAccess(profile) ? "account_ineligible" : "frequency_mismatch",
+        last_error: message,
+        last_attempt_at: startedAt
+      });
+
+      return {
+        status: "skipped" as const,
+        message
+      };
+    }
+
+    if ((website.report_frequency ?? "weekly") !== row.frequency) {
+      const message = "The website report frequency changed after this queue item was created.";
+      await updateQueueRow(row.id, {
+        status: "skipped",
+        failure_reason: "frequency_mismatch",
+        last_error: message,
+        last_attempt_at: startedAt
+      });
+
+      return {
+        status: "skipped" as const,
+        message
+      };
+    }
+
+    const claimed = await claimQueueRow(row, startedAt);
+    if (!claimed) {
+      return {
+        status: "skipped" as const,
+        message: "This queue row was claimed by another worker."
+      };
+    }
+
+    const reportId =
+      row.report_id ??
+      (typeof row.metadata?.reportId === "string" ? row.metadata.reportId : null);
+
+    if (!reportId) {
+      throw new Error("A generated report is required before scheduled email delivery can run.");
+    }
+
+    const report = await loadReport(reportId);
+    if (!report?.pdf_url) {
+      throw new Error("A generated PDF report is required before scheduled email delivery can run.");
+    }
+
+    const delivery = await sendStoredReportEmail({
+      reportId,
+      skipAlreadySentRecipients: true,
+      deliveryMode: "scheduled"
+    });
+
+    if (!delivery.deliveries.length) {
+      const message = "Duplicate prevention skipped this scheduled report because it was already delivered.";
+      await updateQueueRow(row.id, {
+        report_id: reportId,
+        status: "skipped",
+        failure_reason: "already_sent",
+        last_error: message,
+        last_attempt_at: startedAt,
+        sent_at: delivery.report.sent_at ?? new Date().toISOString()
+      });
+
+      return {
+        status: "skipped" as const,
+        message
+      };
+    }
+
+    await updateQueueRow(row.id, {
+      report_id: reportId,
+      status: "sent",
+      failure_reason: null,
+      last_error: null,
+      last_attempt_at: startedAt,
+      sent_at: delivery.report.sent_at ?? new Date().toISOString()
+    });
+
+    return {
+      status: "sent" as const,
+      reportId
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown report email queue failure.";
+    const failureReason = classifyEmailFailure(message);
+    const attemptCount = (row.attempt_count ?? 0) + 1;
+
+    await updateQueueRow(row.id, {
+      status: "failed",
+      failure_reason: failureReason,
+      last_error: message,
+      last_attempt_at: startedAt,
+      next_attempt_at: getRetryAt(Math.min(60, attemptCount * 10)),
+      attempt_count: attemptCount
+    });
+
+    await logAdminError({
+      errorType: "email_failed",
+      errorMessage: message,
+      websiteId: row.website_id,
+      userId: row.user_id,
+      context: {
+        queue: "report_email_queue",
+        queueId: row.id,
+        failureReason
+      },
+      dedupeWindowMinutes: 30
+    });
+    await logFailedTask({
+      cronName: "process-report-emails",
+      taskType: "send-report-email",
+      userId: row.user_id,
+      siteId: row.website_id,
+      errorMessage: message,
+      payload: {
+        queueId: row.id,
+        userId: row.user_id,
+        websiteId: row.website_id,
+        reportId: row.report_id,
+        frequency: row.frequency
+      }
+    });
+
+    return {
+      status: "failed" as const,
+      message
+    };
+  }
+}
+
+export async function retryReportEmailQueueTask(input: { queueId: string }) {
+  const row = await loadQueueRowById(input.queueId);
+
+  if (!row) {
+    throw new Error("Report email queue row not found.");
+  }
+
+  return processReportEmailQueueRow(row);
+}
+
 export async function processQueuedReportEmails(
   limit = 25,
   guard?: CronExecutionGuard
@@ -407,128 +599,9 @@ export async function processQueuedReportEmails(
     }
 
     inspectedCount += 1;
-
-    const startedAt = new Date().toISOString();
-
-    try {
-      const adminNow = createSupabaseAdminClient();
-      const { data: website } = await adminNow
-        .from("websites")
-        .select("id,user_id,url,label,auto_email_reports,report_frequency")
-        .eq("id", row.website_id)
-        .maybeSingle<Website>();
-      const { data: profile } = await adminNow
-        .from("users")
-        .select("id,email,plan,timezone,subscription_status,is_trial,trial_ends_at")
-        .eq("id", row.user_id)
-        .maybeSingle<
-          Pick<
-            UserProfile,
-            "id" | "email" | "plan" | "timezone" | "subscription_status" | "is_trial" | "trial_ends_at"
-          >
-        >();
-
-      if (
-        !website ||
-        !profile ||
-        !PLAN_LIMITS[profile.plan]?.emailReports ||
-        !hasScheduledAutomationAccess(profile) ||
-        !website.auto_email_reports ||
-        website.report_frequency === "never"
-      ) {
-        await updateQueueRow(row.id, {
-          status: "skipped",
-          failure_reason: !profile || !hasScheduledAutomationAccess(profile) ? "account_ineligible" : "frequency_mismatch",
-          last_error:
-            !profile || !hasScheduledAutomationAccess(profile)
-              ? "Scheduled reports are no longer enabled for this account."
-              : "Report emails are no longer enabled for this website.",
-          last_attempt_at: startedAt
-        });
-        continue;
-      }
-
-      if ((website.report_frequency ?? "weekly") !== row.frequency) {
-        await updateQueueRow(row.id, {
-          status: "skipped",
-          failure_reason: "frequency_mismatch",
-          last_error: "The website report frequency changed after this queue item was created.",
-          last_attempt_at: startedAt
-        });
-        continue;
-      }
-
-      const claimed = await claimQueueRow(row, startedAt);
-      if (!claimed) {
-        continue;
-      }
-
-      const reportId =
-        row.report_id ??
-        (typeof row.metadata?.reportId === "string" ? row.metadata.reportId : null);
-
-      if (!reportId) {
-        throw new Error("A generated report is required before scheduled email delivery can run.");
-      }
-
-      const report = await loadReport(reportId);
-      if (!report?.pdf_url) {
-        throw new Error("A generated PDF report is required before scheduled email delivery can run.");
-      }
-
-      const delivery = await sendStoredReportEmail({
-        reportId,
-        skipAlreadySentRecipients: true,
-        deliveryMode: "scheduled"
-      });
-
-      if (!delivery.deliveries.length) {
-        await updateQueueRow(row.id, {
-          report_id: reportId,
-          status: "skipped",
-          failure_reason: "already_sent",
-          last_error: "Duplicate prevention skipped this scheduled report because it was already delivered.",
-          last_attempt_at: startedAt,
-          sent_at: delivery.report.sent_at ?? new Date().toISOString()
-        });
-        continue;
-      }
-
-      await updateQueueRow(row.id, {
-        report_id: reportId,
-        status: "sent",
-        failure_reason: null,
-        last_error: null,
-        last_attempt_at: startedAt,
-        sent_at: delivery.report.sent_at ?? new Date().toISOString()
-      });
-      sentReportIds.push(reportId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown report email queue failure.";
-      const failureReason = classifyEmailFailure(message);
-      const attemptCount = (row.attempt_count ?? 0) + 1;
-
-      await updateQueueRow(row.id, {
-        status: "failed",
-        failure_reason: failureReason,
-        last_error: message,
-        last_attempt_at: startedAt,
-        next_attempt_at: getRetryAt(Math.min(60, attemptCount * 10)),
-        attempt_count: attemptCount
-      });
-
-      await logAdminError({
-        errorType: "email_failed",
-        errorMessage: message,
-        websiteId: row.website_id,
-        userId: row.user_id,
-        context: {
-          queue: "report_email_queue",
-          queueId: row.id,
-          failureReason
-        },
-        dedupeWindowMinutes: 30
-      });
+    const result = await processReportEmailQueueRow(row);
+    if (result.status === "sent" && result.reportId) {
+      sentReportIds.push(result.reportId);
     }
   }
 

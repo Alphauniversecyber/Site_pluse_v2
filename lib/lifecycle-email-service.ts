@@ -2,6 +2,7 @@ import "server-only";
 
 import type { UserProfile, Website } from "@/types";
 import { logAdminError } from "@/lib/admin/logging";
+import { logFailedTask } from "@/lib/failed-tasks";
 import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
 import { buildEmailDedupeKey } from "@/lib/email-utils";
 import { sendProductEmail } from "@/lib/resend";
@@ -26,7 +27,7 @@ type ActivationProfile = Pick<
   "id" | "email" | "full_name" | "created_at" | "is_trial" | "trial_ends_at"
 >;
 
-type ActivationEmailType = "activation_day1" | "activation_day3" | "activation_day7";
+export type ActivationEmailType = "activation_day1" | "activation_day3" | "activation_day7";
 
 type ActivationEmailDefinition = {
   emailType: ActivationEmailType;
@@ -131,6 +132,18 @@ function getActivationWindow(targetDays: number) {
   };
 }
 
+function getActivationFailedTaskType(emailType: ActivationEmailType) {
+  if (emailType === "activation_day1") {
+    return "send-activation-day1" as const;
+  }
+
+  if (emailType === "activation_day3") {
+    return "send-activation-day3" as const;
+  }
+
+  return "send-activation-day7" as const;
+}
+
 async function getAlreadySentLifecycleEmailUserIds(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   userIds: string[],
@@ -151,6 +164,23 @@ async function getAlreadySentLifecycleEmailUserIds(
   }
 
   return new Set(((data ?? []) as Array<{ user_id: string }>).map((row) => row.user_id));
+}
+
+async function getActivationProfileById(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string
+) {
+  const { data, error } = await admin
+    .from("users")
+    .select("id,email,full_name,created_at,is_trial,trial_ends_at")
+    .eq("id", userId)
+    .maybeSingle<ActivationProfile>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? null;
 }
 
 async function getUserIdsWithWebsites(
@@ -232,6 +262,36 @@ async function queueEmail(
   if (delivery) {
     sent.push(dedupeKey);
   }
+}
+
+function buildActivationEmailPayload(
+  profile: ActivationProfile,
+  definition: ActivationEmailDefinition,
+  dedupeKey: string
+) {
+  return {
+    templateId: definition.templateId,
+    dedupeKey,
+    campaign: "lifecycle_activation",
+    to: profile.email,
+    subject: definition.subject,
+    preheader: definition.preheader,
+    eyebrow: definition.eyebrow,
+    title: definition.title,
+    summary: definition.summary,
+    bodyHtml: definition.bodyHtml,
+    ctaLabel: definition.ctaLabel,
+    ctaUrl: ACTIVATION_DASHBOARD_URL,
+    accent: definition.accent,
+    metadata: {
+      userId: profile.id,
+      activationEmail: true,
+      emailType: definition.emailType,
+      targetDays: definition.targetDays,
+      dedupeKey
+    },
+    triggeredAt: profile.created_at
+  } as const;
 }
 
 async function maybeSendWelcomeEmails(profile: LifecycleProfile, snapshot: LifecycleSnapshot, sent: string[]) {
@@ -699,44 +759,10 @@ async function sendActivationEmailBatch(
   let processedCount = 0;
 
   for (const profile of pendingProfiles) {
-    const dedupeKey = buildEmailDedupeKey("lifecycle", definition.emailType, profile.id);
-
     try {
-      const delivery = await sendProductEmail({
-        templateId: definition.templateId,
-        dedupeKey,
-        campaign: "lifecycle_activation",
-        to: profile.email,
-        subject: definition.subject,
-        preheader: definition.preheader,
-        eyebrow: definition.eyebrow,
-        title: definition.title,
-        summary: definition.summary,
-        bodyHtml: definition.bodyHtml,
-        ctaLabel: definition.ctaLabel,
-        ctaUrl: ACTIVATION_DASHBOARD_URL,
-        accent: definition.accent,
-        metadata: {
-          userId: profile.id,
-          activationEmail: true,
-          emailType: definition.emailType,
-          targetDays: definition.targetDays,
-          dedupeKey
-        },
-        triggeredAt: profile.created_at
-      });
-
-      await markLifecycleEmailSent(admin, profile.id, definition.emailType);
-      sentKeys.push(dedupeKey);
+      const result = await sendActivationEmailToProfile(admin, profile, definition);
+      sentKeys.push(result.dedupeKey);
       processedCount += 1;
-
-      console.info("[lifecycle:activation_sent]", {
-        emailType: definition.emailType,
-        userId: profile.id,
-        to: profile.email,
-        dedupeKey,
-        status: delivery ? "sent" : "deduped"
-      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to send activation email.";
 
@@ -757,6 +783,16 @@ async function sendActivationEmailBatch(
           emailType: definition.emailType
         }
       });
+      await logFailedTask({
+        cronName: "process-lifecycle-emails",
+        taskType: getActivationFailedTaskType(definition.emailType),
+        userId: profile.id,
+        errorMessage: message,
+        payload: {
+          userId: profile.id,
+          emailType: definition.emailType
+        }
+      });
     }
   }
 
@@ -764,6 +800,55 @@ async function sendActivationEmailBatch(
     inspectedCount: pendingProfiles.length,
     processedCount
   };
+}
+
+async function sendActivationEmailToProfile(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  profile: ActivationProfile,
+  definition: ActivationEmailDefinition
+) {
+  const dedupeKey = buildEmailDedupeKey("lifecycle", definition.emailType, profile.id);
+  const delivery = await sendProductEmail(buildActivationEmailPayload(profile, definition, dedupeKey));
+
+  await markLifecycleEmailSent(admin, profile.id, definition.emailType);
+
+  console.info("[lifecycle:activation_sent]", {
+    emailType: definition.emailType,
+    userId: profile.id,
+    to: profile.email,
+    dedupeKey,
+    status: delivery ? "sent" : "deduped"
+  });
+
+  return {
+    dedupeKey,
+    delivery
+  };
+}
+
+function getActivationEmailDefinition(emailType: ActivationEmailType) {
+  const definition = ACTIVATION_EMAILS.find((item) => item.emailType === emailType);
+
+  if (!definition) {
+    throw new Error(`Unsupported activation email type: ${emailType}`);
+  }
+
+  return definition;
+}
+
+export async function retryActivationEmailTask(input: {
+  userId: string;
+  emailType: ActivationEmailType;
+}) {
+  const admin = createSupabaseAdminClient();
+  const profile = await getActivationProfileById(admin, input.userId);
+
+  if (!profile) {
+    throw new Error("User profile not found.");
+  }
+
+  const definition = getActivationEmailDefinition(input.emailType);
+  return sendActivationEmailToProfile(admin, profile, definition);
 }
 
 export async function sendActivationEmails() {

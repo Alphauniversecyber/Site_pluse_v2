@@ -6,11 +6,12 @@ import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { AdminSeriesChart } from "@/components/admin/admin-series-chart";
 import { AdminActionButton } from "@/components/admin/admin-action-button";
 import { requireAdminPageAccess } from "@/lib/admin/auth";
-import { getAdminCronsData } from "@/lib/admin/data";
+import { getAdminCronsData, getAdminFailedTasksData } from "@/lib/admin/data";
 import { getAdminScanMonitoringData } from "@/lib/admin/scan-monitoring";
 import { formatAdminDate, parseTextParam } from "@/lib/admin/format";
 
 import { runAdminCronAction } from "./actions";
+import { FailedTasksTable } from "./failed-tasks-table";
 
 function getStatusTone(status: string) {
   if (status === "success" || status === "completed") {
@@ -41,7 +42,13 @@ export default async function AdminCronsPage({
   const scanUser = parseTextParam(searchParams?.scanUser);
   const scanStatus = parseTextParam(searchParams?.scanStatus) || "all";
   const scanDate = parseTextParam(searchParams?.scanDate);
+  const failedStatus = parseTextParam(searchParams?.failedStatus) || "all";
+  const failedRange = parseTextParam(searchParams?.failedRange) || "7d";
   const data = await getAdminCronsData();
+  const failedTasks = await getAdminFailedTasksData({
+    status: failedStatus === "all" || failedStatus === "failed" || failedStatus === "retried" || failedStatus === "resolved" ? failedStatus : "all",
+    range: failedRange === "30d" || failedRange === "all" ? failedRange : "7d"
+  });
   const monitoring = await getAdminScanMonitoringData({
     user: scanUser,
     status: scanStatus,
@@ -56,6 +63,7 @@ export default async function AdminCronsPage({
       />
 
       <AdminErrorNotice message={data.error} />
+      <AdminErrorNotice message={failedTasks.error} />
       <AdminErrorNotice message={monitoring.error} />
 
       {message ? (
@@ -142,7 +150,9 @@ export default async function AdminCronsPage({
           </div>
 
           <AdminCard>
-            <form action="/admin/crons" className="grid gap-4">
+          <form action="/admin/crons" className="grid gap-4">
+              <input type="hidden" name="failedStatus" value={failedTasks.filters.status} />
+              <input type="hidden" name="failedRange" value={failedTasks.filters.range} />
               <div>
                 <label htmlFor="scanUser" className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
                   User / Website
@@ -243,6 +253,59 @@ export default async function AdminCronsPage({
             <AdminEmptyState
               title="No missed scans for the selected filters"
               description="Every website that should be scanned right now has either completed successfully or there is no backlog matching the selected filters."
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <div className="mb-4 flex flex-col gap-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#FCA5A5]">Failed Tasks</p>
+          <h2 className="text-2xl font-semibold text-white">User and site-level retry queue</h2>
+          <p className="max-w-3xl text-sm leading-6 text-zinc-400">
+            These rows capture task-level failures inside cron runs, such as a single report PDF failing to generate or a single scheduled email failing to send.
+          </p>
+        </div>
+
+        <AdminCard>
+          <form className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
+            <input type="hidden" name="scanUser" value={monitoring.filters.user} />
+            <input type="hidden" name="scanStatus" value={monitoring.filters.status} />
+            <input type="hidden" name="scanDate" value={monitoring.filters.date} />
+            <select
+              name="failedStatus"
+              defaultValue={failedTasks.filters.status}
+              className="rounded-2xl border border-[#2A2A2A] bg-[#0B0B0B] px-4 py-3 text-sm text-white outline-none focus:border-[#F97316]"
+            >
+              <option value="all">All statuses</option>
+              <option value="failed">Failed</option>
+              <option value="retried">Retried</option>
+              <option value="resolved">Resolved</option>
+            </select>
+            <select
+              name="failedRange"
+              defaultValue={failedTasks.filters.range}
+              className="rounded-2xl border border-[#2A2A2A] bg-[#0B0B0B] px-4 py-3 text-sm text-white outline-none focus:border-[#F97316]"
+            >
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="all">All time</option>
+            </select>
+            <button type="submit" className="rounded-2xl bg-[#F97316] px-4 py-3 text-sm font-semibold text-white">
+              Apply
+            </button>
+          </form>
+        </AdminCard>
+
+        <div className="mt-6">
+          {failedTasks.rows.length ? (
+            <AdminCard className="overflow-hidden p-0">
+              <FailedTasksTable initialRows={failedTasks.rows} />
+            </AdminCard>
+          ) : (
+            <AdminEmptyState
+              title="No failed tasks for the selected filters"
+              description="When a cron run hits a user-level or website-level task failure, it will appear here with enough context to retry it safely."
             />
           )}
         </div>

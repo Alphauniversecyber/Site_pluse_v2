@@ -3,6 +3,7 @@ import "server-only";
 import type { ScanResult, UserProfile, Website } from "@/types";
 import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
 import { buildEmailDedupeKey } from "@/lib/email-utils";
+import { logFailedTask } from "@/lib/failed-tasks";
 import { enqueueJob } from "@/lib/job-queue";
 import { runPageSpeedScan } from "@/lib/pagespeed";
 import { trySendCriticalAlertEmail } from "@/lib/resend";
@@ -119,6 +120,7 @@ export async function runCompetitorScan(input: {
       accessibility: number;
       best_practices: number;
       scan_status: "success" | "failed";
+      error_message: string | null;
     }>();
 
   if (latest?.scanned_at && isFresh(latest.scanned_at, COMPETITOR_CACHE_HOURS)) {
@@ -326,12 +328,41 @@ export async function processQueuedCompetitorScanJob(input: {
     competitorUrl: input.competitorUrl
   });
 
+  if (result.scan_status === "failed") {
+    await logFailedTask({
+      cronName: "process-competitors",
+      taskType: "scan-competitor",
+      userId: profile.id,
+      siteId: website.id,
+      errorMessage: result.error_message ?? "The competitor scan failed.",
+      payload: {
+        userId: profile.id,
+        websiteId: website.id,
+        competitorUrl: input.competitorUrl
+      }
+    });
+  }
+
   return {
-    status: "processed",
+    status: result.scan_status === "failed" ? "failed" : "processed",
     websiteId: website.id,
     competitorUrl: input.competitorUrl,
-    scanStatus: result.scan_status
+    scanStatus: result.scan_status,
+    errorMessage: result.error_message ?? null
   };
+}
+
+export async function retryCompetitorScanTask(input: {
+  websiteId: string;
+  competitorUrl: string;
+}) {
+  const result = await processQueuedCompetitorScanJob(input);
+
+  if (result.scanStatus === "failed") {
+    throw new Error(result.errorMessage ?? "The competitor scan failed again.");
+  }
+
+  return result;
 }
 
 export async function processCompetitorScansBatch(input: { limit?: number; offset?: number }) {

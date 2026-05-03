@@ -7,6 +7,7 @@ import {
   logBillingEvent
 } from "@/lib/admin/logging";
 import { getCronBatchLimit, createCronExecutionGuard } from "@/lib/cron";
+import { logFailedTask } from "@/lib/failed-tasks";
 import {
   cancelPaddleSubscription,
   createPaddleRefundAdjustment,
@@ -1114,6 +1115,77 @@ async function markWebhookFailed(row: PaddleWebhookEventRecord, message: string)
     .eq("id", row.id);
 }
 
+async function processWebhookEventRow(row: PaddleWebhookEventRecord) {
+  try {
+    await markWebhookProcessing(row.id);
+    await handlePaddleWebhookPayload(row.payload);
+    await markWebhookProcessed(row.id);
+
+    return {
+      status: "processed" as const
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown Paddle webhook processing error.";
+    await markWebhookFailed(row, message);
+    await logAdminError({
+      errorType: "webhook_failed",
+      errorMessage: message,
+      context: {
+        paddleEventId: row.paddle_event_id,
+        eventType: row.event_type
+      }
+    });
+    await logBillingEvent({
+      email: "unknown",
+      planName: null,
+      eventType: "webhook_error",
+      status: "failed",
+      errorMessage: message,
+      paddleEventId: row.paddle_event_id,
+      occurredAt: row.created_at
+    });
+    await logFailedTask({
+      cronName: "process-paddle-webhooks",
+      taskType: "process-paddle-webhook",
+      errorMessage: message,
+      payload: {
+        webhookEventId: row.id,
+        paddleEventId: row.paddle_event_id,
+        eventType: row.event_type
+      }
+    });
+
+    return {
+      status: "failed" as const,
+      message
+    };
+  }
+}
+
+export async function retryQueuedPaddleWebhookTask(input: { webhookEventId: string }) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("paddle_webhook_events")
+    .select("*")
+    .eq("id", input.webhookEventId)
+    .maybeSingle<PaddleWebhookEventRecord>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Queued Paddle webhook event not found.");
+  }
+
+  const result = await processWebhookEventRow(data);
+  if (result.status !== "processed") {
+    throw new Error(result.message ?? "Paddle webhook retry failed.");
+  }
+
+  return result;
+}
+
 export async function processQueuedPaddleWebhooks() {
   const batchSize = getCronBatchLimit("PADDLE_WEBHOOK_BATCH_LIMIT", 25);
   const guard = createCronExecutionGuard("process-paddle-webhooks", 12_000);
@@ -1142,31 +1214,9 @@ export async function processQueuedPaddleWebhooks() {
 
     inspectedCount += 1;
 
-    try {
-      await markWebhookProcessing(row.id);
-      await handlePaddleWebhookPayload(row.payload);
-      await markWebhookProcessed(row.id);
+    const result = await processWebhookEventRow(row);
+    if (result.status === "processed") {
       processed += 1;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown Paddle webhook processing error.";
-      await markWebhookFailed(row, message);
-      await logAdminError({
-        errorType: "webhook_failed",
-        errorMessage: message,
-        context: {
-          paddleEventId: row.paddle_event_id,
-          eventType: row.event_type
-        }
-      });
-      await logBillingEvent({
-        email: "unknown",
-        planName: null,
-        eventType: "webhook_error",
-        status: "failed",
-        errorMessage: message,
-        paddleEventId: row.paddle_event_id,
-        occurredAt: row.created_at
-      });
     }
   }
 

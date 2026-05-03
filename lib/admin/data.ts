@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { BillingCycle, EmailTemplateId, PlanKey, SubscriptionStatus } from "@/types";
+import type { FailedTaskStatus } from "@/lib/failed-tasks";
 
 import {
   ADMIN_CRON_DEFINITIONS,
@@ -134,6 +135,19 @@ type ManualRevenueEntryRecord = {
   amount: number | string;
   note: string | null;
   created_at: string;
+};
+
+type AdminFailedTaskRecord = {
+  id: string;
+  cron_name: string;
+  task_type: string;
+  user_id: string | null;
+  site_id: string | null;
+  error_message: string;
+  payload: Record<string, unknown>;
+  status: FailedTaskStatus;
+  created_at: string;
+  retried_at: string | null;
 };
 
 export type AdminOverviewData = {
@@ -363,6 +377,29 @@ export type AdminErrorsPageData = {
   error: string | null;
 };
 
+export type AdminFailedTasksData = {
+  rows: Array<{
+    id: string;
+    cronName: string;
+    taskType: string;
+    userId: string | null;
+    userEmail: string;
+    siteId: string | null;
+    siteLabel: string;
+    siteUrl: string;
+    errorMessage: string;
+    payload: Record<string, unknown>;
+    status: FailedTaskStatus;
+    createdAt: string;
+    retriedAt: string | null;
+  }>;
+  filters: {
+    status: "all" | FailedTaskStatus;
+    range: "7d" | "30d" | "all";
+  };
+  error: string | null;
+};
+
 function chunkPage<T>(rows: T[], page: number, pageSize: number, exportAll = false) {
   if (exportAll) {
     return {
@@ -380,6 +417,15 @@ function chunkPage<T>(rows: T[], page: number, pageSize: number, exportAll = fal
     total,
     totalPages
   };
+}
+
+function getFailedTaskRangeStart(range: "7d" | "30d" | "all") {
+  if (range === "all") {
+    return null;
+  }
+
+  const days = range === "30d" ? 30 : 7;
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 }
 
 function latestByWebsite<T extends { website_id: string; scanned_at?: string; sent_at?: string; created_at?: string }>(
@@ -1374,6 +1420,105 @@ export async function getAdminCronsData(): Promise<AdminCronsPageData> {
         };
       }),
       error: error instanceof Error ? error.message : "Unable to load cron logs."
+    };
+  }
+}
+
+export async function getAdminFailedTasksData(input: {
+  status?: "all" | FailedTaskStatus;
+  range?: "7d" | "30d" | "all";
+} = {}): Promise<AdminFailedTasksData> {
+  const admin = createSupabaseAdminClient();
+  const status = input.status ?? "all";
+  const range = input.range ?? "7d";
+  const rangeStart = getFailedTaskRangeStart(range);
+
+  try {
+    let query = admin
+      .from("failed_tasks")
+      .select("id,cron_name,task_type,user_id,site_id,error_message,payload,status,created_at,retried_at")
+      .order("created_at", { ascending: false })
+      .limit(250);
+
+    if (status !== "all") {
+      query = query.eq("status", status);
+    }
+
+    if (rangeStart) {
+      query = query.gte("created_at", rangeStart);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const rows = (data ?? []) as AdminFailedTaskRecord[];
+    const userIds = Array.from(new Set(rows.map((row) => row.user_id).filter((value): value is string => Boolean(value))));
+    const siteIds = Array.from(new Set(rows.map((row) => row.site_id).filter((value): value is string => Boolean(value))));
+
+    const [{ data: usersData, error: usersError }, { data: sitesData, error: sitesError }] = await Promise.all([
+      userIds.length
+        ? admin.from("users").select("id,email").in("id", userIds)
+        : Promise.resolve({ data: [] as Array<{ id: string; email: string }>, error: null }),
+      siteIds.length
+        ? admin.from("websites").select("id,label,url").in("id", siteIds)
+        : Promise.resolve({ data: [] as Array<{ id: string; label: string; url: string }>, error: null })
+    ]);
+
+    if (usersError) {
+      throw new Error(usersError.message);
+    }
+
+    if (sitesError) {
+      throw new Error(sitesError.message);
+    }
+
+    const userById = new Map(
+      ((usersData ?? []) as Array<{ id: string; email: string }>).map((row) => [row.id, row.email])
+    );
+    const siteById = new Map(
+      ((sitesData ?? []) as Array<{ id: string; label: string; url: string }>).map((row) => [
+        row.id,
+        row
+      ])
+    );
+
+    return {
+      rows: rows.map((row) => {
+        const site = row.site_id ? siteById.get(row.site_id) : null;
+
+        return {
+          id: row.id,
+          cronName: row.cron_name,
+          taskType: row.task_type,
+          userId: row.user_id,
+          userEmail: row.user_id ? userById.get(row.user_id) ?? "Unknown user" : "N/A",
+          siteId: row.site_id,
+          siteLabel: site?.label ?? "N/A",
+          siteUrl: site?.url ?? "",
+          errorMessage: row.error_message,
+          payload: row.payload ?? {},
+          status: row.status,
+          createdAt: row.created_at,
+          retriedAt: row.retried_at
+        };
+      }),
+      filters: {
+        status,
+        range
+      },
+      error: null
+    };
+  } catch (error) {
+    return {
+      rows: [],
+      filters: {
+        status,
+        range
+      },
+      error: error instanceof Error ? error.message : "Unable to load failed tasks."
     };
   }
 }

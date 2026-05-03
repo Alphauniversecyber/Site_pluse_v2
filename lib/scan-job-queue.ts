@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ReportFrequency, ScanFrequency, UserProfile, Website } from "@/types";
 import { logAdminError, logScanExecution } from "@/lib/admin/logging";
+import { logFailedTask } from "@/lib/failed-tasks";
 import type { CronExecutionGuard } from "@/lib/cron";
 import { executeWebsiteScan } from "@/lib/scan-service";
 import { getPeriodKey, getRetryAt, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
@@ -357,6 +358,16 @@ async function executeWebsiteScanWithTimeout(websiteId: string) {
       clearTimeout(timeoutHandle);
     }
   }
+}
+
+export async function retryWebsiteScanTask(input: { websiteId: string }) {
+  const result = await executeWebsiteScan(input.websiteId);
+
+  if (result.scan.scan_status === "failed") {
+    throw new Error(result.scan.error_message ?? "The website scan failed again.");
+  }
+
+  return result;
 }
 
 export async function enqueueDueScanJobs(limit?: number | null, offset = 0): Promise<EnqueueDueScanJobsResult> {
@@ -716,6 +727,21 @@ export async function processQueuedScanJobs(
           scanId: result.scan.id
         }
       });
+      if (result.scan.scan_status === "failed") {
+        await logFailedTask({
+          cronName: row.metadata?.source === "retry-failed-scans" ? "retry-failed-scans" : "process-scans",
+          taskType: "execute-scan",
+          userId: row.user_id,
+          siteId: row.website_id,
+          errorMessage: result.scan.error_message ?? "The scheduled scan completed with a failed result.",
+          payload: {
+            scanJobQueueId: row.id,
+            userId: row.user_id,
+            websiteId: row.website_id,
+            scanId: result.scan.id
+          }
+        });
+      }
       executedWebsiteIds.push(row.website_id);
       settledCount += 1;
     } catch (error) {
@@ -753,6 +779,18 @@ export async function processQueuedScanJobs(
           failureReason
         },
         dedupeWindowMinutes: 30
+      });
+      await logFailedTask({
+        cronName: row.metadata?.source === "retry-failed-scans" ? "retry-failed-scans" : "process-scans",
+        taskType: "execute-scan",
+        userId: row.user_id,
+        siteId: row.website_id,
+        errorMessage: message,
+        payload: {
+          scanJobQueueId: row.id,
+          userId: row.user_id,
+          websiteId: row.website_id
+        }
       });
     }
   }
