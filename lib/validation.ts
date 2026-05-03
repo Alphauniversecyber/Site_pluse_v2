@@ -113,6 +113,23 @@ export const paddleConfirmSchema = z.object({
   transactionId: z.string().trim().min(3, "Transaction id is required.")
 });
 
+export const adminUpdateUserPlanSchema = z
+  .object({
+    userId: z.string().uuid("Invalid user id."),
+    plan: z.enum(["free", "pro_monthly", "pro_yearly"]),
+    countAsRevenue: z.boolean().default(false),
+    note: z.string().trim().max(500, "Keep the note under 500 characters.").optional()
+  })
+  .superRefine((value, context) => {
+    if (value.plan === "free" && value.countAsRevenue) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Free plan overrides cannot count as revenue.",
+        path: ["countAsRevenue"]
+      });
+    }
+  });
+
 export const settingsSchema = z.object({
   full_name: z.string().trim().min(2, "Full name is required."),
   email: z.string().email(),

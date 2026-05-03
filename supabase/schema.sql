@@ -78,6 +78,8 @@ create table if not exists public.users (
   email text not null unique,
   full_name text,
   plan public.plan_tier not null default 'free',
+  plan_override boolean not null default false,
+  plan_override_counts_as_revenue boolean not null default false,
   timezone text not null default 'UTC',
   paddle_customer_id text,
   paddle_subscription_id text,
@@ -163,6 +165,15 @@ create table if not exists public.payment_logs (
   paddle_subscription_id text,
   metadata jsonb not null default '{}'::jsonb,
   timestamp timestamptz not null default timezone('utc', now()),
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.manual_revenue_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users (id) on delete cascade,
+  plan text not null,
+  amount numeric(10,2) not null check (amount >= 0),
+  note text,
   created_at timestamptz not null default timezone('utc', now())
 );
 
@@ -600,6 +611,10 @@ create index if not exists idx_competitor_scans_website_scanned_at on public.com
 create index if not exists idx_payment_logs_timestamp on public.payment_logs (timestamp desc);
 create index if not exists idx_payment_logs_email on public.payment_logs (lower(user_email), timestamp desc);
 create index if not exists idx_payment_logs_subscription on public.payment_logs (paddle_subscription_id, timestamp desc);
+create index if not exists idx_manual_revenue_entries_user_id
+  on public.manual_revenue_entries (user_id);
+create index if not exists idx_manual_revenue_entries_created_at
+  on public.manual_revenue_entries (created_at desc);
 create index if not exists idx_paddle_webhook_events_status_retry
   on public.paddle_webhook_events (status, next_retry_at asc, created_at asc);
 create index if not exists idx_report_email_queue_status_scheduled
@@ -796,6 +811,7 @@ alter table public.sent_lifecycle_emails enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.billing_plan_prices enable row level security;
 alter table public.payment_logs enable row level security;
+alter table public.manual_revenue_entries enable row level security;
 alter table public.paddle_webhook_events enable row level security;
 alter table public.agency_branding enable row level security;
 alter table public.team_members enable row level security;

@@ -30,6 +30,8 @@ type AdminUserRecord = {
   email: string;
   full_name: string | null;
   plan: PlanKey;
+  plan_override: boolean;
+  plan_override_counts_as_revenue: boolean;
   billing_cycle: BillingCycle | null;
   subscription_price: number | null;
   subscription_status: SubscriptionStatus | null;
@@ -125,6 +127,15 @@ type AdminErrorLogRecord = {
   created_at: string;
 };
 
+type ManualRevenueEntryRecord = {
+  id: string;
+  user_id: string;
+  plan: string;
+  amount: number | string;
+  note: string | null;
+  created_at: string;
+};
+
 export type AdminOverviewData = {
   stats: Array<{ label: string; value: string; tone: "neutral" | "green" | "blue" | "amber" | "red" }>;
   revenue: Array<{ label: string; value: string; note: string }>;
@@ -148,6 +159,8 @@ export type AdminUsersPageData = {
     plan: PlanKey;
     planLabel: string;
     state: ReturnType<typeof getAdminUserState>;
+    planOverride: boolean;
+    planOverrideCountsAsRevenue: boolean;
     trialEndsAt: string | null;
     websitesCount: number;
     websites: Array<{ id: string; label: string; url: string }>;
@@ -416,6 +429,35 @@ function parseRecipients(value: string | null | undefined) {
     .filter(Boolean);
 }
 
+function shouldCountUserInRevenue(input: {
+  subscription_status: SubscriptionStatus | null;
+  plan_override?: boolean;
+  plan_override_counts_as_revenue?: boolean;
+}) {
+  if (input.subscription_status !== "active") {
+    return false;
+  }
+
+  if (input.plan_override) {
+    return Boolean(input.plan_override_counts_as_revenue);
+  }
+
+  return true;
+}
+
+function toNumber(value: number | string | null | undefined) {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
 async function loadUsersByIds(ids: string[]) {
   if (!ids.length) {
     return new Map<string, AdminUserRecord>();
@@ -425,7 +467,7 @@ async function loadUsersByIds(ids: string[]) {
   const { data } = await admin
     .from("users")
     .select(
-      "id,email,full_name,plan,billing_cycle,subscription_price,subscription_status,next_billing_date,trial_end_date,trial_ends_at,is_trial,ip_address,country,city,region,located_at,created_at,updated_at"
+      "id,email,full_name,plan,plan_override,plan_override_counts_as_revenue,billing_cycle,subscription_price,subscription_status,next_billing_date,trial_end_date,trial_ends_at,is_trial,ip_address,country,city,region,located_at,created_at,updated_at"
     )
     .in("id", ids);
 
@@ -469,6 +511,7 @@ export async function getAdminOverviewData(): Promise<AdminOverviewData> {
       reportRowsResult,
       failedScansResult,
       paymentRowsResult,
+      manualRevenueRowsResult,
       expiredRowsResult
     ] = await Promise.all([
       admin.from("users").select("*", { head: true, count: "exact" }),
@@ -499,7 +542,7 @@ export async function getAdminOverviewData(): Promise<AdminOverviewData> {
       admin
         .from("users")
         .select(
-          "id,subscription_price,billing_cycle,subscription_status,trial_end_date,updated_at,email"
+          "id,subscription_price,billing_cycle,subscription_status,trial_end_date,updated_at,email,plan_override,plan_override_counts_as_revenue"
         )
         .in("subscription_status", ["active", "cancelled"]),
       admin
@@ -522,11 +565,16 @@ export async function getAdminOverviewData(): Promise<AdminOverviewData> {
         .limit(10),
       admin
         .from("users")
-        .select("id,email,subscription_price,updated_at")
+        .select("id,email,subscription_price,updated_at,plan_override,plan_override_counts_as_revenue")
         .eq("subscription_status", "active")
         .not("subscription_price", "is", null)
         .gte("updated_at", monthIso)
         .order("updated_at", { ascending: false })
+        .limit(10),
+      admin
+        .from("manual_revenue_entries")
+        .select("id,user_id,plan,amount,note,created_at")
+        .order("created_at", { ascending: false })
         .limit(10),
       admin
         .from("users")
@@ -546,8 +594,10 @@ export async function getAdminOverviewData(): Promise<AdminOverviewData> {
       trial_end_date: string | null;
       updated_at: string;
       email: string;
+      plan_override: boolean;
+      plan_override_counts_as_revenue: boolean;
     }>;
-    const paidUsers = mrrUsers.filter((row) => row.subscription_status === "active");
+    const paidUsers = mrrUsers.filter((row) => shouldCountUserInRevenue(row));
     const historicalTrials = mrrUsers.filter((row) => row.trial_end_date).length;
     const churnThisMonth = mrrUsers.filter(
       (row) =>
@@ -559,6 +609,9 @@ export async function getAdminOverviewData(): Promise<AdminOverviewData> {
       0
     );
     const conversionRate = historicalTrials ? (paidUsers.length / historicalTrials) * 100 : 0;
+    const manualRevenueRows = (manualRevenueRowsResult.data ?? []) as ManualRevenueEntryRecord[];
+    const manualRevenueUserIds = Array.from(new Set(manualRevenueRows.map((row) => row.user_id)));
+    const manualRevenueUsersById = await loadUsersByIds(manualRevenueUserIds);
 
     const cronLogs = (cronLogsResult.data ?? []) as AdminCronLogRecord[];
     const scanCronLog = cronLogs.find((row) => row.cron_name === "process-scans") ?? null;
@@ -606,12 +659,31 @@ export async function getAdminOverviewData(): Promise<AdminOverviewData> {
         timestamp: row.scanned_at,
         tone: "red" as const
       })),
-      ...((paymentRowsResult.data ?? []) as Array<{ id: string; email: string; subscription_price: number | null; updated_at: string }>).map((row) => ({
+      ...((paymentRowsResult.data ?? []) as Array<{
+        id: string;
+        email: string;
+        subscription_price: number | null;
+        updated_at: string;
+        plan_override: boolean;
+        plan_override_counts_as_revenue: boolean;
+      }>)
+        .filter((row) => !row.plan_override)
+        .map((row) => ({
         id: `payment-${row.id}`,
         type: "Payment received",
         title: row.email,
         detail: `Approx. ${formatCurrency(row.subscription_price ?? 0)} in new paid billing activity.`,
         timestamp: row.updated_at,
+        tone: "green" as const
+      })),
+      ...manualRevenueRows.map((row) => ({
+        id: `manual-revenue-${row.id}`,
+        type: "Manual revenue",
+        title: manualRevenueUsersById.get(row.user_id)?.email ?? row.user_id,
+        detail: row.note?.trim()
+          ? `${formatCurrency(toNumber(row.amount))} recorded manually. ${row.note.trim()}`
+          : `${formatCurrency(toNumber(row.amount))} recorded manually.`,
+        timestamp: row.created_at,
         tone: "green" as const
       }))
     ]
@@ -623,7 +695,7 @@ export async function getAdminOverviewData(): Promise<AdminOverviewData> {
         { label: "Total Users", value: String(totalUsersResult.count ?? 0), tone: "neutral" },
         { label: "Active Trial Users", value: String(activeTrialsResult.count ?? 0), tone: "blue" },
         { label: "Expired Trials", value: String(expiredTrialsResult.count ?? 0), tone: "amber" },
-        { label: "Paid Users", value: String(paidUsersResult.count ?? 0), tone: "green" },
+        { label: "Paid Users", value: String(paidUsers.length), tone: "green" },
         { label: "Total Websites", value: String(totalWebsitesResult.count ?? 0), tone: "neutral" },
         { label: "Scans Today", value: String(scansTodayResult.count ?? 0), tone: "blue" }
       ],
@@ -725,7 +797,7 @@ export async function getAdminUsersData(input: {
     const { data, error } = await admin
       .from("users")
       .select(
-        "id,email,full_name,plan,billing_cycle,subscription_price,subscription_status,next_billing_date,trial_end_date,trial_ends_at,is_trial,ip_address,country,city,region,located_at,created_at,updated_at"
+        "id,email,full_name,plan,plan_override,plan_override_counts_as_revenue,billing_cycle,subscription_price,subscription_status,next_billing_date,trial_end_date,trial_ends_at,is_trial,ip_address,country,city,region,located_at,created_at,updated_at"
       )
       .order("created_at", { ascending: false });
 
@@ -830,6 +902,8 @@ export async function getAdminUsersData(input: {
           plan: user.plan,
           planLabel: getPlanLabel(user.plan),
           state: getAdminUserState(user),
+          planOverride: user.plan_override,
+          planOverrideCountsAsRevenue: user.plan_override_counts_as_revenue,
           trialEndsAt: user.trial_ends_at,
           websitesCount: ownedWebsites.length,
           websites: ownedWebsites.map((website) => ({
@@ -1393,15 +1467,24 @@ export async function getAdminBillingData(): Promise<AdminBillingPageData> {
   const previousMonthIso = startOfPreviousMonthIso();
 
   try {
-    const { data, error } = await admin
-      .from("users")
-      .select(
-        "id,email,plan,billing_cycle,subscription_price,subscription_status,next_billing_date,trial_end_date,trial_ends_at,is_trial,updated_at"
-      )
-      .order("updated_at", { ascending: false });
+    const [{ data, error }, { data: manualRevenueData, error: manualRevenueError }] = await Promise.all([
+      admin
+        .from("users")
+        .select(
+          "id,email,plan,plan_override,plan_override_counts_as_revenue,billing_cycle,subscription_price,subscription_status,next_billing_date,trial_end_date,trial_ends_at,is_trial,updated_at"
+        )
+        .order("updated_at", { ascending: false }),
+      admin
+        .from("manual_revenue_entries")
+        .select("id,user_id,plan,amount,note,created_at")
+    ]);
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    if (manualRevenueError) {
+      throw new Error(manualRevenueError.message);
     }
 
     const users = (data ?? []) as Array<
@@ -1410,6 +1493,8 @@ export async function getAdminBillingData(): Promise<AdminBillingPageData> {
         | "id"
         | "email"
         | "plan"
+        | "plan_override"
+        | "plan_override_counts_as_revenue"
         | "billing_cycle"
         | "subscription_price"
         | "subscription_status"
@@ -1420,7 +1505,10 @@ export async function getAdminBillingData(): Promise<AdminBillingPageData> {
         | "updated_at"
       >
     >;
-    const paidUsers = users.filter((row) => row.subscription_status === "active" && row.subscription_price);
+    const manualRevenueRows = (manualRevenueData ?? []) as ManualRevenueEntryRecord[];
+    const paidUsers = users.filter(
+      (row) => shouldCountUserInRevenue(row) && row.subscription_price
+    );
     const trialUsers = users.filter((row) => getAdminUserState(row) === "trial");
     const expiredTrials = users.filter((row) => getAdminUserState(row) === "expired");
     const mrr = paidUsers.reduce(
@@ -1431,19 +1519,33 @@ export async function getAdminBillingData(): Promise<AdminBillingPageData> {
       .filter(
         (row) =>
           row.subscription_status === "active" &&
+          !row.plan_override &&
           new Date(row.updated_at).getTime() >= new Date(monthIso).getTime()
       )
-      .reduce((sum, row) => sum + (row.subscription_price ?? 0), 0);
+      .reduce((sum, row) => sum + (row.subscription_price ?? 0), 0) +
+      manualRevenueRows
+        .filter((row) => new Date(row.created_at).getTime() >= new Date(monthIso).getTime())
+        .reduce((sum, row) => sum + toNumber(row.amount), 0);
     const revenueLastMonth = users
       .filter((row) => {
         const updatedAt = new Date(row.updated_at).getTime();
         return (
           row.subscription_status === "active" &&
+          !row.plan_override &&
           updatedAt >= new Date(previousMonthIso).getTime() &&
           updatedAt < new Date(monthIso).getTime()
         );
       })
-      .reduce((sum, row) => sum + (row.subscription_price ?? 0), 0);
+      .reduce((sum, row) => sum + (row.subscription_price ?? 0), 0) +
+      manualRevenueRows
+        .filter((row) => {
+          const createdAt = new Date(row.created_at).getTime();
+          return (
+            createdAt >= new Date(previousMonthIso).getTime() &&
+            createdAt < new Date(monthIso).getTime()
+          );
+        })
+        .reduce((sum, row) => sum + toNumber(row.amount), 0);
 
     return {
       paidUsers: paidUsers.map((row) => ({

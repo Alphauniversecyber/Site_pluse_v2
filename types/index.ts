@@ -60,6 +60,8 @@ export interface UserProfile {
   email: string;
   full_name: string | null;
   plan: PlanKey;
+  plan_override?: boolean;
+  plan_override_counts_as_revenue?: boolean;
   timezone?: string | null;
   paddle_customer_id: string | null;
   paddle_subscription_id: string | null;
@@ -99,6 +101,15 @@ export interface SubscriptionRecord {
   last_payment_date: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ManualRevenueEntry {
+  id: string;
+  user_id: string;
+  plan: string;
+  amount: number;
+  note: string | null;
+  created_at: string;
 }
 
 export interface PaymentLogEntry {

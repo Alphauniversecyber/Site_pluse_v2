@@ -10,6 +10,24 @@ function getAdminSecret() {
   return process.env.ADMIN_SECRET?.trim() ?? "";
 }
 
+function getCookieValueFromHeader(cookieHeader: string | null | undefined, name: string) {
+  if (!cookieHeader) {
+    return null;
+  }
+
+  const parts = cookieHeader.split(";");
+
+  for (const part of parts) {
+    const [rawName, ...rawValue] = part.trim().split("=");
+
+    if (rawName === name) {
+      return rawValue.join("=").trim() || null;
+    }
+  }
+
+  return null;
+}
+
 export function isAdminSecretValid(value: string | null | undefined) {
   const secret = getAdminSecret();
   return Boolean(secret) && value === secret;
@@ -52,8 +70,15 @@ export function getAdminAuthorizationHeader() {
 
 export function requireAdminApiAuthorization(request: Request) {
   const authorization = request.headers.get("authorization");
+  const cookieValue = getCookieValueFromHeader(
+    request.headers.get("cookie"),
+    ADMIN_COOKIE_NAME
+  );
 
-  if (!isAdminSecretValid(authorization?.replace(/^Bearer\s+/i, ""))) {
+  if (
+    !isAdminSecretValid(authorization?.replace(/^Bearer\s+/i, "")) &&
+    !isAdminSecretValid(cookieValue)
+  ) {
     return apiError("Unauthorized", 401);
   }
 

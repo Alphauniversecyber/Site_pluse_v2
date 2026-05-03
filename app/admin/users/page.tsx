@@ -1,8 +1,10 @@
+import { AdminUserPlanControl } from "@/components/admin/admin-user-plan-control";
 import { AdminCard } from "@/components/admin/admin-card";
 import { AdminEmptyState } from "@/components/admin/admin-empty-state";
 import { AdminErrorNotice } from "@/components/admin/admin-error-notice";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { AdminPagination } from "@/components/admin/admin-pagination";
+import { getAdminCurrentPlanLabel } from "@/lib/admin/user-plan";
 import { requireAdminPageAccess } from "@/lib/admin/auth";
 import { getAdminUsersData } from "@/lib/admin/data";
 import {
@@ -168,7 +170,7 @@ export default async function AdminUsersPage({
                               borderColor: planTone.border
                             }}
                           >
-                            {row.planLabel}
+                            {getAdminCurrentPlanLabel(row.plan, row.billingCycle)}
                           </span>
                         </td>
                         <td className="px-4 py-4">
@@ -230,6 +232,18 @@ export default async function AdminUsersPage({
                                   <p className="mt-2 text-zinc-300">Last scan: {row.lastScanAt ? formatAdminDate(row.lastScanAt) : "N/A"}</p>
                                   <p className="mt-1 text-zinc-500">Reports sent: {row.reportsSentCount}</p>
                                   <p className="mt-1 text-zinc-500">Trial state: {getStatusLabel(row.state)}</p>
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Plan Management</p>
+                                <div className="mt-3">
+                                  <AdminUserPlanControl
+                                    userId={row.id}
+                                    plan={row.plan}
+                                    billingCycle={row.billingCycle}
+                                    planOverride={row.planOverride}
+                                    planOverrideCountsAsRevenue={row.planOverrideCountsAsRevenue}
+                                  />
                                 </div>
                               </div>
                               <div className="text-xs text-zinc-500">Impersonate (future)</div>
