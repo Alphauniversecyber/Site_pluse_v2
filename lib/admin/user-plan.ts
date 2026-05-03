@@ -1,9 +1,27 @@
 import { getPlanPricing, type BillingPlanCatalog } from "@/lib/billing";
+import type { AdminUserState } from "@/lib/admin/format";
 import type { BillingCycle, PlanKey } from "@/types";
 
-export type AdminPlanOverrideValue = "free" | "pro_monthly" | "pro_yearly";
+export type AdminPlanOverrideValue =
+  | "trial"
+  | "pro_monthly"
+  | "pro_yearly"
+  | "growth_monthly"
+  | "growth_yearly";
 
 export function getAdminPlanOverrideLabel(value: AdminPlanOverrideValue) {
+  if (value === "trial") {
+    return "Trial";
+  }
+
+  if (value === "growth_yearly") {
+    return "Growth Yearly";
+  }
+
+  if (value === "growth_monthly") {
+    return "Growth Monthly";
+  }
+
   if (value === "pro_yearly") {
     return "Pro Yearly";
   }
@@ -12,7 +30,7 @@ export function getAdminPlanOverrideLabel(value: AdminPlanOverrideValue) {
     return "Pro Monthly";
   }
 
-  return "Free";
+  return "Trial";
 }
 
 export function getAdminCurrentPlanLabel(plan: PlanKey, billingCycle: BillingCycle | null | undefined) {
@@ -35,6 +53,18 @@ export function getAdminCurrentPlanLabel(plan: PlanKey, billingCycle: BillingCyc
   return "Free";
 }
 
+export function getAdminDisplayedPlanLabel(
+  plan: PlanKey,
+  billingCycle: BillingCycle | null | undefined,
+  state: AdminUserState
+) {
+  if (state === "trial" || state === "expired") {
+    return "Trial";
+  }
+
+  return getAdminCurrentPlanLabel(plan, billingCycle);
+}
+
 export function getAdminCurrentPlanBadgeVariant(plan: PlanKey, billingCycle: BillingCycle | null | undefined) {
   if (plan === "agency") {
     return billingCycle === "yearly" ? "success" : "default";
@@ -49,10 +79,11 @@ export function getAdminCurrentPlanBadgeVariant(plan: PlanKey, billingCycle: Bil
 
 export function getAdminOverrideSelectionFromCurrentPlan(
   plan: PlanKey,
-  billingCycle: BillingCycle | null | undefined
+  billingCycle: BillingCycle | null | undefined,
+  state?: AdminUserState
 ): AdminPlanOverrideValue | null {
-  if (plan === "free") {
-    return "free";
+  if (state === "trial" || state === "expired") {
+    return "trial";
   }
 
   if (plan === "agency" && billingCycle === "yearly") {
@@ -61,6 +92,14 @@ export function getAdminOverrideSelectionFromCurrentPlan(
 
   if (plan === "agency" && billingCycle === "monthly") {
     return "pro_monthly";
+  }
+
+  if (plan === "starter" && billingCycle === "yearly") {
+    return "growth_yearly";
+  }
+
+  if (plan === "starter" && billingCycle === "monthly") {
+    return "growth_monthly";
   }
 
   return null;
@@ -76,21 +115,22 @@ export function resolveAdminPlanOverride(
   originalPrice: number;
   salePrice: number;
 } {
-  if (value === "free") {
+  if (value === "trial") {
     return {
-      plan: "free",
+      plan: "starter",
       billingCycle: null,
-      planName: "Free",
+      planName: "Trial",
       originalPrice: 0,
       salePrice: 0
     };
   }
 
-  const billingCycle = value === "pro_yearly" ? "yearly" : "monthly";
-  const pricing = getPlanPricing("agency", billingCycle, billingPlans);
+  const plan = value.startsWith("growth_") ? "starter" : "agency";
+  const billingCycle = value.endsWith("_yearly") ? "yearly" : "monthly";
+  const pricing = getPlanPricing(plan, billingCycle, billingPlans);
 
   return {
-    plan: "agency",
+    plan,
     billingCycle,
     planName: pricing.planName,
     originalPrice: pricing.originalPrice,

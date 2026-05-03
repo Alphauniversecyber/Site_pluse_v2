@@ -116,15 +116,15 @@ export const paddleConfirmSchema = z.object({
 export const adminUpdateUserPlanSchema = z
   .object({
     userId: z.string().uuid("Invalid user id."),
-    plan: z.enum(["free", "pro_monthly", "pro_yearly"]),
+    plan: z.enum(["trial", "pro_monthly", "pro_yearly", "growth_monthly", "growth_yearly"]),
     countAsRevenue: z.boolean().default(false),
     note: z.string().trim().max(500, "Keep the note under 500 characters.").optional()
   })
   .superRefine((value, context) => {
-    if (value.plan === "free" && value.countAsRevenue) {
+    if (value.plan === "trial" && value.countAsRevenue) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Free plan overrides cannot count as revenue.",
+        message: "Trial resets cannot count as revenue.",
         path: ["countAsRevenue"]
       });
     }

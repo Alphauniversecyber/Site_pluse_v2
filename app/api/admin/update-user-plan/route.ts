@@ -1,7 +1,8 @@
 import { apiError, apiSuccess } from "@/lib/api";
 import { requireAdminApiAuthorization } from "@/lib/admin/auth";
+import { getAdminUserState } from "@/lib/admin/format";
 import {
-  getAdminCurrentPlanLabel,
+  getAdminDisplayedPlanLabel,
   getAdminOverrideSelectionFromCurrentPlan,
   resolveAdminPlanOverride,
   type AdminPlanOverrideValue
@@ -9,7 +10,7 @@ import {
 import { getBillingPlans } from "@/lib/billing-config";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { adminUpdateUserPlanSchema } from "@/lib/validation";
-import type { BillingCycle, SubscriptionStatus, UserProfile } from "@/types";
+import type { BillingCycle, PlanKey, SubscriptionStatus, UserProfile } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -50,9 +51,24 @@ type ManagedSubscriptionRow = {
 };
 
 const MANUAL_SUBSCRIPTION_PREFIX = "manual_override:";
+const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
+const ADMIN_MANUAL_REVENUE_FALLBACKS: Record<Exclude<AdminPlanOverrideValue, "trial">, number> = {
+  pro_monthly: 49,
+  pro_yearly: 470,
+  growth_monthly: 99,
+  growth_yearly: 950
+};
 
 function getManualSubscriptionId(userId: string) {
   return `${MANUAL_SUBSCRIPTION_PREFIX}${userId}`;
+}
+
+function getRevenueAmount(plan: Exclude<AdminPlanOverrideValue, "trial">, salePrice: number) {
+  if (salePrice > 0) {
+    return salePrice;
+  }
+
+  return ADMIN_MANUAL_REVENUE_FALLBACKS[plan];
 }
 
 async function loadManagedUser(userId: string) {
@@ -94,6 +110,7 @@ async function loadLatestSubscription(userId: string) {
 async function syncSubscriptionMirror(input: {
   user: AdminManagedUserRow;
   overridePlan: AdminPlanOverrideValue;
+  plan: PlanKey;
   planName: string;
   billingCycle: BillingCycle | null;
   originalPrice: number;
@@ -104,7 +121,7 @@ async function syncSubscriptionMirror(input: {
   const admin = createSupabaseAdminClient();
   const existing = await loadLatestSubscription(input.user.id);
 
-  if (input.overridePlan === "free") {
+  if (input.overridePlan === "trial") {
     if (!existing) {
       return null;
     }
@@ -129,7 +146,7 @@ async function syncSubscriptionMirror(input: {
     user_id: input.user.id,
     email: input.user.email,
     plan_name: input.planName,
-    plan_tier: "agency" as const,
+    plan_tier: input.plan === "starter" ? ("starter" as const) : ("agency" as const),
     billing_interval: input.billingCycle ?? "monthly",
     original_price: input.originalPrice,
     sale_price: input.salePrice,
@@ -176,25 +193,29 @@ export async function POST(request: Request) {
     const billingPlans = await getBillingPlans();
     const resolved = resolveAdminPlanOverride(parsed.data.plan, billingPlans);
     const nowIso = new Date().toISOString();
-    const lastPaymentDate =
-      parsed.data.countAsRevenue && parsed.data.plan !== "free"
+    const isTrialReset = parsed.data.plan === "trial";
+    const trialEndsAt = isTrialReset ? new Date(Date.now() + TRIAL_DURATION_MS).toISOString() : null;
+    const lastPaymentDate = isTrialReset
+      ? null
+      : parsed.data.countAsRevenue
         ? nowIso
         : user.last_payment_date ?? null;
+    const subscriptionStatus = isTrialReset ? "trialing" : "active";
 
     const { error: userError } = await admin
       .from("users")
       .update({
         plan: resolved.plan,
         plan_override: true,
-        plan_override_counts_as_revenue: parsed.data.plan === "free" ? false : parsed.data.countAsRevenue,
+        plan_override_counts_as_revenue: isTrialReset ? false : parsed.data.countAsRevenue,
         billing_cycle: resolved.billingCycle,
-        subscription_price: resolved.plan === "free" ? null : resolved.salePrice,
-        subscription_status: resolved.plan === "free" ? "inactive" : "active",
+        subscription_price: isTrialReset ? null : resolved.salePrice,
+        subscription_status: subscriptionStatus,
         next_billing_date: null,
         last_payment_date: lastPaymentDate,
-        is_trial: false,
-        trial_end_date: null,
-        trial_ends_at: null
+        is_trial: isTrialReset,
+        trial_end_date: trialEndsAt,
+        trial_ends_at: trialEndsAt
       })
       .eq("id", user.id);
 
@@ -205,6 +226,7 @@ export async function POST(request: Request) {
     await syncSubscriptionMirror({
       user,
       overridePlan: parsed.data.plan,
+      plan: resolved.plan,
       planName: resolved.planName,
       billingCycle: resolved.billingCycle,
       originalPrice: resolved.originalPrice,
@@ -215,11 +237,11 @@ export async function POST(request: Request) {
 
     let revenueEntryCreated = false;
 
-    if (parsed.data.countAsRevenue && parsed.data.plan !== "free") {
+    if (parsed.data.countAsRevenue && parsed.data.plan !== "trial") {
       const { error: revenueError } = await admin.from("manual_revenue_entries").insert({
         user_id: user.id,
         plan: parsed.data.plan,
-        amount: resolved.salePrice,
+        amount: getRevenueAmount(parsed.data.plan, resolved.salePrice),
         note: parsed.data.note?.trim() || null,
         created_at: nowIso
       });
@@ -233,18 +255,30 @@ export async function POST(request: Request) {
 
     const responsePlan = resolved.plan;
     const responseBillingCycle = resolved.billingCycle;
+    const responseState = getAdminUserState({
+      is_trial: isTrialReset,
+      trial_ends_at: trialEndsAt,
+      subscription_status: subscriptionStatus,
+      plan: responsePlan
+    });
 
     return apiSuccess({
       userId: user.id,
       plan: responsePlan,
       billingCycle: responseBillingCycle,
-      currentPlanLabel: getAdminCurrentPlanLabel(responsePlan, responseBillingCycle),
-      selectedPlan: getAdminOverrideSelectionFromCurrentPlan(responsePlan, responseBillingCycle),
-      subscriptionStatus: (resolved.plan === "free" ? "inactive" : "active") as SubscriptionStatus,
-      subscriptionPrice: resolved.plan === "free" ? null : resolved.salePrice,
+      currentPlanLabel: getAdminDisplayedPlanLabel(responsePlan, responseBillingCycle, responseState),
+      selectedPlan: getAdminOverrideSelectionFromCurrentPlan(
+        responsePlan,
+        responseBillingCycle,
+        responseState
+      ),
+      state: responseState,
+      subscriptionStatus: subscriptionStatus as SubscriptionStatus,
+      subscriptionPrice: isTrialReset ? null : resolved.salePrice,
+      nextBillingDate: null,
+      trialEndsAt,
       planOverride: true,
-      planOverrideCountsAsRevenue:
-        parsed.data.plan === "free" ? false : parsed.data.countAsRevenue,
+      planOverrideCountsAsRevenue: isTrialReset ? false : parsed.data.countAsRevenue,
       revenueEntryCreated
     });
   } catch (error) {
