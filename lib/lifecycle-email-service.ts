@@ -21,7 +21,90 @@ type LifecycleSnapshot = {
   firstWebsiteId: string | null;
 };
 
+type ActivationProfile = Pick<
+  UserProfile,
+  "id" | "email" | "full_name" | "created_at" | "is_trial" | "trial_ends_at"
+>;
+
+type ActivationEmailType = "activation_day1" | "activation_day3" | "activation_day7";
+
+type ActivationEmailDefinition = {
+  emailType: ActivationEmailType;
+  templateId: Parameters<typeof sendProductEmail>[0]["templateId"];
+  targetDays: number;
+  subject: string;
+  preheader: string;
+  eyebrow: string;
+  title: string;
+  summary: string;
+  bodyHtml: string;
+  ctaLabel: string;
+  accent?: string;
+};
+
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const HALF_DAY_IN_MS = 12 * 60 * 60 * 1000;
+const ACTIVATION_DASHBOARD_URL = "https://trysitepulse.com/dashboard";
+const ACTIVATION_EMAILS: ActivationEmailDefinition[] = [
+  {
+    emailType: "activation_day1",
+    templateId: "activation_day_1",
+    targetDays: 1,
+    subject: "Your SitePulse account is ready \u2014 add your first site",
+    preheader: "Your account is set up. Add your first site and make the most of the 14-day free trial.",
+    eyebrow: "Activation day 1",
+    title: "Your SitePulse account is ready",
+    summary: "Your workspace is live and the 14-day free trial is already running.",
+    bodyHtml: `
+      <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
+        Everything is set up. The next step is simple: add your first site so SitePulse can start tracking performance and surfacing SEO issues.
+      </p>
+      <p style="margin:0;font-size:15px;line-height:24px;color:#475569;">
+        Once your first site is in, you can start seeing where the biggest wins and risks are right away.
+      </p>
+    `,
+    ctaLabel: "Add Your First Site"
+  },
+  {
+    emailType: "activation_day3",
+    templateId: "activation_day_3",
+    targetDays: 3,
+    subject: "Still haven't run your first audit?",
+    preheader: "Run the first SitePulse audit and see the SEO issues, performance signals, and PDF report flow in action.",
+    eyebrow: "Activation day 3",
+    title: "Your first audit is still waiting",
+    summary: "SitePulse gives you an instant SEO audit and a client-ready PDF report as soon as the first site is added.",
+    bodyHtml: `
+      <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
+        If you have not added a site yet, you have not seen the part that matters most: the audit itself. That is where SitePulse starts turning raw scan data into something easier to act on and easier to share.
+      </p>
+      <p style="margin:0;font-size:15px;line-height:24px;color:#475569;">
+        Add a site, run the first audit, and you will immediately have a clearer picture of SEO issues plus a report you can use with clients.
+      </p>
+    `,
+    ctaLabel: "Run Your First Audit"
+  },
+  {
+    emailType: "activation_day7",
+    templateId: "activation_day_7",
+    targetDays: 7,
+    subject: "Your trial is halfway gone \u2014 here's what you're missing",
+    preheader: "Seven days are left in your trial. Add a site now to see what SitePulse can surface for you.",
+    eyebrow: "Activation day 7",
+    title: "You still have 7 days left to try SitePulse",
+    summary: "Your trial is halfway through, but you have not used it yet because no site has been added.",
+    bodyHtml: `
+      <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
+        Adding one site is enough to see the core workflow: instant audit results, clear issue prioritization, and a polished PDF report you can put in front of a client.
+      </p>
+      <p style="margin:0;font-size:15px;line-height:24px;color:#475569;">
+        If you have any questions or want help getting the first audit running, just reply to this email and we will help.
+      </p>
+    `,
+    ctaLabel: "Add Your First Site",
+    accent: "#C2410C"
+  }
+];
 
 function getDaysSince(timestamp: string) {
   return Math.floor((Date.now() - new Date(timestamp).getTime()) / DAY_IN_MS);
@@ -37,6 +120,79 @@ function getTrialDaysRemaining(trialEndsAt: string | null) {
 
 function getDashboardUrl(path: string) {
   return `${getBaseUrl().replace(/\/$/, "")}${path}`;
+}
+
+function getActivationWindow(targetDays: number) {
+  const targetMs = Date.now() - targetDays * DAY_IN_MS;
+
+  return {
+    startIso: new Date(targetMs - HALF_DAY_IN_MS).toISOString(),
+    endIso: new Date(targetMs + HALF_DAY_IN_MS).toISOString()
+  };
+}
+
+async function getAlreadySentLifecycleEmailUserIds(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userIds: string[],
+  emailType: ActivationEmailType
+) {
+  if (!userIds.length) {
+    return new Set<string>();
+  }
+
+  const { data, error } = await admin
+    .from("sent_lifecycle_emails")
+    .select("user_id")
+    .in("user_id", userIds)
+    .eq("email_type", emailType);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return new Set(((data ?? []) as Array<{ user_id: string }>).map((row) => row.user_id));
+}
+
+async function getUserIdsWithWebsites(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userIds: string[]
+) {
+  if (!userIds.length) {
+    return new Set<string>();
+  }
+
+  const { data, error } = await admin
+    .from("websites")
+    .select("user_id")
+    .in("user_id", userIds);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return new Set(((data ?? []) as Array<{ user_id: string }>).map((row) => row.user_id));
+}
+
+async function markLifecycleEmailSent(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  emailType: ActivationEmailType
+) {
+  const { error } = await admin.from("sent_lifecycle_emails").upsert(
+    {
+      user_id: userId,
+      email_type: emailType,
+      sent_at: new Date().toISOString()
+    },
+    {
+      onConflict: "user_id,email_type",
+      ignoreDuplicates: true
+    }
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 async function loadLifecycleSnapshot(userId: string): Promise<LifecycleSnapshot> {
@@ -484,6 +640,149 @@ async function maybeSendOnboardingEmails(profile: LifecycleProfile, snapshot: Li
     //   })
     // );
   }
+}
+
+async function sendActivationEmailBatch(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  definition: ActivationEmailDefinition,
+  sentKeys: string[]
+) {
+  const { startIso, endIso } = getActivationWindow(definition.targetDays);
+  const { data, error } = await admin
+    .from("users")
+    .select("id,email,full_name,created_at,is_trial,trial_ends_at")
+    .gte("created_at", startIso)
+    .lt("created_at", endIso)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const profiles = (data ?? []) as ActivationProfile[];
+
+  if (!profiles.length) {
+    console.info("[lifecycle:activation_window_empty]", {
+      emailType: definition.emailType,
+      targetDays: definition.targetDays,
+      startIso,
+      endIso
+    });
+
+    return {
+      inspectedCount: 0,
+      processedCount: 0
+    };
+  }
+
+  const userIds = profiles.map((profile) => profile.id);
+  const [alreadySentUserIds, userIdsWithWebsites] = await Promise.all([
+    getAlreadySentLifecycleEmailUserIds(admin, userIds, definition.emailType),
+    getUserIdsWithWebsites(admin, userIds)
+  ]);
+
+  const pendingProfiles = profiles.filter(
+    (profile) => !alreadySentUserIds.has(profile.id) && !userIdsWithWebsites.has(profile.id)
+  );
+
+  console.info("[lifecycle:activation_candidates]", {
+    emailType: definition.emailType,
+    targetDays: definition.targetDays,
+    windowStart: startIso,
+    windowEnd: endIso,
+    totalProfiles: profiles.length,
+    alreadySentCount: alreadySentUserIds.size,
+    hasWebsiteCount: userIdsWithWebsites.size,
+    pendingCount: pendingProfiles.length
+  });
+
+  let processedCount = 0;
+
+  for (const profile of pendingProfiles) {
+    const dedupeKey = buildEmailDedupeKey("lifecycle", definition.emailType, profile.id);
+
+    try {
+      const delivery = await sendProductEmail({
+        templateId: definition.templateId,
+        dedupeKey,
+        campaign: "lifecycle_activation",
+        to: profile.email,
+        subject: definition.subject,
+        preheader: definition.preheader,
+        eyebrow: definition.eyebrow,
+        title: definition.title,
+        summary: definition.summary,
+        bodyHtml: definition.bodyHtml,
+        ctaLabel: definition.ctaLabel,
+        ctaUrl: ACTIVATION_DASHBOARD_URL,
+        accent: definition.accent,
+        metadata: {
+          userId: profile.id,
+          activationEmail: true,
+          emailType: definition.emailType,
+          targetDays: definition.targetDays,
+          dedupeKey
+        },
+        triggeredAt: profile.created_at
+      });
+
+      await markLifecycleEmailSent(admin, profile.id, definition.emailType);
+      sentKeys.push(dedupeKey);
+      processedCount += 1;
+
+      console.info("[lifecycle:activation_sent]", {
+        emailType: definition.emailType,
+        userId: profile.id,
+        to: profile.email,
+        dedupeKey,
+        status: delivery ? "sent" : "deduped"
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to send activation email.";
+
+      console.error("[lifecycle:activation_failed]", {
+        emailType: definition.emailType,
+        userId: profile.id,
+        to: profile.email,
+        error: message
+      });
+
+      await logAdminError({
+        errorType: "email_failed",
+        errorMessage: message,
+        userId: profile.id,
+        context: {
+          lifecycleEmail: true,
+          activationEmail: true,
+          emailType: definition.emailType
+        }
+      });
+    }
+  }
+
+  return {
+    inspectedCount: pendingProfiles.length,
+    processedCount
+  };
+}
+
+export async function sendActivationEmails() {
+  const admin = createSupabaseAdminClient();
+  const sentKeys: string[] = [];
+  let inspectedCount = 0;
+  let processedCount = 0;
+
+  for (const definition of ACTIVATION_EMAILS) {
+    const result = await sendActivationEmailBatch(admin, definition, sentKeys);
+    inspectedCount += result.inspectedCount;
+    processedCount += result.processedCount;
+  }
+
+  return {
+    sentKeys,
+    inspectedCount,
+    processedCount
+  };
 }
 
 export async function processLifecycleEmails(limit = getCronBatchLimit("LIFECYCLE_CRON_USER_LIMIT", 50)) {

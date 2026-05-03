@@ -104,6 +104,14 @@ create table if not exists public.users (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.sent_lifecycle_emails (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users (id) on delete cascade,
+  email_type text not null,
+  sent_at timestamptz not null default timezone('utc', now()),
+  unique (user_id, email_type)
+);
+
 create table if not exists public.subscriptions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users (id) on delete cascade,
@@ -608,6 +616,10 @@ create index if not exists idx_report_email_queue_user_period
   on public.report_email_queue (user_id, website_id, period_key);
 create index if not exists idx_report_email_queue_sent_at
   on public.report_email_queue (sent_at desc);
+create index if not exists idx_sent_lifecycle_emails_user_id
+  on public.sent_lifecycle_emails (user_id);
+create index if not exists idx_sent_lifecycle_emails_email_type_sent_at
+  on public.sent_lifecycle_emails (email_type, sent_at desc);
 create index if not exists idx_scan_job_queue_status_scheduled
   on public.scan_job_queue (status, next_attempt_at asc);
 create index if not exists idx_scan_job_queue_user_period
@@ -780,6 +792,7 @@ end;
 $$;
 
 alter table public.users enable row level security;
+alter table public.sent_lifecycle_emails enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.billing_plan_prices enable row level security;
 alter table public.payment_logs enable row level security;
