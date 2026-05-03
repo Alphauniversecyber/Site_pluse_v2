@@ -1,43 +1,78 @@
-import { existsSync } from "node:fs";
-import path from "node:path";
-import type { MetadataRoute } from "next";
-
-const baseUrl = "https://www.trysitepulse.com";
-
-const staticRoutes: Array<{
-  route: string;
-  priority: number;
-  changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
-}> = [
-  { route: "/", priority: 1, changeFrequency: "weekly" },
-  { route: "/features", priority: 0.8, changeFrequency: "weekly" },
-  { route: "/pricing", priority: 0.8, changeFrequency: "weekly" },
-  { route: "/login", priority: 0.6, changeFrequency: "monthly" },
-  { route: "/signup", priority: 0.6, changeFrequency: "monthly" },
-  { route: "/reset-password", priority: 0.6, changeFrequency: "monthly" },
-  { route: "/contact", priority: 0.6, changeFrequency: "monthly" },
-  { route: "/changelog", priority: 0.6, changeFrequency: "monthly" },
-  { route: "/roadmap", priority: 0.6, changeFrequency: "monthly" },
-  { route: "/privacy", priority: 0.6, changeFrequency: "yearly" },
-  { route: "/refund", priority: 0.6, changeFrequency: "yearly" },
-  { route: "/terms", priority: 0.6, changeFrequency: "yearly" }
-];
+import { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const routes = [...staticRoutes];
-
-  if (existsSync(path.join(process.cwd(), "app", "(public)", "blog", "page.tsx"))) {
-    routes.splice(3, 0, {
-      route: "/blog",
-      priority: 0.6,
-      changeFrequency: "weekly"
-    });
-  }
-
-  return routes.map(({ route, priority, changeFrequency }) => ({
-    url: `${baseUrl}${route === "/" ? "" : route}`,
-    lastModified: new Date(),
-    changeFrequency,
-    priority
-  }));
+  return [
+    {
+      url: "https://www.trysitepulse.com",
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 1
+    },
+    {
+      url: "https://www.trysitepulse.com/pricing",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.8
+    },
+    {
+      url: "https://www.trysitepulse.com/features",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.8
+    },
+    {
+      url: "https://www.trysitepulse.com/login",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.6
+    },
+    {
+      url: "https://www.trysitepulse.com/signup",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.6
+    },
+    {
+      url: "https://www.trysitepulse.com/reset-password",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.6
+    },
+    {
+      url: "https://www.trysitepulse.com/contact",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.6
+    },
+    {
+      url: "https://www.trysitepulse.com/changelog",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.6
+    },
+    {
+      url: "https://www.trysitepulse.com/roadmap",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.6
+    },
+    {
+      url: "https://www.trysitepulse.com/privacy",
+      lastModified: new Date(),
+      changeFrequency: "yearly",
+      priority: 0.6
+    },
+    {
+      url: "https://www.trysitepulse.com/refund",
+      lastModified: new Date(),
+      changeFrequency: "yearly",
+      priority: 0.6
+    },
+    {
+      url: "https://www.trysitepulse.com/terms",
+      lastModified: new Date(),
+      changeFrequency: "yearly",
+      priority: 0.6
+    }
+  ];
 }

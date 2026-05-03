@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { AgencyPricingPage } from "@/components/landing/agency-pricing-page";
 
 export const metadata: Metadata = {
-  title: "SEO Audit Tool Pricing for Agencies",
+  title: "Pricing — SitePulse",
   description:
     "Compare SitePulse pricing for agencies and start a 14-day free trial. Choose the SEO audit and reporting plan that fits your client workflow.",
   alternates: {
