@@ -141,6 +141,7 @@ export interface Website {
   extra_recipients?: string[];
   auto_email_reports?: boolean;
   email_notifications?: boolean;
+  client_dashboard_enabled?: boolean;
   competitor_urls?: string[];
   created_at: string;
   updated_at?: string;
@@ -172,6 +173,9 @@ export interface AgencyBranding {
   logo_url: string | null;
   brand_color: string;
   email_from_name: string | null;
+  reply_to_email?: string | null;
+  agency_website_url?: string | null;
+  report_footer_text?: string | null;
   created_at: string;
 }
 

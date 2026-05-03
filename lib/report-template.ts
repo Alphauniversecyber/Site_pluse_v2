@@ -2,6 +2,8 @@
   agency_name: string;
   agency_logo_url: string;
   agency_email: string;
+  agency_website_url: string;
+  report_footer_text: string;
   white_label?: boolean;
   brand_color: string;
   client_name: string;
@@ -195,7 +197,9 @@ function footer(context: ReportContext, page: number, total = 13) {
   const darkPage = page === 1 || page === total;
   const color = darkPage ? "#64748B" : "#94A3B8";
   const border = darkPage ? "#1E293B" : "#E2E8F0";
-  return `<div style="position:absolute;left:17mm;right:17mm;bottom:14mm;display:flex;justify-content:space-between;font-size:10px;color:${color};border-top:1px solid ${border};padding-top:6px"><span>${esc(context.agency_name)}</span><span>${esc(context.agency_email)}</span><span>Page ${page} of ${total}</span></div>`;
+  const footerExtras = [context.agency_website_url, context.report_footer_text].filter(Boolean);
+
+  return `<div style="position:absolute;left:17mm;right:17mm;bottom:14mm;color:${color};border-top:1px solid ${border};padding-top:6px"><div style="display:flex;justify-content:space-between;font-size:10px;gap:12px"><span>${esc(context.agency_name)}</span><span style="text-align:center;flex:1">${esc(context.agency_email)}</span><span>Page ${page} of ${total}</span></div>${footerExtras.length ? `<div style="margin-top:6px;display:flex;flex-direction:column;gap:2px;font-size:9px;line-height:1.4;text-align:center;color:${color}">${footerExtras.map((item) => `<span style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item)}</span>`).join("")}</div>` : ""}</div>`;
 }
 
 function ring(score: number, size = 76) {

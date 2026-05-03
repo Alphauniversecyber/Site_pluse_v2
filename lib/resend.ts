@@ -44,6 +44,7 @@ type SharedEmailSendInput = {
   campaign: string;
   to: string;
   fromName: string;
+  replyTo?: CreateEmailOptions["replyTo"];
   subject: string;
   html: string;
   metadata?: EmailLogPayload;
@@ -168,6 +169,7 @@ async function sendEmailWithConfirmation(input: SharedEmailSendInput) {
   const payload: CreateEmailOptions = {
     from: `${input.fromName} <${fromEmail}>`,
     to: input.to,
+    replyTo: input.replyTo,
     subject: input.subject,
     html: input.html,
     attachments: input.attachments
@@ -1319,7 +1321,7 @@ export async function sendReportEmail(input: {
   securityHeaders?: SecurityHeadersRecord | null;
   brokenLinks?: BrokenLinkRecord | null;
   pdfBuffer: Buffer;
-  dashboardUrl: string;
+  dashboardUrl?: string | null;
   deliveryMode: "manual" | "scheduled";
   frequency: ScanFrequency;
   dedupeKey: string;
@@ -1330,12 +1332,13 @@ export async function sendReportEmail(input: {
     input.profile,
     input.branding
   );
-  const fromName = whiteLabelBranding?.agency_name || "SitePulse";
+  const fromName = whiteLabelBranding?.email_from_name || whiteLabelBranding?.agency_name || "SitePulse";
   const accent = whiteLabelBranding?.brand_color || "#3B82F6";
   const reportBrandName = whiteLabelBranding?.agency_name || "SitePulse";
   const reportBrandLogoUrl = whiteLabelBranding?.logo_url
     ? ensureHttpsUrl(whiteLabelBranding.logo_url)
     : null;
+  const replyTo = whiteLabelBranding?.reply_to_email?.trim() || undefined;
   const reportMeta = getReportEmailMeta({
     deliveryMode: input.deliveryMode,
     frequency: input.frequency
@@ -1350,10 +1353,12 @@ export async function sendReportEmail(input: {
   const billingUrl = `${emailBaseUrl}/dashboard/billing`;
   const unsubscribeUrl = `${emailBaseUrl}/dashboard/settings`;
   const helpUrl = `${emailBaseUrl}/contact`;
-  const liveDashboardUrl = ensureHttpsUrl(input.dashboardUrl);
-  const dashboardLinkTextRaw = stripProtocol(liveDashboardUrl);
+  const liveDashboardUrl = input.dashboardUrl ? ensureHttpsUrl(input.dashboardUrl) : null;
+  const dashboardLinkTextRaw = liveDashboardUrl ? stripProtocol(liveDashboardUrl) : null;
   const dashboardLinkText =
-    dashboardLinkTextRaw.length > 44 ? `${dashboardLinkTextRaw.slice(0, 41)}...` : dashboardLinkTextRaw;
+    dashboardLinkTextRaw && dashboardLinkTextRaw.length > 44
+      ? `${dashboardLinkTextRaw.slice(0, 41)}...`
+      : dashboardLinkTextRaw;
   const performanceDelta =
     input.previousScan !== null && input.previousScan !== undefined
       ? input.scan.performance_score - input.previousScan.performance_score
@@ -1503,9 +1508,13 @@ export async function sendReportEmail(input: {
         ? `${reportMeta.label} Report: Performance improved by ${performanceDelta} points`
         : `${reportMeta.label} Website Report for ${clientWebsiteName}`;
   const reportPreheader =
-    input.deliveryMode === "manual"
-      ? `A fresh client-ready report for ${clientWebsiteName} is attached with a live dashboard link.`
-      : `${reportMeta.label} score changes, quick wins, and the attached report for ${clientWebsiteName}.`;
+    liveDashboardUrl
+      ? input.deliveryMode === "manual"
+        ? `A fresh client-ready report for ${clientWebsiteName} is attached with a live dashboard link.`
+        : `${reportMeta.label} score changes, quick wins, and the attached report for ${clientWebsiteName}.`
+      : input.deliveryMode === "manual"
+        ? `A fresh client-ready report for ${clientWebsiteName} is attached.`
+        : `${reportMeta.label} score changes, quick wins, and the attached report for ${clientWebsiteName}.`;
   const headerBrandMarkup = reportBrandLogoUrl
     ? `
         <div style="display:flex;align-items:center;gap:12px;">
@@ -1564,8 +1573,10 @@ export async function sendReportEmail(input: {
       recipient: input.to,
       reportMode: reportLabelLower,
       reportFrequency: input.frequency,
+      clientDashboardEnabled: Boolean(liveDashboardUrl),
       dedupeKey: input.dedupeKey
     },
+    replyTo,
     html: `
       ${renderPreheader(reportPreheader)}
       <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#F4F6F9;margin:0;padding:0;">
@@ -1707,12 +1718,13 @@ export async function sendReportEmail(input: {
                         ${sectionDivider()}
                       </td>
                     </tr>
+                    ${liveDashboardUrl ? `
                     <tr>
                       <td style="padding:0;">
                         <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #BFDBFE;border-radius:8px;background:#EFF6FF;">
                           <tr>
                             <td style="padding:22px 22px 20px 22px;text-align:center;">
-                                              <p style="margin:0 0 8px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#2563EB;font-weight:700;">
+                              <p style="margin:0 0 8px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#2563EB;font-weight:700;">
                                 &#128202; Your live dashboard
                               </p>
                               <p style="margin:0 0 16px 0;font-size:22px;line-height:30px;font-weight:700;color:#1D4ED8;">
@@ -1722,19 +1734,19 @@ export async function sendReportEmail(input: {
                                 <tr>
                                   <td align="center" style="border-radius:8px;background:#2563EB;">
                                     <a href="${escapeHtml(liveDashboardUrl)}" style="display:inline-block;padding:14px 24px;font-size:15px;line-height:20px;font-weight:700;color:#FFFFFF;text-decoration:none;">
-                                      View Your Dashboard &rarr;
+                                      View Live Dashboard &rarr;
                                     </a>
                                   </td>
                                 </tr>
                               </table>
                               <p style="margin:12px 0 0 0;font-size:12px;line-height:18px;color:#6B7280;">
-                                ${escapeHtml(dashboardLinkText)}
+                                ${escapeHtml(dashboardLinkText ?? "")}
                               </p>
                             </td>
                           </tr>
                         </table>
                       </td>
-                    </tr>
+                    </tr>` : ""}
                   </table>
                 </td>
               </tr>

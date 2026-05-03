@@ -1,4 +1,5 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
+import { ensureMagicTokenForWebsite } from "@/lib/client-token";
 import { buildHealthScore } from "@/lib/health-score";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { PLAN_LIMITS } from "@/lib/utils";
@@ -146,6 +147,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (parsed.data.email_notifications !== undefined) {
     websiteUpdates.email_notifications = parsed.data.email_notifications;
   }
+  if (parsed.data.client_dashboard_enabled !== undefined) {
+    websiteUpdates.client_dashboard_enabled = parsed.data.client_dashboard_enabled;
+  }
   if (parsed.data.competitor_urls !== undefined) {
     websiteUpdates.competitor_urls = parsed.data.competitor_urls.slice(0, 3);
   }
@@ -184,10 +188,18 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       .single();
   }
 
-  const website = updateResult.data ? normalizeWebsiteNotificationFields(updateResult.data) : null;
+  let website = updateResult.data ? normalizeWebsiteNotificationFields(updateResult.data) : null;
 
   if (updateResult.error || !website) {
     return apiError(updateResult.error?.message ?? "Unable to update website.", 500);
+  }
+
+  if (website.client_dashboard_enabled && !website.magic_token) {
+    const magicToken = await ensureMagicTokenForWebsite(params.id);
+    website = {
+      ...website,
+      magic_token: magicToken
+    };
   }
 
   if (parsed.data.frequency) {

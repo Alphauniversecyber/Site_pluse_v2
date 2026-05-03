@@ -48,12 +48,19 @@ export async function PUT(request: Request) {
   }
 
   const admin = createSupabaseAdminClient();
+  const normalizedBranding = {
+    ...parsed.data,
+    logo_url: parsed.data.logo_url?.trim() || null,
+    reply_to_email: parsed.data.reply_to_email?.trim() || null,
+    agency_website_url: parsed.data.agency_website_url?.trim() || null,
+    report_footer_text: parsed.data.report_footer_text?.trim() || null
+  };
   const { data: branding, error } = await admin
     .from("agency_branding")
     .upsert(
       {
         user_id: workspace.workspaceOwnerId,
-        ...parsed.data
+        ...normalizedBranding
       },
       {
         onConflict: "user_id"

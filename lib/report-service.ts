@@ -463,13 +463,19 @@ export async function sendStoredReportEmail(input: {
       securityHeaders,
       uptimeChecks
     }).overall;
-    const dashboardToken = await ensureMagicTokenForWebsite(website.id);
-    const dashboardBaseUrl =
-      process.env.NEXT_PUBLIC_BASE_URL ??
-      process.env.APP_URL ??
-      process.env.NEXT_PUBLIC_APP_URL ??
-      "http://localhost:3000";
-    const dashboardUrl = `${dashboardBaseUrl.replace(/\/$/, "")}/d/${dashboardToken}`;
+    const dashboardUrl = website.client_dashboard_enabled
+      ? (() => {
+          const dashboardBaseUrl =
+            process.env.NEXT_PUBLIC_BASE_URL ??
+            process.env.APP_URL ??
+            process.env.NEXT_PUBLIC_APP_URL ??
+            "http://localhost:3000";
+          return `${dashboardBaseUrl.replace(/\/$/, "")}/d/`;
+        })()
+      : null;
+    const dashboardToken = website.client_dashboard_enabled
+      ? await ensureMagicTokenForWebsite(website.id)
+      : null;
     const deliveries: Array<{
       recipient: string;
       messageId: string;
@@ -491,7 +497,7 @@ export async function sendStoredReportEmail(input: {
           securityHeaders,
           brokenLinks,
           pdfBuffer,
-          dashboardUrl,
+          dashboardUrl: dashboardUrl && dashboardToken ? `${dashboardUrl}${dashboardToken}` : null,
           deliveryMode,
           frequency: emailFrequency,
           dedupeKey: buildEmailDedupeKey("report", report.id, recipient),

@@ -198,6 +198,9 @@ create table if not exists public.agency_branding (
   logo_url text,
   brand_color text not null default '#3B82F6',
   email_from_name text,
+  reply_to_email text,
+  agency_website_url text,
+  report_footer_text text,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -235,6 +238,7 @@ create table if not exists public.websites (
   extra_recipients text[] not null default '{}'::text[],
   auto_email_reports boolean not null default true,
   email_notifications boolean not null default true,
+  client_dashboard_enabled boolean not null default false,
   competitor_urls jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
@@ -529,6 +533,7 @@ alter table public.websites add column if not exists report_frequency text;
 alter table public.websites add column if not exists extra_recipients text[];
 alter table public.websites add column if not exists auto_email_reports boolean;
 alter table public.websites add column if not exists email_notifications boolean;
+alter table public.websites add column if not exists client_dashboard_enabled boolean not null default false;
 alter table public.websites add column if not exists magic_token text;
 alter table public.websites add column if not exists gsc_access_token text;
 alter table public.websites add column if not exists gsc_refresh_token text;
@@ -563,6 +568,11 @@ alter table public.websites alter column auto_email_reports set default true;
 alter table public.websites alter column auto_email_reports set not null;
 alter table public.websites alter column email_notifications set default true;
 alter table public.websites alter column email_notifications set not null;
+alter table public.websites alter column client_dashboard_enabled set default false;
+alter table public.websites alter column client_dashboard_enabled set not null;
+alter table public.agency_branding add column if not exists reply_to_email text;
+alter table public.agency_branding add column if not exists agency_website_url text;
+alter table public.agency_branding add column if not exists report_footer_text text;
 alter table public.users alter column subscription_status set default 'inactive';
 alter table public.users drop column if exists stripe_customer_id;
 alter table public.users drop column if exists stripe_subscription_id;

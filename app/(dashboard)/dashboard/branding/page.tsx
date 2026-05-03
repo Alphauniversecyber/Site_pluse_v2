@@ -5,13 +5,14 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
-import { LogoPreview } from "@/components/brand/logo-preview";
+import { BrandingPreviewPanel } from "@/components/dashboard/branding-preview-panel";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { isTrialActive } from "@/lib/trial";
 import { buildStoragePath } from "@/lib/utils";
@@ -33,7 +34,10 @@ export default function BrandingPage() {
       agency_name: "",
       brand_color: "#3B82F6",
       email_from_name: "",
-      logo_url: ""
+      logo_url: "",
+      reply_to_email: "",
+      agency_website_url: "",
+      report_footer_text: ""
     }
   });
 
@@ -46,9 +50,14 @@ export default function BrandingPage() {
       agency_name: branding.agency_name,
       brand_color: branding.brand_color,
       email_from_name: branding.email_from_name ?? branding.agency_name,
-      logo_url: branding.logo_url ?? ""
+      logo_url: branding.logo_url ?? "",
+      reply_to_email: branding.reply_to_email ?? "",
+      agency_website_url: branding.agency_website_url ?? "",
+      report_footer_text: branding.report_footer_text ?? ""
     });
   }, [branding, form]);
+
+  const previewValues = form.watch();
 
   const uploadLogo = async (file: File) => {
     if (!user) {
@@ -166,6 +175,15 @@ export default function BrandingPage() {
                 )}
               </div>
               <div className="space-y-2">
+                <Label htmlFor="reply-to-email">Reply-to email</Label>
+                <Input id="reply-to-email" type="email" aria-invalid={Boolean(form.formState.errors.reply_to_email)} {...form.register("reply_to_email")} />
+                {form.formState.errors.reply_to_email ? (
+                  <p className="text-sm text-rose-400">{form.formState.errors.reply_to_email.message}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Clients who reply to report emails will reach this address instead of SitePulse.</p>
+                )}
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="logo-url">Logo URL</Label>
                 <Input id="logo-url" aria-invalid={Boolean(form.formState.errors.logo_url)} {...form.register("logo_url")} />
                 {form.formState.errors.logo_url ? (
@@ -191,6 +209,29 @@ export default function BrandingPage() {
                   Horizontal and square logos are both supported. Previews use contain mode so nothing gets cropped.
                 </p>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="agency-website-url">Agency website URL</Label>
+                <Input id="agency-website-url" type="url" aria-invalid={Boolean(form.formState.errors.agency_website_url)} {...form.register("agency_website_url")} />
+                {form.formState.errors.agency_website_url ? (
+                  <p className="text-sm text-rose-400">{form.formState.errors.agency_website_url.message}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Shown in the PDF report footer so clients can find your agency.</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="report-footer-text">Report footer text</Label>
+                <Textarea
+                  id="report-footer-text"
+                  maxLength={200}
+                  aria-invalid={Boolean(form.formState.errors.report_footer_text)}
+                  {...form.register("report_footer_text")}
+                />
+                {form.formState.errors.report_footer_text ? (
+                  <p className="text-sm text-rose-400">{form.formState.errors.report_footer_text.message}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Custom message shown at the bottom of every PDF report.</p>
+                )}
+              </div>
               <Button type="submit" disabled={saving}>
                 {saving ? "Saving..." : "Save branding"}
               </Button>
@@ -203,48 +244,15 @@ export default function BrandingPage() {
             <CardTitle>Report preview</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="rounded-[2rem] border border-border bg-background p-4 sm:p-6">
-              <div className="overflow-hidden rounded-[1.75rem] border border-border bg-white shadow-[0_24px_60px_-36px_rgba(15,23,42,0.45)]" style={{ borderColor: form.watch("brand_color") }}>
-                <div className="bg-card px-5 py-5">
-                  <LogoPreview
-                    src={form.watch("logo_url")}
-                    alt={`${form.watch("agency_name") || "Agency"} logo`}
-                    fallbackTitle="Your logo will appear here"
-                    fallbackBody="Upload a PNG, JPG, SVG, or ICO to preview branded reports."
-                    className="min-h-[84px] border-white/10 bg-white/5"
-                    imageClassName="max-h-14"
-                  />
-                </div>
-
-                <div className="space-y-6 px-5 py-6 text-slate-900">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Weekly report preview</p>
-                    <h3 className="mt-3 font-display text-3xl font-semibold">{form.watch("agency_name") || "Your Agency"}</h3>
-                    <p className="mt-2 text-slate-500">
-                      Sent from {form.watch("email_from_name") || "Your team"} to clients and stakeholders.
-                    </p>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {[
-                      ["Performance", "91"],
-                      ["Accessibility", "88"],
-                      ["SEO", "94"],
-                      ["Best Practices", "90"]
-                    ].map(([label, value]) => (
-                      <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</p>
-                        <p className="mt-2 text-2xl font-semibold">{value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                    Branded PDFs and weekly emails keep your agency front and center without clipping, stretching, or awkward logo cropping.
-                  </div>
-                </div>
-              </div>
-            </div>
+            <BrandingPreviewPanel
+              agencyName={previewValues.agency_name || "Your Agency"}
+              brandColor={previewValues.brand_color || "#3B82F6"}
+              emailFromName={previewValues.email_from_name || previewValues.agency_name || "Your Agency"}
+              logoUrl={previewValues.logo_url || ""}
+              replyToEmail={previewValues.reply_to_email || ""}
+              agencyWebsiteUrl={previewValues.agency_website_url || ""}
+              reportFooterText={previewValues.report_footer_text || ""}
+            />
           </CardContent>
         </Card>
       </div>

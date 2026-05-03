@@ -6,7 +6,9 @@ import {
   Activity,
   AlertTriangle,
   Clock3,
+  Copy,
   FileDown,
+  Link2,
   Mail,
   Shield,
   ShieldCheck,
@@ -885,6 +887,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const [reportFrequency, setReportFrequency] = useState<ReportFrequency>("weekly");
   const [autoEmailReports, setAutoEmailReports] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
+  const [clientDashboardEnabled, setClientDashboardEnabled] = useState(false);
+  const [dashboardOrigin, setDashboardOrigin] = useState("");
   const [isPending, startTransition] = useTransition();
   const { paywallFeature, isExpired, closePaywall, requireAccess } = useTrialPaywall(workspace.workspaceProfile);
   const canManageWorkspace = workspace.activeWorkspace.role !== "viewer";
@@ -955,6 +959,16 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
     setEmailNotifications(data?.email_notifications ?? true);
   }, [data?.email_notifications]);
 
+  useEffect(() => {
+    setClientDashboardEnabled(data?.client_dashboard_enabled ?? false);
+  }, [data?.client_dashboard_enabled]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setDashboardOrigin(window.location.origin);
+    }
+  }, []);
+
   const currentScan = data?.scans?.[0] ?? null;
   const previousScan = data?.scans?.[1] ?? null;
   const currentScanFailed = currentScan?.scan_status === "failed";
@@ -969,6 +983,10 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const uptimeSummary = buildUptimeSummary(data?.uptime_checks ?? []);
   const competitorEntries = latestCompetitorEntries(data?.competitor_scans ?? []);
   const businessImpact = buildSiteBusinessImpact(currentScan ?? null);
+  const clientDashboardUrl =
+    clientDashboardEnabled && data?.magic_token && dashboardOrigin
+      ? `${dashboardOrigin}/d/${data.magic_token}`
+      : "";
 
   useEffect(() => {
     healthSignalAttemptCountsRef.current.clear();
@@ -1265,7 +1283,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             report_frequency: reportFrequency,
             extra_recipients: nextRecipients,
             auto_email_reports: autoEmailReports,
-            email_notifications: emailNotifications
+            email_notifications: emailNotifications,
+            client_dashboard_enabled: clientDashboardEnabled
           })
         });
 
@@ -1276,6 +1295,20 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
         toast.error(error instanceof Error ? error.message : "Unable to update website notification settings.");
       }
     });
+
+  const copyClientDashboardUrl = async () => {
+    if (!clientDashboardUrl) {
+      toast.error("Save this website first to generate the client dashboard URL.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(clientDashboardUrl);
+      toast.success("Client dashboard URL copied.");
+    } catch {
+      toast.error("Unable to copy the client dashboard URL.");
+    }
+  };
 
   if (loading) {
     return (
@@ -1459,6 +1492,45 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                   </p>
                 </div>
                 <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} disabled={isPending || !canManageWorkspace} />
+              </div>
+
+              <div className="rounded-2xl border border-border bg-background px-4 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium">Client Dashboard</p>
+                    <p className="text-sm text-muted-foreground">
+                      Share a live dashboard link with your client so they can view their site's performance anytime.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={clientDashboardEnabled}
+                    onCheckedChange={setClientDashboardEnabled}
+                    disabled={isPending || !canManageWorkspace}
+                  />
+                </div>
+
+                {clientDashboardEnabled ? (
+                  <div className="mt-4 rounded-2xl border border-border/80 bg-card p-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <Link2 className="h-4 w-4" />
+                      <span>Client dashboard URL</span>
+                    </div>
+
+                    {clientDashboardUrl ? (
+                      <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center">
+                        <Input value={clientDashboardUrl} readOnly className="font-mono text-xs sm:text-sm" />
+                        <Button type="button" variant="outline" onClick={copyClientDashboardUrl} className="md:shrink-0">
+                          <Copy className="mr-2 h-4 w-4" />
+                          Copy
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        Save settings to generate the stable client dashboard link for this website.
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>
 

@@ -321,7 +321,9 @@ function buildReportContext(
   const desktopScore = clampScore(input.scan.desktop_snapshot?.performance_score ?? input.scan.performance_score);
   const clientName = input.website.label || input.profile.full_name || input.website.url;
   const agencyName = whiteLabelBranding?.agency_name || "SitePulse";
-  const agencyEmail = whiteLabelBranding ? input.profile.email : process.env.FROM_EMAIL ?? input.profile.email;
+  const agencyEmail =
+    whiteLabelBranding?.reply_to_email?.trim() ||
+    (whiteLabelBranding ? input.profile.email : process.env.FROM_EMAIL ?? input.profile.email);
   const brandColor = whiteLabelBranding?.brand_color || "#2563EB";
   const monitoringSamples = (input.uptimeChecks ?? []).length;
 
@@ -330,6 +332,8 @@ function buildReportContext(
     agency_name: agencyName,
     agency_logo_url: whiteLabelBranding?.logo_url ?? "",
     agency_email: agencyEmail,
+    agency_website_url: whiteLabelBranding?.agency_website_url?.trim() ?? "",
+    report_footer_text: whiteLabelBranding?.report_footer_text?.trim() ?? "",
     brand_color: brandColor,
     client_name: clientName,
     website_url: input.website.url,

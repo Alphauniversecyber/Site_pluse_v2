@@ -60,6 +60,7 @@ export const websiteUpdateSchema = z.object({
   extra_recipients: z.array(z.string().email()).optional(),
   auto_email_reports: z.boolean().optional(),
   email_notifications: z.boolean().optional(),
+  client_dashboard_enabled: z.boolean().optional(),
   competitor_urls: z.array(z.string().url()).max(3).optional()
 });
 
@@ -156,5 +157,32 @@ export const brandingSchema = z.object({
   agency_name: z.string().trim().min(2, "Agency name is required."),
   brand_color: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "Use a valid hex color."),
   email_from_name: z.string().trim().min(2, "Email from name is required."),
-  logo_url: z.string().url().optional().or(z.literal("")).nullable()
+  logo_url: z.string().url().optional().or(z.literal("")).nullable(),
+  reply_to_email: z.string().trim().email("Enter a valid reply-to email.").optional().or(z.literal("")).nullable(),
+  agency_website_url: z
+    .string()
+    .trim()
+    .transform((value) => {
+      if (!value) {
+        return value;
+      }
+
+      return urlRegex.test(value) ? value : `https://${value}`;
+    })
+    .refine((value) => {
+      if (!value) {
+        return true;
+      }
+
+      try {
+        new URL(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Enter a valid agency website URL.")
+    .optional()
+    .or(z.literal(""))
+    .nullable(),
+  report_footer_text: z.string().trim().max(200, "Keep the footer text under 200 characters.").optional().or(z.literal("")).nullable()
 });
