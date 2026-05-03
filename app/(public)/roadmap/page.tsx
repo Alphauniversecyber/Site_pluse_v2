@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -35,33 +36,41 @@ const roadmapItems = [
 
 export default function RoadmapPage() {
   return (
-    <main className="container py-14 md:py-20">
-      <div className="mx-auto max-w-4xl">
-        <Badge>What&apos;s next</Badge>
-        <h1 className="mt-6 font-display text-4xl font-semibold tracking-tight md:text-5xl">
-          SitePulse Product Roadmap
-        </h1>
-        <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-          The roadmap is focused on making SitePulse more valuable as an agency growth system, not
-          just a monitoring dashboard.
-        </p>
+    <>
+      <BreadcrumbJsonLd
+        items={[
+          { name: "Home", item: "https://www.trysitepulse.com" },
+          { name: "Roadmap", item: "https://www.trysitepulse.com/roadmap" }
+        ]}
+      />
+      <main className="container py-14 md:py-20">
+        <div className="mx-auto max-w-4xl">
+          <Badge>What&apos;s next</Badge>
+          <h1 className="mt-6 font-display text-4xl font-semibold tracking-tight md:text-5xl">
+            SitePulse Product Roadmap
+          </h1>
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
+            The roadmap is focused on making SitePulse more valuable as an agency growth system, not
+            just a monitoring dashboard.
+          </p>
 
-        <div className="mt-10 grid gap-6">
-          {roadmapItems.map((item) => (
-            <Card key={item.title} className="border-border/80">
-              <CardHeader>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-                  {item.status}
-                </p>
-                <CardTitle>{item.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-7 text-muted-foreground">{item.details}</p>
-              </CardContent>
-            </Card>
-          ))}
+          <div className="mt-10 grid gap-6">
+            {roadmapItems.map((item) => (
+              <Card key={item.title} className="border-border/80">
+                <CardHeader>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
+                    {item.status}
+                  </p>
+                  <CardTitle>{item.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm leading-7 text-muted-foreground">{item.details}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }

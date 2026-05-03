@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { LegalPageShell } from "@/components/legal/legal-page-shell";
 
 export const metadata: Metadata = {
@@ -15,12 +16,19 @@ const lastUpdated = "April 8, 2026";
 
 export default function RefundPage() {
   return (
-    <LegalPageShell
-      eyebrow="Legal"
-      title="SitePulse Refund Policy"
-      intro="This Refund Policy explains how free trials, first charges, and refunds work for SitePulse subscriptions. All payments and refunds are processed through Paddle, which acts as Merchant of Record."
-      lastUpdated={lastUpdated}
-      sections={[
+    <>
+      <BreadcrumbJsonLd
+        items={[
+          { name: "Home", item: "https://www.trysitepulse.com" },
+          { name: "Refund Policy", item: "https://www.trysitepulse.com/refund" }
+        ]}
+      />
+      <LegalPageShell
+        eyebrow="Legal"
+        title="SitePulse Refund Policy"
+        intro="This Refund Policy explains how free trials, first charges, and refunds work for SitePulse subscriptions. All payments and refunds are processed through Paddle, which acts as Merchant of Record."
+        lastUpdated={lastUpdated}
+        sections={[
         {
           title: "1. Free Trial for Paid Plans",
           paragraphs: [
@@ -63,7 +71,8 @@ export default function RefundPage() {
             "We may request additional details needed to locate the order in Paddle and review eligibility."
           ]
         }
-      ]}
-    />
+        ]}
+      />
+    </>
   );
 }

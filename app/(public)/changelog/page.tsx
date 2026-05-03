@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -35,33 +36,41 @@ const updates = [
 
 export default function ChangelogPage() {
   return (
-    <main className="container py-14 md:py-20">
-      <div className="mx-auto max-w-4xl">
-        <Badge>Product updates</Badge>
-        <h1 className="mt-6 font-display text-4xl font-semibold tracking-tight md:text-5xl">
-          SitePulse Product Changelog
-        </h1>
-        <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-          Follow the latest improvements across monitoring, reporting, billing, and client-delivery
-          workflows.
-        </p>
+    <>
+      <BreadcrumbJsonLd
+        items={[
+          { name: "Home", item: "https://www.trysitepulse.com" },
+          { name: "Changelog", item: "https://www.trysitepulse.com/changelog" }
+        ]}
+      />
+      <main className="container py-14 md:py-20">
+        <div className="mx-auto max-w-4xl">
+          <Badge>Product updates</Badge>
+          <h1 className="mt-6 font-display text-4xl font-semibold tracking-tight md:text-5xl">
+            SitePulse Product Changelog
+          </h1>
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
+            Follow the latest improvements across monitoring, reporting, billing, and client-delivery
+            workflows.
+          </p>
 
-        <div className="mt-10 space-y-6">
-          {updates.map((update) => (
-            <Card key={update.title} className="border-border/80">
-              <CardHeader>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-                  {update.date}
-                </p>
-                <CardTitle>{update.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-7 text-muted-foreground">{update.details}</p>
-              </CardContent>
-            </Card>
-          ))}
+          <div className="mt-10 space-y-6">
+            {updates.map((update) => (
+              <Card key={update.title} className="border-border/80">
+                <CardHeader>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
+                    {update.date}
+                  </p>
+                  <CardTitle>{update.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm leading-7 text-muted-foreground">{update.details}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }

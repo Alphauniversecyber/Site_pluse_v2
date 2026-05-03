@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AgencyPricingPage } from "@/components/landing/agency-pricing-page";
+import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 
 export const metadata: Metadata = {
   title: "Pricing — SitePulse",
@@ -12,5 +13,15 @@ export const metadata: Metadata = {
 };
 
 export default function PricingPage() {
-  return <AgencyPricingPage />;
+  return (
+    <>
+      <BreadcrumbJsonLd
+        items={[
+          { name: "Home", item: "https://www.trysitepulse.com" },
+          { name: "Pricing", item: "https://www.trysitepulse.com/pricing" }
+        ]}
+      />
+      <AgencyPricingPage />
+    </>
+  );
 }

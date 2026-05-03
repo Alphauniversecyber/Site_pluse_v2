@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AgencyFeaturesPage } from "@/components/landing/agency-features-page";
+import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 
 export const metadata: Metadata = {
   title: "Features — SitePulse",
@@ -12,5 +13,15 @@ export const metadata: Metadata = {
 };
 
 export default function FeaturesPage() {
-  return <AgencyFeaturesPage />;
+  return (
+    <>
+      <BreadcrumbJsonLd
+        items={[
+          { name: "Home", item: "https://www.trysitepulse.com" },
+          { name: "Features", item: "https://www.trysitepulse.com/features" }
+        ]}
+      />
+      <AgencyFeaturesPage />
+    </>
+  );
 }

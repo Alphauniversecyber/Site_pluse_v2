@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { LegalPageShell } from "@/components/legal/legal-page-shell";
 
 export const metadata: Metadata = {
@@ -15,12 +16,19 @@ const lastUpdated = "April 8, 2026";
 
 export default function PrivacyPage() {
   return (
-    <LegalPageShell
-      eyebrow="Legal"
-      title="SitePulse Privacy Policy"
-      intro="This Privacy Policy explains what personal data SitePulse collects, how we use it, how it is stored, and what rights you have in relation to your information."
-      lastUpdated={lastUpdated}
-      sections={[
+    <>
+      <BreadcrumbJsonLd
+        items={[
+          { name: "Home", item: "https://www.trysitepulse.com" },
+          { name: "Privacy Policy", item: "https://www.trysitepulse.com/privacy" }
+        ]}
+      />
+      <LegalPageShell
+        eyebrow="Legal"
+        title="SitePulse Privacy Policy"
+        intro="This Privacy Policy explains what personal data SitePulse collects, how we use it, how it is stored, and what rights you have in relation to your information."
+        lastUpdated={lastUpdated}
+        sections={[
         {
           title: "1. Information We Collect",
           paragraphs: [
@@ -93,7 +101,8 @@ export default function PrivacyPage() {
             "We may update this Privacy Policy from time to time. If we make material changes, we may notify you through the service or by email. Your continued use of SitePulse after the revised policy takes effect means you accept the updated policy."
           ]
         }
-      ]}
-    />
+        ]}
+      />
+    </>
   );
 }

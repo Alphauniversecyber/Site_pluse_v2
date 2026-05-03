@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -30,36 +31,44 @@ const contactCards = [
 
 export default function ContactPage() {
   return (
-    <main className="container py-14 md:py-20">
-      <div className="mx-auto max-w-4xl">
-        <Badge>Contact</Badge>
-        <h1 className="mt-6 font-display text-4xl font-semibold tracking-tight md:text-5xl">
-          Contact SitePulse
-        </h1>
-        <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-          Reach out if you need help evaluating SitePulse, setting up billing, or handling account
-          and privacy requests.
-        </p>
+    <>
+      <BreadcrumbJsonLd
+        items={[
+          { name: "Home", item: "https://www.trysitepulse.com" },
+          { name: "Contact", item: "https://www.trysitepulse.com/contact" }
+        ]}
+      />
+      <main className="container py-14 md:py-20">
+        <div className="mx-auto max-w-4xl">
+          <Badge>Contact</Badge>
+          <h1 className="mt-6 font-display text-4xl font-semibold tracking-tight md:text-5xl">
+            Contact SitePulse
+          </h1>
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
+            Reach out if you need help evaluating SitePulse, setting up billing, or handling account
+            and privacy requests.
+          </p>
 
-        <div className="mt-10 grid gap-6 md:grid-cols-2">
-          {contactCards.map((card) => (
-            <Card key={card.title} className="border-border/80">
-              <CardHeader>
-                <CardTitle>{card.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm leading-7 text-muted-foreground">{card.detail}</p>
-                <a
-                  href={card.href}
-                  className="text-sm font-medium text-primary transition-colors duration-150 ease-out hover:text-foreground"
-                >
-                  {card.label}
-                </a>
-              </CardContent>
-            </Card>
-          ))}
+          <div className="mt-10 grid gap-6 md:grid-cols-2">
+            {contactCards.map((card) => (
+              <Card key={card.title} className="border-border/80">
+                <CardHeader>
+                  <CardTitle>{card.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm leading-7 text-muted-foreground">{card.detail}</p>
+                  <a
+                    href={card.href}
+                    className="text-sm font-medium text-primary transition-colors duration-150 ease-out hover:text-foreground"
+                  >
+                    {card.label}
+                  </a>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }

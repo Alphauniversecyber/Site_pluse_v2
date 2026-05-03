@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AgencyGrowthHome } from "@/components/landing/agency-growth-home";
+import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { getBillingPlans } from "@/lib/billing-config";
 
 export const metadata: Metadata = {
@@ -15,5 +16,12 @@ export const metadata: Metadata = {
 export default async function LandingPage() {
   const plans = await getBillingPlans();
 
-  return <AgencyGrowthHome plans={plans} />;
+  return (
+    <>
+      <BreadcrumbJsonLd
+        items={[{ name: "Home", item: "https://www.trysitepulse.com" }]}
+      />
+      <AgencyGrowthHome plans={plans} />
+    </>
+  );
 }

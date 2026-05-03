@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { LegalPageShell } from "@/components/legal/legal-page-shell";
 
 export const metadata: Metadata = {
@@ -15,12 +16,19 @@ const lastUpdated = "April 8, 2026";
 
 export default function TermsPage() {
   return (
-    <LegalPageShell
-      eyebrow="Legal"
-      title="SitePulse Terms of Service"
-      intro="These Terms of Service govern your use of SitePulse, a SaaS platform that helps agencies scan websites, monitor website health, generate client-ready reports, and manage recurring proof of value for their clients."
-      lastUpdated={lastUpdated}
-      sections={[
+    <>
+      <BreadcrumbJsonLd
+        items={[
+          { name: "Home", item: "https://www.trysitepulse.com" },
+          { name: "Terms of Service", item: "https://www.trysitepulse.com/terms" }
+        ]}
+      />
+      <LegalPageShell
+        eyebrow="Legal"
+        title="SitePulse Terms of Service"
+        intro="These Terms of Service govern your use of SitePulse, a SaaS platform that helps agencies scan websites, monitor website health, generate client-ready reports, and manage recurring proof of value for their clients."
+        lastUpdated={lastUpdated}
+        sections={[
         {
           title: "1. Service Description",
           paragraphs: [
@@ -98,7 +106,8 @@ export default function TermsPage() {
             "We may update these Terms of Service from time to time. If we make material changes, we may provide notice through the platform or by email. Continued use of SitePulse after updated terms become effective constitutes acceptance of the revised terms."
           ]
         }
-      ]}
-    />
+        ]}
+      />
+    </>
   );
 }

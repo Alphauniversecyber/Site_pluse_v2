@@ -76,17 +76,13 @@ export function SiteHeader() {
     };
   }, [isAuthenticated]);
 
-  const guestLinks = [
+  const mainLinks = [
+    { href: "/", label: "Home" },
     { href: "/features", label: "Features" },
     { href: "/pricing", label: "Pricing" },
-    { href: "/login", label: "Login" }
+    { href: "/about", label: "About" },
+    { href: "/blog", label: "Blog" }
   ] as const;
-  const authenticatedLinks = [
-    { href: "/features", label: "Features" },
-    { href: "/pricing", label: "Pricing" },
-    { href: "/dashboard/reports", label: "My Reports", showUnread: true }
-  ] as const;
-  const links = isAuthenticated ? authenticatedLinks : guestLinks;
 
   const myReportsHref = "/dashboard/reports";
 
@@ -112,8 +108,8 @@ export function SiteHeader() {
             Agency growth system
           </p>
         </Link>
-        <nav className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
-          {links.map((item) => (
+        <nav aria-label="Main navigation" className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
+          {mainLinks.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -122,14 +118,7 @@ export function SiteHeader() {
                 pathname === item.href ? "text-foreground" : ""
               )}
             >
-              <span className="relative inline-flex items-center gap-2">
-                {item.label}
-                {"showUnread" in item && item.showUnread && unreadCount > 0 ? (
-                  <span className="relative inline-flex h-2.5 w-2.5">
-                    <span className="absolute inset-0 rounded-full bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.45)]" />
-                  </span>
-                ) : null}
-              </span>
+              <span className="relative inline-flex items-center gap-2">{item.label}</span>
             </Link>
           ))}
         </nav>
@@ -139,6 +128,18 @@ export function SiteHeader() {
             <>
               <Button asChild>
                 <Link href="/dashboard">Go to Dashboard</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={myReportsHref}>
+                  <span className="relative inline-flex items-center gap-2">
+                    My Reports
+                    {unreadCount > 0 ? (
+                      <span className="relative inline-flex h-2.5 w-2.5">
+                        <span className="absolute inset-0 rounded-full bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.45)]" />
+                      </span>
+                    ) : null}
+                  </span>
+                </Link>
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -186,9 +187,14 @@ export function SiteHeader() {
               </DropdownMenu>
             </>
           ) : (
-            <Button asChild>
-              <Link href="/#free-scan">Scan a website (free)</Link>
-            </Button>
+            <>
+              <Button asChild variant="outline">
+                <Link href="/login">Login</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/#free-scan">Scan a website (free)</Link>
+              </Button>
+            </>
           )}
         </div>
 
@@ -248,8 +254,8 @@ export function SiteHeader() {
               </SheetDescription>
             </SheetHeader>
 
-            <nav className="mt-8 space-y-2">
-              {links.map((item) => (
+            <nav aria-label="Mobile navigation" className="mt-8 space-y-2">
+              {mainLinks.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -260,14 +266,7 @@ export function SiteHeader() {
                       : "text-muted-foreground hover:bg-card hover:text-foreground"
                   )}
                 >
-                  <span className="relative inline-flex items-center gap-2">
-                    {item.label}
-                    {"showUnread" in item && item.showUnread && unreadCount > 0 ? (
-                      <span className="relative inline-flex h-2.5 w-2.5">
-                        <span className="absolute inset-0 rounded-full bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.45)]" />
-                      </span>
-                    ) : null}
-                  </span>
+                  <span className="relative inline-flex items-center gap-2">{item.label}</span>
                 </Link>
               ))}
             </nav>
@@ -280,9 +279,22 @@ export function SiteHeader() {
               </Button>
               {isAuthenticated ? (
                 <Button asChild variant="outline" className="mt-3 w-full">
-                  <Link href={myReportsHref}>Open My Reports</Link>
+                  <Link href={myReportsHref}>
+                    <span className="relative inline-flex items-center gap-2">
+                      Open My Reports
+                      {unreadCount > 0 ? (
+                        <span className="relative inline-flex h-2.5 w-2.5">
+                          <span className="absolute inset-0 rounded-full bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.45)]" />
+                        </span>
+                      ) : null}
+                    </span>
+                  </Link>
                 </Button>
-              ) : null}
+              ) : (
+                <Button asChild variant="outline" className="mt-3 w-full">
+                  <Link href="/login">Login</Link>
+                </Button>
+              )}
             </div>
           </SheetContent>
         </Sheet>

@@ -63,6 +63,22 @@ const organizationSchema = {
   ]
 };
 
+const websiteSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "SitePulse",
+  url: "https://www.trysitepulse.com",
+  description: "SEO audit and reporting tool for digital agencies",
+  potentialAction: {
+    "@type": "SearchAction",
+    target: {
+      "@type": "EntryPoint",
+      urlTemplate: "https://www.trysitepulse.com/?q={search_term_string}"
+    },
+    "query-input": "required name=search_term_string"
+  }
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.trysitepulse.com"),
   title: {
@@ -135,6 +151,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className={`${manrope.variable} ${spaceGrotesk.variable}`}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
