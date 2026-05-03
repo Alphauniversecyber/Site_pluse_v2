@@ -36,6 +36,7 @@ export async function generateScanPdf(input: {
   try {
     return await renderBrowserPdf(input);
   } catch (error) {
+    // TODO: Consolidate the jsPDF fallback onto renderReportHtml so both PDF paths share one layout source of truth.
     console.warn("[reports:pdf] Browser PDF renderer failed. Falling back to jsPDF renderer.", {
       websiteId: input.website.id,
       scanId: input.scan.id,

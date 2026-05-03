@@ -4,6 +4,28 @@ import { canManageWorkspace, resolveWorkspaceContext } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 
+export async function GET() {
+  const { profile, errorResponse } = await requireApiUser();
+  if (errorResponse || !profile) {
+    return errorResponse;
+  }
+
+  const workspace = await resolveWorkspaceContext(profile);
+  const admin = createSupabaseAdminClient();
+
+  const { data, error } = await admin
+    .from("notifications")
+    .select("id,user_id,website_id,type,title,body,is_read,severity,metadata,created_at")
+    .eq("user_id", workspace.workspaceOwnerId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return apiError(error.message, 500);
+  }
+
+  return apiSuccess(data ?? []);
+}
+
 export async function DELETE() {
   const { user, profile, errorResponse } = await requireApiUser();
   if (errorResponse || !profile || !user) {

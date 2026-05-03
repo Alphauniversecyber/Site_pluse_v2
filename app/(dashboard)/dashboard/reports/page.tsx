@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { ArrowUpRight, Download, Mail, Search, Sparkles } from "lucide-react";
+import { ArrowUpRight, Download, Eye, FileText, Mail, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { AddWebsiteButton } from "@/components/trial/AddWebsiteButton";
 import { TrialPaywall } from "@/components/trial/TrialPaywall";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -90,12 +92,18 @@ function MetricPill({
 }
 
 export default function ReportsPage() {
-  const { websites } = useWebsites({ view: "summary" });
+  const { websites, loading: websitesLoading } = useWebsites({ view: "summary" });
   const workspace = useWorkspace();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [viewerLoadingId, setViewerLoadingId] = useState<string | null>(null);
+  const [viewerReport, setViewerReport] = useState<{
+    id: string;
+    websiteLabel: string;
+    signedUrl: string;
+  } | null>(null);
   const { paywallFeature, isExpired, closePaywall, requireAccess } = useTrialPaywall(workspace.workspaceProfile);
   const canManageWorkspace = workspace.activeWorkspace.role !== "viewer";
 
@@ -164,6 +172,22 @@ export default function ReportsPage() {
         toast.error(error instanceof Error ? error.message : "Unable to download report.");
       }
     });
+
+  async function openReportViewer(report: Report) {
+    try {
+      setViewerLoadingId(report.id);
+      const result = await fetchJson<{ signedUrl: string }>(`/api/reports/${report.id}`);
+      setViewerReport({
+        id: report.id,
+        websiteLabel: websiteLabels.get(report.website_id)?.label ?? report.website_id,
+        signedUrl: result.signedUrl
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to open report.");
+    } finally {
+      setViewerLoadingId(null);
+    }
+  }
 
   const sendReport = (id: string) =>
     startTransition(async () => {
@@ -256,7 +280,20 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {loading ? (
+          {!loading && !websitesLoading && !websites.length ? (
+            <EmptyState
+              icon={FileText}
+              title="No reports yet"
+              description="Add a website and SitePulse will automatically generate your first audit report."
+              action={
+                canManageWorkspace ? (
+                  <AddWebsiteButton profile={workspace.workspaceProfile} websiteCount={0}>
+                    Add a website &rarr;
+                  </AddWebsiteButton>
+                ) : undefined
+              }
+            />
+          ) : loading || websitesLoading ? (
             <div className="space-y-4">
               {Array.from({ length: 4 }).map((_, index) => (
                 <div key={index} className="rounded-[1.75rem] border border-slate-200/90 bg-white/90 p-5 shadow-[0_18px_48px_-34px_rgba(15,23,42,0.14)] dark:border-border/80 dark:bg-background/70 dark:shadow-none">
@@ -316,7 +353,18 @@ export default function ReportsPage() {
                         </div>
                       </div>
 
-                      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                      <div className={cn("mt-5 grid gap-2", canManageWorkspace ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+                        <Button
+                          variant="outline"
+                          className="h-11 justify-center rounded-2xl"
+                          onClick={() => {
+                            void openReportViewer(report);
+                          }}
+                          disabled={viewerLoadingId === report.id}
+                        >
+                          <Eye className="h-4 w-4" />
+                          {viewerLoadingId === report.id ? "Opening..." : "View PDF"}
+                        </Button>
                         <Button
                           variant="outline"
                           className="h-11 justify-center rounded-2xl"
@@ -424,6 +472,20 @@ export default function ReportsPage() {
                                 <Button
                                   variant="outline"
                                   className="h-11 justify-between rounded-2xl px-4"
+                                  onClick={() => {
+                                    void openReportViewer(report);
+                                  }}
+                                  disabled={viewerLoadingId === report.id}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <Eye className="h-4 w-4" />
+                                    {viewerLoadingId === report.id ? "Opening" : "View PDF"}
+                                  </span>
+                                  <ArrowUpRight className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  className="h-11 justify-between rounded-2xl px-4"
                                   onClick={() =>
                                     requireAccess("download_report", () => downloadReport(report.id))
                                   }
@@ -470,6 +532,39 @@ export default function ReportsPage() {
           )}
         </CardContent>
       </Card>
+      <Dialog open={Boolean(viewerReport)} onOpenChange={(open) => !open && setViewerReport(null)}>
+        <DialogContent className="h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none gap-0 overflow-hidden rounded-[2rem] p-0 [&>button]:hidden">
+          <DialogHeader className="flex flex-row items-center justify-between border-b border-border px-5 py-4">
+            <div>
+              <DialogTitle>{viewerReport?.websiteLabel ?? "Report PDF"}</DialogTitle>
+              <p className="mt-1 text-sm text-muted-foreground">Embedded report preview</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {viewerReport ? (
+                <Button
+                  variant="outline"
+                  onClick={() => window.open(viewerReport.signedUrl, "_blank", "noopener,noreferrer")}
+                >
+                  <Download className="h-4 w-4" />
+                  Download
+                </Button>
+              ) : null}
+              <Button variant="ghost" onClick={() => setViewerReport(null)}>
+                Close
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 bg-slate-950/5">
+            {viewerReport ? (
+              <iframe
+                title={`${viewerReport.websiteLabel} report PDF`}
+                src={viewerReport.signedUrl}
+                className="h-full w-full border-0"
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
       <TrialPaywall
         isOpen={paywallFeature !== null}
         onClose={closePaywall}

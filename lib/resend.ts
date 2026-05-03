@@ -13,7 +13,7 @@ import type {
   Website
 } from "@/types";
 import { hasSentEmailWithDedupeKey, logEmailDelivery } from "@/lib/admin/logging";
-import { getReportEmailMeta } from "@/lib/email-utils";
+import { buildReportEmailTemplate } from "@/lib/report-email-template";
 import { formatDateTime, getBaseUrl } from "@/lib/utils";
 
 let resendClient: Resend | null = null;
@@ -1329,242 +1329,30 @@ export async function sendReportEmail(input: {
   triggeredAt?: string | null;
 }) {
   const baseUrl = getBaseUrl();
-  const { whiteLabelEnabled, branding: whiteLabelBranding } = getReportEmailBranding(
-    input.profile,
-    input.branding
-  );
-  const fromName = whiteLabelBranding?.email_from_name || whiteLabelBranding?.agency_name || "SitePulse";
-  const accent = whiteLabelBranding?.brand_color || "#3B82F6";
-  const reportBrandName = whiteLabelBranding?.agency_name || "SitePulse";
-  const reportBrandLogoUrl = whiteLabelBranding?.logo_url
-    ? ensureHttpsUrl(whiteLabelBranding.logo_url)
-    : null;
-  const replyTo = whiteLabelBranding?.reply_to_email?.trim() || undefined;
-  const reportMeta = getReportEmailMeta({
-    deliveryMode: input.deliveryMode,
-    frequency: input.frequency
-  });
-  const clientWebsiteName = getClientWebsiteName(input.website);
-  const websiteHost = stripProtocol(input.website.url);
-  const reportDate = formatReportDate(input.scan.scanned_at);
-  const reportMonthYear = formatReportMonthYear(input.scan.scanned_at);
-  const emailBaseUrl = ensureHttpsUrl(baseUrl).replace(/\/$/, "");
-  const websiteUrl = ensureHttpsUrl(input.website.url);
-  const manageReportsUrl = `${emailBaseUrl}/dashboard/reports`;
-  const billingUrl = `${emailBaseUrl}/dashboard/billing`;
-  const unsubscribeUrl = `${emailBaseUrl}/dashboard/settings`;
-  const helpUrl = `${emailBaseUrl}/contact`;
-  const liveDashboardUrl = input.dashboardUrl ? ensureHttpsUrl(input.dashboardUrl) : null;
-  const dashboardLinkTextRaw = liveDashboardUrl ? stripProtocol(liveDashboardUrl) : null;
-  const dashboardLinkText =
-    dashboardLinkTextRaw && dashboardLinkTextRaw.length > 44
-      ? `${dashboardLinkTextRaw.slice(0, 41)}...`
-      : dashboardLinkTextRaw;
-  const performanceDelta =
-    input.previousScan !== null && input.previousScan !== undefined
-      ? input.scan.performance_score - input.previousScan.performance_score
-      : null;
-  const issueSummaries = buildIssueSummaries({
+  const template = buildReportEmailTemplate({
+    to: input.to,
+    website: input.website,
+    profile: input.profile,
+    branding: input.branding,
     scan: input.scan,
+    previousScan: input.previousScan,
+    securityHeaders: input.securityHeaders,
     brokenLinks: input.brokenLinks,
-    securityHeaders: input.securityHeaders
+    dashboardUrl: input.dashboardUrl,
+    deliveryMode: input.deliveryMode,
+    frequency: input.frequency,
+    baseUrl
   });
-  const topIssues = issueSummaries.slice(0, 4);
-  const quickWins = buildQuickWins(issueSummaries, input.scan);
-  const businessImpactLines = buildBusinessImpactLines(input.scan);
-  const keyIssue = topIssues[0]?.title ?? "your site performance";
-  const reportYear = new Date(input.scan.scanned_at).getFullYear();
-  const heroSummaryPrimary =
-    performanceDelta !== null && performanceDelta < 0
-      ? `Performance fell by ${Math.abs(performanceDelta)} points since the previous scan, which puts more pressure on conversions and client confidence.`
-      : "This report shows where the site is helping or hurting visibility, speed, and trust.";
-  const heroSummarySecondary = `The biggest talking point in this report is ${keyIssue.toLowerCase()}. Review the highest-priority fixes below, then open the full report for the complete action plan.`;
-  const businessImpactMarkup = businessImpactLines
-    .map(
-      (line) => `
-        <tr>
-          <td valign="top" style="width:28px;padding:0 12px 12px 0;font-size:16px;line-height:20px;">${line.icon}</td>
-          <td valign="top" style="padding:0 0 12px 0;font-size:14px;line-height:22px;color:#4B5563;">
-            ${escapeHtml(line.text)}
-          </td>
-        </tr>
-      `
-    )
-    .join("");
-  const issuesMarkup = topIssues.length
-    ? topIssues
-        .map((issue, index) => {
-          const priority = getPriorityTone(issue.priority);
-
-          return `
-            <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-              <tr>
-                <td style="padding:0 0 ${index < topIssues.length - 1 ? 12 : 0}px 0;">
-                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E5E7EB;border-left:4px solid ${priority.accent};border-radius:8px;background:#FFFFFF;box-shadow:0 6px 18px rgba(15,23,42,0.06);">
-                    <tr>
-                      <td style="padding:18px 18px 16px 18px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                          <tr>
-                            <td valign="top" style="padding:0 12px 10px 0;">
-                              <table cellpadding="0" cellspacing="0" role="presentation">
-                                <tr>
-                                  <td valign="top" style="padding:1px 10px 0 0;font-size:16px;line-height:20px;color:#6B7280;">${getCategoryIcon(issue.category)}</td>
-                                  <td valign="top" style="font-size:16px;line-height:24px;font-weight:700;color:#111827;">
-                                    ${escapeHtml(issue.title)}
-                                  </td>
-                                </tr>
-                              </table>
-                            </td>
-                            <td align="right" valign="top" style="white-space:nowrap;padding:0 0 10px 0;">
-                              <span style="display:inline-block;border:1px solid ${priority.border};background:${priority.background};color:${priority.text};border-radius:999px;padding:6px 10px;font-size:11px;line-height:11px;font-weight:700;letter-spacing:0.4px;">
-                                ${priority.label}
-                              </span>
-                            </td>
-                          </tr>
-                        </table>
-                        <p style="margin:0 0 10px 0;font-size:14px;line-height:22px;color:#6B7280;">
-                          ${escapeHtml(truncateText(issue.subtitle, 150))}
-                        </p>
-                        <a href="${escapeHtml(issue.learnMoreUrl)}" style="font-size:14px;line-height:20px;font-weight:700;color:${accent};text-decoration:none;">
-                          Learn more &rarr;
-                        </a>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-          `;
-        })
-        .join("")
-    : `
-        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E5E7EB;border-left:4px solid #3B82F6;border-radius:8px;background:#FFFFFF;box-shadow:0 6px 18px rgba(15,23,42,0.06);">
-          <tr>
-            <td style="padding:18px 18px 16px 18px;">
-              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                <tr>
-                  <td valign="top" style="font-size:16px;line-height:24px;font-weight:700;color:#111827;padding:0 12px 10px 0;">
-                    No urgent issues need attention this week
-                  </td>
-                  <td align="right" valign="top" style="white-space:nowrap;padding:0 0 10px 0;">
-                    <span style="display:inline-block;border:1px solid #BFDBFE;background:#DBEAFE;color:#1D4ED8;border-radius:999px;padding:6px 10px;font-size:11px;line-height:11px;font-weight:700;letter-spacing:0.4px;">
-                      LOW PRIORITY
-                    </span>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:0;font-size:14px;line-height:22px;color:#6B7280;">
-                This week looks stable overall, so the focus can stay on small improvements and ongoing monitoring.
-              </p>
-            </td>
-          </tr>
-        </table>
-      `;
-  const quickWinsMarkup = quickWins
-    .map((win, index) => {
-      const difficultyTone = getDifficultyTone(win.effortMinutes);
-      const timeEstimate = win.difficulty.includes("/") ? win.difficulty.split("/").slice(1).join("/").trim() : win.difficulty;
-
-      return `
-        <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-          <tr>
-            <td style="padding:0 0 ${index < quickWins.length - 1 ? 12 : 0}px 0;">
-              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E2E8F0;border-radius:8px;background:#FFFFFF;">
-                <tr>
-                  <td valign="top" style="width:44px;padding:18px 0 18px 18px;">
-                    <table width="28" cellpadding="0" cellspacing="0" role="presentation" style="width:28px;height:28px;background:#DCFCE7;border-radius:999px;">
-                      <tr>
-                        <td align="center" valign="middle" style="font-size:15px;line-height:15px;color:#166534;font-weight:700;">&#10003;</td>
-                      </tr>
-                    </table>
-                  </td>
-                  <td valign="top" style="padding:18px 18px 18px 12px;">
-                    <p style="margin:0 0 6px 0;font-size:15px;line-height:22px;font-weight:700;color:#111827;">
-                      ${escapeHtml(win.quickAction)}
-                    </p>
-                    <p style="margin:0 0 8px 0;font-size:14px;line-height:22px;color:#6B7280;">
-                      Est. Impact: ${escapeHtml(win.quickImpact)}
-                    </p>
-                    <p style="margin:0;font-size:13px;line-height:20px;color:#6B7280;">
-                      Difficulty:
-                      <span style="display:inline-block;margin:0 6px;border:1px solid ${difficultyTone.border};background:${difficultyTone.background};color:${difficultyTone.text};border-radius:999px;padding:4px 10px;font-size:11px;line-height:11px;font-weight:700;vertical-align:middle;">
-                        ${difficultyTone.label}
-                      </span>
-                      <span style="color:#94A3B8;">${escapeHtml(timeEstimate)}</span>
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-      `;
-    })
-    .join("");
-  const reportLabelLower = reportMeta.label.toLowerCase();
-  const subject =
-    performanceDelta !== null && performanceDelta < 0
-      ? `${reportMeta.label} Report: Performance dropped by ${Math.abs(performanceDelta)} points`
-      : performanceDelta !== null && performanceDelta > 0
-        ? `${reportMeta.label} Report: Performance improved by ${performanceDelta} points`
-        : `${reportMeta.label} Website Report for ${clientWebsiteName}`;
-  const reportPreheader =
-    liveDashboardUrl
-      ? input.deliveryMode === "manual"
-        ? `A fresh client-ready report for ${clientWebsiteName} is attached with a live dashboard link.`
-        : `${reportMeta.label} score changes, quick wins, and the attached report for ${clientWebsiteName}.`
-      : input.deliveryMode === "manual"
-        ? `A fresh client-ready report for ${clientWebsiteName} is attached.`
-        : `${reportMeta.label} score changes, quick wins, and the attached report for ${clientWebsiteName}.`;
-  const headerBrandMarkup = reportBrandLogoUrl
-    ? `
-        <div style="display:flex;align-items:center;gap:12px;">
-          <img src="${escapeHtml(reportBrandLogoUrl)}" alt="${escapeHtml(reportBrandName)}" style="display:block;max-height:32px;max-width:140px;object-fit:contain;" />
-          <span style="font-size:20px;line-height:24px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">
-            ${escapeHtml(reportBrandName)}
-          </span>
-        </div>
-      `
-    : `
-        <span style="font-size:24px;line-height:28px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">
-          ${escapeHtml(reportBrandName)}
-        </span>
-      `;
-  const footerMetaMarkup = whiteLabelEnabled
-    ? `
-        <p style="margin:0;font-size:13px;line-height:20px;color:#6B7280;">
-          ${escapeHtml(reportBrandName)}
-        </p>
-      `
-    : `
-        <p style="margin:0 0 12px 0;font-size:13px;line-height:20px;color:#6B7280;">
-          ${input.deliveryMode === "manual" ? "This report was sent from SitePulse" : "This automated report was generated by SitePulse"} for ${escapeHtml(input.to)}
-        </p>
-        <p style="margin:0 0 12px 0;font-size:13px;line-height:20px;color:#6B7280;">
-          <a href="${escapeHtml(manageReportsUrl)}" style="color:${accent};text-decoration:none;">Manage Reports</a>
-          <span style="color:#CBD5E1;"> &middot; </span>
-          <a href="${escapeHtml(billingUrl)}" style="color:${accent};text-decoration:none;">Billing</a>
-          <span style="color:#CBD5E1;"> &middot; </span>
-          <a href="${escapeHtml(unsubscribeUrl)}" style="color:${accent};text-decoration:none;">Unsubscribe</a>
-          <span style="color:#CBD5E1;"> &middot; </span>
-          <a href="${escapeHtml(helpUrl)}" style="color:${accent};text-decoration:none;">Help</a>
-        </p>
-        <p style="margin:0 0 6px 0;font-size:12px;line-height:18px;color:#9CA3AF;">
-          &copy; ${reportYear} SitePulse
-        </p>
-        <p style="margin:0;font-size:12px;line-height:18px;color:#9CA3AF;">
-          Made for agencies, not developers.
-        </p>
-      `;
+  const reportLabelLower = template.meta.label.toLowerCase();
 
   return sendEmailWithConfirmation({
     kind: "report",
-    templateId: reportMeta.templateId,
+    templateId: template.meta.templateId,
     dedupeKey: input.dedupeKey,
-    campaign: reportMeta.campaign,
+    campaign: template.meta.campaign,
     to: input.to,
-    fromName,
-    subject,
+    fromName: template.fromName,
+    subject: template.subject,
     triggeredAt: input.triggeredAt ?? input.scan.scanned_at,
     metadata: {
       reportId: input.reportId,
@@ -1574,194 +1362,11 @@ export async function sendReportEmail(input: {
       recipient: input.to,
       reportMode: reportLabelLower,
       reportFrequency: input.frequency,
-      clientDashboardEnabled: Boolean(liveDashboardUrl),
+      clientDashboardEnabled: Boolean(input.dashboardUrl),
       dedupeKey: input.dedupeKey
     },
-    replyTo,
-    html: `
-      ${renderPreheader(reportPreheader)}
-      <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#F4F6F9;margin:0;padding:0;">
-        <tr>
-          <td align="center" style="padding:32px 12px;">
-            <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="width:600px;max-width:600px;background:#FFFFFF;border-collapse:separate;border-spacing:0;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;">
-              <tr>
-                <td style="background:#0F172A;padding:0;">
-                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                    <tr>
-                      <td style="padding:22px 24px;font-family:Arial,Helvetica,sans-serif;">
-                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                          <tr>
-                            <td valign="middle">
-                              ${headerBrandMarkup}
-                            </td>
-                            <td align="right" valign="middle" style="font-size:13px;line-height:20px;color:#94A3AF;">
-                              ${escapeHtml(reportMeta.label)} Performance Report &middot; ${escapeHtml(reportMonthYear)}
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="height:4px;background:${accent};font-size:0;line-height:0;">&nbsp;</td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding:24px;font-family:Arial,Helvetica,sans-serif;color:#111827;">
-                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                    <tr>
-                      <td style="padding:0 0 24px 0;">
-                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E5E7EB;border-radius:8px;background:#FFFFFF;">
-                          <tr>
-                            <td style="padding:28px 24px 24px 24px;">
-                              <p style="margin:0 0 8px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#94A3AF;font-weight:700;">
-                                ${escapeHtml(reportMeta.label)} website report
-                              </p>
-                              <h1 style="margin:0 0 10px 0;font-size:30px;line-height:38px;font-weight:700;color:#111827;">
-                                ${escapeHtml(reportMeta.label)} Website Report for ${escapeHtml(clientWebsiteName)}
-                              </h1>
-                              <p style="margin:0 0 8px 0;font-size:16px;line-height:24px;font-weight:700;">
-                                <a href="${escapeHtml(websiteUrl)}" style="color:#2563EB;text-decoration:none;">${escapeHtml(websiteHost)}</a>
-                              </p>
-                              <p style="margin:0 0 20px 0;font-size:13px;line-height:20px;color:#9CA3AF;">
-                                ${escapeHtml(reportDate)}
-                              </p>
-                              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#EFF6FF;border-left:4px solid ${accent};border-radius:8px;">
-                                <tr>
-                                  <td style="padding:16px 18px;">
-                                    <p style="margin:0 0 8px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#2563EB;font-weight:700;">
-                                      Why this matters now
-                                    </p>
-                                    <p style="margin:0 0 6px 0;font-size:14px;line-height:22px;color:#1E3A8A;">
-                                      ${escapeHtml(heroSummaryPrimary)}
-                                    </p>
-                                    <p style="margin:0;font-size:14px;line-height:22px;color:#475569;">
-                                      ${escapeHtml(heroSummarySecondary)}
-                                    </p>
-                                  </td>
-                                </tr>
-                              </table>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:0 0 24px 0;">
-                        ${renderScoreSummary(input.scan, input.previousScan)}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:0 0 28px 0;">
-                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #FDE68A;border-left:4px solid #F59E0B;border-radius:8px;background:#FFFBEB;">
-                          <tr>
-                            <td style="padding:20px 20px 16px 20px;">
-                              <p style="margin:0 0 12px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#B45309;font-weight:700;">
-                                What this means for your business
-                              </p>
-                              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                                ${businessImpactMarkup}
-                              </table>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td style="padding:0;">
-                        ${sectionDivider()}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:0 0 16px 0;">
-                        <h2 style="margin:0 0 6px 0;font-size:28px;line-height:34px;font-weight:700;color:#111827;">
-                          What needs your attention
-                        </h2>
-                        <p style="margin:0;font-size:14px;line-height:22px;color:#6B7280;">
-                          Top issues sorted by priority
-                        </p>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:0 0 28px 0;">
-                        ${issuesMarkup}
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td style="padding:0;">
-                        ${sectionDivider()}
-                      </td>
-                    </tr>
-                    <tr>
-                <td style="padding:0 0 16px 0;">
-                  <h2 style="margin:0 0 6px 0;font-size:24px;line-height:30px;font-weight:700;color:#111827;">
-                    3 quick wins to tackle next
-                  </h2>
-                </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:0 0 28px 0;">
-                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #E2E8F0;border-radius:8px;background:#F8FAFC;">
-                          <tr>
-                            <td style="padding:18px 18px 16px 18px;">
-                              ${quickWinsMarkup}
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td style="padding:0;">
-                        ${sectionDivider()}
-                      </td>
-                    </tr>
-                    ${liveDashboardUrl ? `
-                    <tr>
-                      <td style="padding:0;">
-                        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;border:1px solid #BFDBFE;border-radius:8px;background:#EFF6FF;">
-                          <tr>
-                            <td style="padding:22px 22px 20px 22px;text-align:center;">
-                              <p style="margin:0 0 8px 0;font-size:12px;line-height:12px;letter-spacing:0.6px;text-transform:uppercase;color:#2563EB;font-weight:700;">
-                                &#128202; Your live dashboard
-                              </p>
-                              <p style="margin:0 0 16px 0;font-size:22px;line-height:30px;font-weight:700;color:#1D4ED8;">
-                                See your live SEO data anytime &mdash; no login needed.
-                              </p>
-                              <table align="center" cellpadding="0" cellspacing="0" role="presentation">
-                                <tr>
-                                  <td align="center" style="border-radius:8px;background:#2563EB;">
-                                    <a href="${escapeHtml(liveDashboardUrl)}" style="display:inline-block;padding:14px 24px;font-size:15px;line-height:20px;font-weight:700;color:#FFFFFF;text-decoration:none;">
-                                      View Live Dashboard &rarr;
-                                    </a>
-                                  </td>
-                                </tr>
-                              </table>
-                              <p style="margin:12px 0 0 0;font-size:12px;line-height:18px;color:#6B7280;">
-                                ${escapeHtml(dashboardLinkText ?? "")}
-                              </p>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>` : ""}
-                  </table>
-                </td>
-              </tr>
-
-              <tr>
-                <td style="padding:24px;background:#F9FAFB;border-top:1px solid #E5E7EB;text-align:center;font-family:Arial,Helvetica,sans-serif;">
-                  ${footerMetaMarkup}
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    `,
+    replyTo: template.replyTo,
+    html: template.html,
     attachments: [
       {
         filename: `${input.website.label.replace(/\s+/g, "-").toLowerCase()}-report.pdf`,

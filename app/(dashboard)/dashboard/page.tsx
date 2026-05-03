@@ -14,6 +14,7 @@ import {
 
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { SnapshotStatCard } from "@/components/dashboard/snapshot-stat-card";
+import { EmptyState } from "@/components/dashboard/empty-state";
 import { AddWebsiteButton } from "@/components/trial/AddWebsiteButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -175,6 +176,26 @@ export default async function DashboardOverviewPage() {
 
   const websites = (websitesData ?? []) as Website[];
   const websiteIds = websites.map((website) => website.id);
+
+  if (!websites.length) {
+    return (
+      <div className="flex min-h-[calc(100vh-18rem)] items-center justify-center">
+        <EmptyState
+          icon={Globe2}
+          title="Add your first website to get started"
+          description="SitePulse monitors your sites, runs weekly audits, and sends branded reports to your clients."
+          action={
+            workspace.role !== "viewer" ? (
+              <AddWebsiteButton profile={workspaceProfile} websiteCount={0}>
+                Add a website &rarr;
+              </AddWebsiteButton>
+            ) : undefined
+          }
+          className="w-full max-w-2xl"
+        />
+      </div>
+    );
+  }
 
   const [{ data: scansData }, { count: scanCount }, { data: schedulesData }] = await Promise.all([
     websiteIds.length

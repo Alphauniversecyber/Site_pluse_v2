@@ -69,11 +69,11 @@ const planMarketingCopy: Record<
   },
   starter: {
     subtitle: "For agencies turning website reviews into a repeatable sales and retention system.",
-    badgeVariant: "success"
+    badgeVariant: "default"
   },
   agency: {
     subtitle: "For agencies that want a premium client-delivery system inside their own service stack.",
-    badgeVariant: "success"
+    badgeVariant: "default"
   }
 };
 
@@ -648,12 +648,12 @@ export default function BillingPage() {
                         {plan.marketingBadge ?? plan.displayName}
                       </Badge>
                       {isPaidPlan(planKey) && hasDiscount ? (
-                        <Badge className="border-transparent bg-emerald-600 text-white hover:bg-emerald-600">
-                          {discountPercentage}% off
+                        <Badge className="border-transparent bg-primary text-primary-foreground hover:bg-primary">
+                          {discountPercentage}% OFF
                         </Badge>
                       ) : null}
                       {yearlySelected && isPaidPlan(planKey) && getYearlySavingsLabel(planKey, planCatalog) ? (
-                        <Badge className="border-transparent bg-emerald-600 text-white hover:bg-emerald-600">
+                        <Badge className="border-transparent bg-primary text-primary-foreground hover:bg-primary">
                           {getYearlySavingsLabel(planKey, planCatalog)}
                         </Badge>
                       ) : null}
@@ -680,7 +680,7 @@ export default function BillingPage() {
                     ) : null}
                     {isPaidPlan(planKey) && hasDiscount ? (
                       <>
-                        <p className="text-sm leading-6 text-emerald-600 dark:text-emerald-300">
+                        <p className="text-sm leading-6 text-primary">
                           You save {formatUsdPrice(monthlySavings)}/mo
                         </p>
                         {yearlySelected ? (

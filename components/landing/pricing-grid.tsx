@@ -136,7 +136,7 @@ export function PricingGrid({
                         ? "w-fit px-3 py-1 text-xs tracking-normal normal-case"
                         : "w-fit px-3.5 py-1.5 text-[13px] tracking-normal normal-case",
                       paidPlan &&
-                        "border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200",
+                        "border-transparent bg-primary/10 text-primary",
                       !paidPlan && plan.theme === "light" && "bg-slate-100 text-slate-700",
                       !paidPlan && plan.theme === "featured" && "bg-gradient-to-r from-blue-500 to-blue-600 text-white",
                       !paidPlan &&
@@ -153,10 +153,10 @@ export function PricingGrid({
                         compact
                           ? "w-fit px-3 py-1 text-xs tracking-normal normal-case"
                           : "w-fit px-3.5 py-1.5 text-[13px] tracking-normal normal-case",
-                        "border-transparent bg-emerald-600 text-white"
+                        "border-transparent bg-primary text-primary-foreground"
                       )}
                     >
-                      {discountPercentage}% off
+                      {discountPercentage}% OFF
                     </Badge>
                   ) : null}
 
@@ -166,7 +166,7 @@ export function PricingGrid({
                         compact
                           ? "w-fit px-3 py-1 text-xs tracking-normal normal-case"
                           : "w-fit px-3.5 py-1.5 text-[13px] tracking-normal normal-case",
-                        "border-transparent bg-emerald-600 text-white"
+                        "border-transparent bg-primary text-primary-foreground"
                       )}
                     >
                       {getYearlySavingsLabel(plan.key, plans)}
@@ -206,9 +206,9 @@ export function PricingGrid({
                     </p>
                   ) : null}
 
-                  {paidPlan && hasDiscount ? (
+                    {paidPlan && hasDiscount ? (
                     <>
-                      <p className="mt-1 text-[12px] leading-5 text-emerald-600 dark:text-emerald-300">
+                      <p className="mt-1 text-[12px] leading-5 text-primary">
                         You save {formatUsdPrice(monthlySavings)}/mo
                       </p>
                       {yearlySelected ? (
@@ -347,7 +347,7 @@ export function PricingGrid({
                       <Check
                         className={cn(
                           compact ? "mt-0.5 h-4 w-4 shrink-0" : "mt-0.5 h-[18px] w-[18px] shrink-0",
-                          plan.theme === "featured" ? "text-blue-500" : "text-emerald-500"
+                          "text-primary"
                         )}
                       />
                       <span className={compact ? "leading-6" : "leading-7"}>{feature}</span>

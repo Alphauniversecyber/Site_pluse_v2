@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
+import type { Route } from "next";
 import { Bell } from "lucide-react";
-import { useEffect, useRef, useState, useTransition } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -111,7 +113,7 @@ function getNotificationTone(item: NotificationItem) {
   if (isSystemNotification(item) && item.severity === "low") {
     return {
       badgeLabel: "System",
-      badgeClassName: "border-[#22C55E]/20 bg-[#11281A] text-[#22C55E]",
+      badgeClassName: "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
       borderColor: "#22C55E"
     };
   }
@@ -119,7 +121,7 @@ function getNotificationTone(item: NotificationItem) {
   if (item.severity === "high") {
     return {
       badgeLabel: "High",
-      badgeClassName: "border-[#EF4444]/20 bg-[#2D1B1B] text-[#EF4444]",
+      badgeClassName: "border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400",
       borderColor: "#EF4444"
     };
   }
@@ -127,25 +129,27 @@ function getNotificationTone(item: NotificationItem) {
   if (item.severity === "medium") {
     return {
       badgeLabel: "Medium",
-      badgeClassName: "border-[#F59E0B]/20 bg-[#2D240F] text-[#F59E0B]",
+      badgeClassName: "border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400",
       borderColor: "#F59E0B"
     };
   }
 
   return {
     badgeLabel: "Low",
-    badgeClassName: "border-[#3B82F6]/20 bg-[#0F1E35] text-[#3B82F6]",
+    badgeClassName: "border-primary/20 bg-primary/10 text-primary",
     borderColor: "#3B82F6"
   };
 }
 
 export function NotificationBell({ notifications }: { notifications: NotificationItem[] }) {
   const pathname = usePathname();
+  const router = useRouter();
   const workspace = useWorkspace();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(notifications);
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>("all");
-  const [isPending, startTransition] = useTransition();
+  const [isClearing, setIsClearing] = useState(false);
+  const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -184,23 +188,46 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
     };
   }, [open]);
 
-  function clearNotifications() {
-    startTransition(async () => {
-      try {
-        const result = await fetchJson<{ cleared: number }>("/api/notifications", {
-          method: "DELETE"
-        });
+  async function markAllRead() {
+    try {
+      setIsMarkingAllRead(true);
+      const result = await fetchJson<{ updated: number }>("/api/notifications/mark-all-read", {
+        method: "PATCH"
+      });
 
-        setItems([]);
-        toast.success(
-          result.cleared > 0
-            ? `Cleared ${result.cleared} notification${result.cleared === 1 ? "" : "s"}.`
-            : "Notifications already clear."
-        );
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Unable to clear notifications.");
-      }
-    });
+      setItems((current) => current.map((item) => ({ ...item, is_read: true })));
+      router.refresh();
+      toast.success(
+        result.updated > 0
+          ? `Marked ${result.updated} notification${result.updated === 1 ? "" : "s"} as read.`
+          : "Notifications were already up to date."
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to mark notifications as read.");
+    } finally {
+      setIsMarkingAllRead(false);
+    }
+  }
+
+  async function clearNotifications() {
+    try {
+      setIsClearing(true);
+      const result = await fetchJson<{ cleared: number }>("/api/notifications", {
+        method: "DELETE"
+      });
+
+      setItems([]);
+      router.refresh();
+      toast.success(
+        result.cleared > 0
+          ? `Cleared ${result.cleared} notification${result.cleared === 1 ? "" : "s"}.`
+          : "Notifications already clear."
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to clear notifications.");
+    } finally {
+      setIsClearing(false);
+    }
   }
 
   const unreadCount = items.filter((item) => !item.is_read).length;
@@ -232,10 +259,8 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
         variant="ghost"
         size="icon"
         className={cn(
-          "header-action-button relative h-10 w-10 rounded-full text-slate-400 transition duration-150 motion-safe:hover:scale-100 motion-safe:active:scale-100",
-          open
-            ? "bg-[#1E3A5F] text-[#3B82F6] shadow-[inset_0_0_0_1px_rgba(125,211,252,0.08)]"
-            : "hover:bg-[#152238] hover:text-slate-100"
+          "header-action-button relative h-10 w-10 rounded-full transition duration-150 motion-safe:hover:scale-100 motion-safe:active:scale-100",
+          open && "text-primary"
         )}
         data-state={open ? "active" : "inactive"}
         aria-haspopup="dialog"
@@ -245,43 +270,46 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
       >
         <Bell className="h-[18px] w-[18px]" strokeWidth={1.9} />
         {unreadCount ? (
-          <span className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#EF4444] px-1 text-[10px] font-bold leading-none text-white shadow-[0_0_0_3px_rgba(15,26,46,0.85)] animate-[notification-bell-pulse_2s_ease-in-out_infinite]">
+          <span className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white shadow-[0_0_0_3px_hsl(var(--background))] animate-[notification-bell-pulse_2s_ease-in-out_infinite]">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         ) : null}
       </Button>
 
-      <div
+        <div
         className={cn(
-          "absolute right-0 top-[calc(100%+0.75rem)] z-[9999] w-[420px] max-w-[calc(100vw-1.5rem)] origin-top-right overflow-hidden rounded-2xl border border-[#1E3A5F] bg-[#0F1A2E] shadow-[0_24px_48px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.05)] transition duration-200 ease-out",
+          "absolute right-0 top-[calc(100%+0.75rem)] z-[9999] w-[420px] max-w-[calc(100vw-1.5rem)] origin-top-right overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-[0_24px_48px_rgba(15,23,42,0.18),0_0_0_1px_hsl(var(--border)/0.4)] transition duration-200 ease-out",
           open
             ? "pointer-events-auto translate-y-0 opacity-100 animate-[notification-panel-in_0.2s_ease-out]"
             : "pointer-events-none -translate-y-2 opacity-0"
         )}
       >
-        <div className="border-b border-[#1E3A5F] bg-[#0D1525] px-5 pb-4 pt-5">
+        <div className="border-b border-border bg-card/65 px-5 pb-4 pt-5 backdrop-blur">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-base font-semibold text-slate-100">Notifications</p>
-              <p className="mt-1 text-xs text-[#64748B]">
+              <p className="text-base font-semibold text-foreground">Notifications</p>
+              <p className="mt-1 text-xs text-muted-foreground">
                 {unreadCount} unread
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                disabled
-                className="rounded-md border border-[#1E3A5F] px-2.5 py-1 text-[12px] font-medium text-[#64748B] transition hover:border-[#3B82F6] hover:text-[#3B82F6] disabled:cursor-default disabled:opacity-100"
+                onClick={() => {
+                  void markAllRead();
+                }}
+                disabled={!unreadCount || isMarkingAllRead || !canManageWorkspace}
+                className="rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground transition hover:border-primary/35 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:text-muted-foreground"
               >
-                Mark all read
+                {isMarkingAllRead ? "Marking..." : "Mark all read"}
               </button>
               <button
                 type="button"
-                className="rounded-md border border-[#1E3A5F] px-2.5 py-1 text-[12px] font-medium text-[#64748B] transition hover:border-[#EF4444] hover:text-[#EF4444] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[#1E3A5F] disabled:hover:text-[#64748B]"
+                className="rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground transition hover:border-rose-500/35 hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:text-muted-foreground"
                 onClick={clearNotifications}
-                disabled={!items.length || isPending || !canManageWorkspace}
+                disabled={!items.length || isClearing || !canManageWorkspace}
               >
-                {isPending ? "Clearing..." : "Clear all"}
+                {isClearing ? "Clearing..." : "Clear all"}
               </button>
             </div>
           </div>
@@ -298,8 +326,8 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
                   className={cn(
                     "rounded-full border px-3 py-1.5 text-[12px] font-semibold uppercase tracking-[0.08em] transition",
                     active
-                      ? "border-[#1E3A5F] bg-[#1E3A5F] text-slate-100"
-                      : "border-transparent bg-transparent text-[#64748B] hover:border-[#1E3A5F] hover:text-slate-100"
+                      ? "border-primary/20 bg-primary/10 text-primary"
+                      : "border-transparent bg-transparent text-muted-foreground hover:border-border hover:text-foreground"
                   )}
                 >
                   {tab.label} <span className="ml-1 text-[11px] opacity-80">{tabCounts[tab.key]}</span>
@@ -313,7 +341,7 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
           <div className="notification-panel-scroll max-h-[420px] overflow-y-auto py-2">
             {todayItems.length ? (
               <div>
-                <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#334155]">
+                <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Today
                 </p>
                 {todayItems.map((item) => {
@@ -323,11 +351,15 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
                   return (
                     <div
                       key={item.id}
-                      className="group relative mx-3 my-2 cursor-pointer rounded-xl border border-[#1A2B45] border-l-4 bg-[#111E33] px-4 py-3.5 transition duration-150 hover:bg-[#152238] animate-[notification-item-in_0.3s_ease-out]"
+                      className={cn(
+                        "group relative mx-3 my-2 rounded-xl border border-border border-l-4 px-4 py-3.5 transition duration-150 animate-[notification-item-in_0.3s_ease-out]",
+                        item.is_read ? "bg-card/55" : "bg-card",
+                        "hover:bg-accent/65"
+                      )}
                       style={{ borderLeftColor: tone.borderColor }}
                     >
                       {!item.is_read ? (
-                        <span className="absolute right-4 top-4 h-1.5 w-1.5 rounded-full bg-[#3B82F6] transition duration-150 group-hover:opacity-0" />
+                        <span className="absolute right-4 top-4 h-1.5 w-1.5 rounded-full bg-primary transition duration-150 group-hover:opacity-0" />
                       ) : null}
 
                       <div className="flex items-start justify-between gap-3 pr-4">
@@ -339,20 +371,20 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
                         >
                           {tone.badgeLabel}
                         </span>
-                        <span className="shrink-0 text-[11px] text-[#475569]">
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
                           {formatPanelTimestamp(item.created_at)}
                         </span>
                       </div>
 
-                      <p className="mt-2 text-[14px] font-semibold leading-[1.4] text-slate-100" style={clampTwoLinesStyle}>
+                      <p className="mt-2 text-[14px] font-semibold leading-[1.4] text-foreground" style={clampTwoLinesStyle}>
                         {item.title}
                       </p>
-                      <p className="mt-1 text-[13px] leading-[1.5] text-slate-400" style={clampTwoLinesStyle}>
+                      <p className="mt-1 text-[13px] leading-[1.5] text-muted-foreground" style={clampTwoLinesStyle}>
                         {item.body}
                       </p>
 
                       {websiteTag ? (
-                        <span className="mt-3 inline-flex rounded-md bg-[#1E3A5F] px-2 py-0.5 text-[11px] font-medium text-[#7DD3FC]">
+                        <span className="mt-3 inline-flex rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                           {websiteTag}
                         </span>
                       ) : null}
@@ -364,7 +396,7 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
 
             {earlierItems.length ? (
               <div>
-                <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#334155]">
+                <p className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Earlier
                 </p>
                 {earlierItems.map((item) => {
@@ -374,11 +406,15 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
                   return (
                     <div
                       key={item.id}
-                      className="group relative mx-3 my-2 cursor-pointer rounded-xl border border-[#1A2B45] border-l-4 bg-[#111E33] px-4 py-3.5 transition duration-150 hover:bg-[#152238] animate-[notification-item-in_0.3s_ease-out]"
+                      className={cn(
+                        "group relative mx-3 my-2 rounded-xl border border-border border-l-4 px-4 py-3.5 transition duration-150 animate-[notification-item-in_0.3s_ease-out]",
+                        item.is_read ? "bg-card/55" : "bg-card",
+                        "hover:bg-accent/65"
+                      )}
                       style={{ borderLeftColor: tone.borderColor }}
                     >
                       {!item.is_read ? (
-                        <span className="absolute right-4 top-4 h-1.5 w-1.5 rounded-full bg-[#3B82F6] transition duration-150 group-hover:opacity-0" />
+                        <span className="absolute right-4 top-4 h-1.5 w-1.5 rounded-full bg-primary transition duration-150 group-hover:opacity-0" />
                       ) : null}
 
                       <div className="flex items-start justify-between gap-3 pr-4">
@@ -390,20 +426,20 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
                         >
                           {tone.badgeLabel}
                         </span>
-                        <span className="shrink-0 text-[11px] text-[#475569]">
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
                           {formatPanelTimestamp(item.created_at)}
                         </span>
                       </div>
 
-                      <p className="mt-2 text-[14px] font-semibold leading-[1.4] text-slate-100" style={clampTwoLinesStyle}>
+                      <p className="mt-2 text-[14px] font-semibold leading-[1.4] text-foreground" style={clampTwoLinesStyle}>
                         {item.title}
                       </p>
-                      <p className="mt-1 text-[13px] leading-[1.5] text-slate-400" style={clampTwoLinesStyle}>
+                      <p className="mt-1 text-[13px] leading-[1.5] text-muted-foreground" style={clampTwoLinesStyle}>
                         {item.body}
                       </p>
 
                       {websiteTag ? (
-                        <span className="mt-3 inline-flex rounded-md bg-[#1E3A5F] px-2 py-0.5 text-[11px] font-medium text-[#7DD3FC]">
+                        <span className="mt-3 inline-flex rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                           {websiteTag}
                         </span>
                       ) : null}
@@ -415,21 +451,22 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
           </div>
         ) : (
           <div className="flex min-h-[320px] flex-col items-center justify-center px-5 py-10 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#1E3A5F] bg-[#111E33] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <Bell className="h-7 w-7 text-[#7DD3FC]" strokeWidth={1.8} />
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-border bg-card shadow-[inset_0_1px_0_hsl(var(--border)/0.22)]">
+              <Bell className="h-7 w-7 text-primary" strokeWidth={1.8} />
             </div>
-            <p className="mt-4 text-base font-semibold text-slate-100">All caught up!</p>
-            <p className="mt-2 text-[13px] text-[#64748B]">No new notifications right now.</p>
+            <p className="mt-4 text-base font-semibold text-foreground">All caught up!</p>
+            <p className="mt-2 text-[13px] text-muted-foreground">No new notifications right now.</p>
           </div>
         )}
 
-        <div className="border-t border-[#1E3A5F] bg-[#0D1525] px-5 py-3 text-center">
-          <button
-            type="button"
-            className="text-[13px] font-medium text-[#3B82F6] transition hover:text-[#60A5FA]"
+        <div className="border-t border-border bg-card/65 px-5 py-3 text-center backdrop-blur">
+          <Link
+            href={"/dashboard/notifications" as Route}
+            onClick={() => setOpen(false)}
+            className="text-[13px] font-medium text-primary transition hover:text-primary/80"
           >
             View all notifications &rarr;
-          </button>
+          </Link>
         </div>
       </div>
       </div>
@@ -479,11 +516,11 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
 
         .notification-panel-scroll::-webkit-scrollbar-thumb {
           border-radius: 999px;
-          background: #1e3a5f;
+          background: hsl(var(--border));
         }
 
         .notification-panel-scroll::-webkit-scrollbar-thumb:hover {
-          background: #3b82f6;
+          background: hsl(var(--primary));
         }
       `}</style>
     </>

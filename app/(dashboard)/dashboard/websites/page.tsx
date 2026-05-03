@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, PauseCircle, PlayCircle, Plus, Search, Trash2, WandSparkles } from "lucide-react";
+import { ArrowUpRight, Globe2, PauseCircle, PlayCircle, Plus, Search, Trash2, WandSparkles } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -147,6 +147,19 @@ export default function WebsitesPage() {
             <Button type="button" onClick={() => void refetch()}>
               Try again
             </Button>
+          }
+        />
+      ) : !websites.length ? (
+        <EmptyState
+          icon={Globe2}
+          title="Add your first website to get started"
+          description="SitePulse monitors your sites, runs weekly audits, and sends branded reports to your clients."
+          action={
+            canManageWorkspace ? (
+              <AddWebsiteButton profile={workspace.workspaceProfile} websiteCount={0}>
+                Add a website &rarr;
+              </AddWebsiteButton>
+            ) : undefined
           }
         />
       ) : filtered.length ? (
