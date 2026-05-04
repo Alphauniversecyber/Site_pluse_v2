@@ -68,6 +68,7 @@ export const websiteUpdateSchema = z.object({
   auto_email_reports: z.boolean().optional(),
   email_notifications: z.boolean().optional(),
   client_dashboard_enabled: z.boolean().optional(),
+  client_dashboard_use_branding_logo: z.boolean().optional(),
   competitor_urls: z.array(z.string().url()).max(3).optional()
 });
 

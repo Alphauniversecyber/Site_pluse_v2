@@ -620,6 +620,8 @@ export async function buildClientDashboardPayload(
   const gscConnected = Boolean((website.gsc_refresh_token || website.gsc_access_token) && website.gsc_property);
   const gaConnected = Boolean((website.ga_refresh_token || website.ga_access_token) && website.ga_property_id);
   const clientPackage = normalizeClientPackage(website.package);
+  const useCustomDashboardLogo =
+    clientPackage !== "growth" && website.client_dashboard_use_branding_logo !== false;
   const brandingAccent = website.branding_color?.trim() || "#3b82f6";
   const clientName = website.label.trim() || hostFromUrl(website.url);
 
@@ -633,15 +635,16 @@ export async function buildClientDashboardPayload(
     },
     branding: {
       package: clientPackage,
+      useCustomLogo: useCustomDashboardLogo,
       logoUrl:
-        clientPackage === "growth"
+        !useCustomDashboardLogo
           ? null
           : website.branding_logo?.trim()
             ? website.branding_logo.trim()
             : null,
       accentColor: brandingAccent,
       label:
-        clientPackage === "growth"
+        !useCustomDashboardLogo
           ? "SitePulse"
           : website.branding_name?.trim()
             ? website.branding_name.trim()

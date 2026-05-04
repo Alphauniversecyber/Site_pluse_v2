@@ -2,10 +2,22 @@ import { NextRequest } from "next/server";
 
 import { apiError, apiSuccess } from "@/lib/api";
 import { buildEmptyGaData, fetchGaDashboardData, isGoogleAuthError } from "@/lib/ga";
-import { getClientByToken } from "@/lib/client-token";
+import { disconnectClientGoogleService, getClientByToken } from "@/lib/client-token";
 import { refreshToken } from "@/lib/refresh-token";
 
 export const runtime = "nodejs";
+
+function shouldClearGaConnection(error: unknown) {
+  if (isGoogleAuthError(error)) {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /expired|revoked|invalid authentication credentials|invalid_grant/i.test(error.message);
+}
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
@@ -24,6 +36,11 @@ export async function GET(request: NextRequest) {
   const disconnected = buildEmptyGaData({
     connected: false,
     propertyId: client.ga_property_id ?? null,
+    source: "disconnected"
+  });
+  const clearedDisconnected = buildEmptyGaData({
+    connected: false,
+    propertyId: null,
     source: "disconnected"
   });
   const unavailable = buildEmptyGaData({
@@ -57,6 +74,11 @@ export async function GET(request: NextRequest) {
           token,
           error: refreshError instanceof Error ? refreshError.message : "Unable to refresh GA4 token."
         });
+
+        if (shouldClearGaConnection(refreshError)) {
+          await disconnectClientGoogleService(token, "ga");
+          return apiSuccess(clearedDisconnected);
+        }
       }
     }
 
@@ -64,6 +86,11 @@ export async function GET(request: NextRequest) {
       token,
       error: error instanceof Error ? error.message : "Unable to load GA4 data."
     });
+
+    if (shouldClearGaConnection(error)) {
+      await disconnectClientGoogleService(token, "ga");
+      return apiSuccess(clearedDisconnected);
+    }
 
     return apiSuccess(unavailable);
   }

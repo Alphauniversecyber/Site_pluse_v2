@@ -460,7 +460,7 @@ export function TabNav({
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap items-center gap-4">
               <div className="rounded-2xl border border-border bg-white px-4 py-3 shadow-sm dark:bg-slate-950">
-                {dashboard.branding.package === "growth" ? (
+                {!dashboard.branding.useCustomLogo ? (
                   <img src={growthLogoSrc} alt="SitePulse" className="h-8 w-auto sm:h-9" />
                 ) : dashboard.branding.logoUrl ? (
                   <div className="flex flex-col gap-2">

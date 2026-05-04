@@ -150,6 +150,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (parsed.data.client_dashboard_enabled !== undefined) {
     websiteUpdates.client_dashboard_enabled = parsed.data.client_dashboard_enabled;
   }
+  if (parsed.data.client_dashboard_use_branding_logo !== undefined) {
+    websiteUpdates.client_dashboard_use_branding_logo = parsed.data.client_dashboard_use_branding_logo;
+  }
   if (parsed.data.competitor_urls !== undefined) {
     websiteUpdates.competitor_urls = parsed.data.competitor_urls.slice(0, 3);
   }

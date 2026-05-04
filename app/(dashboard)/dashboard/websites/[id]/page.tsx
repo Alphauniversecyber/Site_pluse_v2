@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { SitePulseLogo } from "@/components/brand/sitepulse-logo";
 import { DeviceScoreChart } from "@/components/charts/device-score-chart";
 import { ScoreTrendChart } from "@/components/charts/score-trend-chart";
 import { EmptyState } from "@/components/dashboard/empty-state";
@@ -147,6 +148,14 @@ function compactDisplayUrl(value: string, maxLength = 56) {
   } catch {
     return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
   }
+}
+
+function customDashboardBrandingEnabled(website: Pick<Website, "package" | "client_dashboard_use_branding_logo"> | null) {
+  return (
+    website?.package === "pro" || website?.package === "enterprise"
+  )
+    ? website.client_dashboard_use_branding_logo !== false
+    : false;
 }
 
 function normalizeRecipientEmails(values: string[] | string) {
@@ -889,6 +898,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const [autoEmailReports, setAutoEmailReports] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [clientDashboardEnabled, setClientDashboardEnabled] = useState(false);
+  const [clientDashboardUseBrandingLogo, setClientDashboardUseBrandingLogo] = useState(false);
   const [dashboardOrigin, setDashboardOrigin] = useState("");
   const [isPending, startTransition] = useTransition();
   const { paywallFeature, isExpired, closePaywall, requireAccess } = useTrialPaywall(workspace.workspaceProfile);
@@ -965,6 +975,10 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   }, [data?.client_dashboard_enabled]);
 
   useEffect(() => {
+    setClientDashboardUseBrandingLogo(customDashboardBrandingEnabled(data));
+  }, [data]);
+
+  useEffect(() => {
     if (typeof window !== "undefined") {
       setDashboardOrigin(window.location.origin);
     }
@@ -984,6 +998,9 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const uptimeSummary = buildUptimeSummary(data?.uptime_checks ?? []);
   const competitorEntries = latestCompetitorEntries(data?.competitor_scans ?? []);
   const businessImpact = buildSiteBusinessImpact(currentScan ?? null);
+  const supportsCustomDashboardBranding = data?.package === "pro" || data?.package === "enterprise";
+  const dashboardBrandName = data?.branding_name?.trim() || data?.label || "Client";
+  const dashboardBrandColor = data?.branding_color?.trim() || "#3b82f6";
   const clientDashboardUrl =
     clientDashboardEnabled && data?.magic_token && dashboardOrigin
       ? `${dashboardOrigin}/d/${data.magic_token}`
@@ -1288,7 +1305,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             extra_recipients: nextRecipients,
             auto_email_reports: autoEmailReports,
             email_notifications: emailNotifications,
-            client_dashboard_enabled: clientDashboardEnabled
+            client_dashboard_enabled: clientDashboardEnabled,
+            client_dashboard_use_branding_logo: clientDashboardUseBrandingLogo
           })
         });
 
@@ -1515,25 +1533,83 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                 </div>
 
                 {clientDashboardEnabled ? (
-                  <div className="mt-4 rounded-2xl border border-border/80 bg-card p-4">
-                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                      <Link2 className="h-4 w-4" />
-                      <span>Client dashboard URL</span>
-                    </div>
+                  <div className="mt-4 space-y-4">
+                    {supportsCustomDashboardBranding ? (
+                      <div className="rounded-2xl border border-border/80 bg-card p-4">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                          <div>
+                            <p className="font-medium">Client dashboard logo</p>
+                            <p className="text-sm text-muted-foreground">
+                              Turn this on to show this website&apos;s branding in the client dashboard header instead of SitePulse.
+                            </p>
+                          </div>
 
-                    {clientDashboardUrl ? (
-                      <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center">
-                        <Input value={clientDashboardUrl} readOnly className="font-mono text-xs sm:text-sm" />
-                        <Button type="button" variant="outline" onClick={copyClientDashboardUrl} className="md:shrink-0">
-                          <Copy className="mr-2 h-4 w-4" />
-                          Copy
-                        </Button>
+                          <div className="min-w-[260px] rounded-2xl border border-border bg-background/80 p-4">
+                            <div className="flex min-h-16 items-center rounded-2xl border border-dashed border-border bg-card px-4 py-3">
+                              {clientDashboardUseBrandingLogo ? (
+                                data?.branding_logo ? (
+                                  <img
+                                    src={data.branding_logo}
+                                    alt={dashboardBrandName}
+                                    className="h-9 w-auto max-w-[180px] object-contain"
+                                  />
+                                ) : (
+                                  <div className="flex items-center gap-3">
+                                    <div
+                                      className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-semibold text-white"
+                                      style={{ backgroundColor: dashboardBrandColor }}
+                                    >
+                                      {(dashboardBrandName[0] ?? "C").toUpperCase()}
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-semibold text-foreground">{dashboardBrandName}</p>
+                                      <p className="text-xs text-muted-foreground">Branded header</p>
+                                    </div>
+                                  </div>
+                                )
+                              ) : (
+                                <SitePulseLogo variant="dark" className="h-8 w-[140px]" />
+                              )}
+                            </div>
+
+                            <div className="mt-4 flex items-center justify-between gap-4">
+                              <div>
+                                <p className="text-sm font-medium text-foreground">Use branded logo</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Turn off to keep the SitePulse header on the client dashboard.
+                                </p>
+                              </div>
+                              <Switch
+                                checked={clientDashboardUseBrandingLogo}
+                                onCheckedChange={setClientDashboardUseBrandingLogo}
+                                disabled={isPending || !canManageWorkspace}
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    ) : (
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        Save settings to generate the stable client dashboard link for this website.
-                      </p>
-                    )}
+                    ) : null}
+
+                    <div className="rounded-2xl border border-border/80 bg-card p-4">
+                      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                        <Link2 className="h-4 w-4" />
+                        <span>Client dashboard URL</span>
+                      </div>
+
+                      {clientDashboardUrl ? (
+                        <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center">
+                          <Input value={clientDashboardUrl} readOnly className="font-mono text-xs sm:text-sm" />
+                          <Button type="button" variant="outline" onClick={copyClientDashboardUrl} className="md:shrink-0">
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Save settings to generate the stable client dashboard link for this website.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ) : null}
               </div>

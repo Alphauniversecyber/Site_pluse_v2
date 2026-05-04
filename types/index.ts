@@ -159,6 +159,7 @@ export interface Website {
   auto_email_reports?: boolean;
   email_notifications?: boolean;
   client_dashboard_enabled?: boolean;
+  client_dashboard_use_branding_logo?: boolean;
   competitor_urls?: string[];
   created_at: string;
   updated_at?: string;
@@ -790,6 +791,7 @@ export interface ClientDashboardPayload {
   branding: {
     package: "growth" | "pro" | "enterprise";
     logoUrl: string | null;
+    useCustomLogo: boolean;
     accentColor: string;
     label: string | null;
     placeholderName: string;
