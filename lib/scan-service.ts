@@ -265,6 +265,7 @@ export async function executeWebsiteScan(
   websiteId: string,
   options?: {
     forceHealthSignals?: boolean;
+    rotationIndex?: number;
   }
 ) {
   const admin = createSupabaseAdminClient();
@@ -284,7 +285,9 @@ export async function executeWebsiteScan(
     previousScans.find((row) => row.scan_status !== "failed") ?? null;
 
   const [pageSpeedResult, accessibilityResult, sslCheckResult, securityHeadersResult] = await Promise.allSettled([
-    runPageSpeedScan(website.url),
+    runPageSpeedScan(website.url, {
+      rotationIndex: options?.rotationIndex
+    }),
     runAccessibilityScan(website.url),
     ensureSslCheck({
       websiteId: website.id,

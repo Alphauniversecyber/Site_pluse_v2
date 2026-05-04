@@ -1,5 +1,5 @@
 import type { DeviceAuditSummary, ScanIssue, ScanRecommendation, ScanResult } from "@/types";
-import { getFriendlyScanFailureMessage, isPageSpeedRateLimitError } from "@/lib/scan-errors";
+import { isPageSpeedRateLimitError } from "@/lib/scan-errors";
 
 const PAGE_SPEED_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 const AUDIT_DOCS_LINK = "https://developer.chrome.com/docs/lighthouse/overview/";
@@ -13,7 +13,10 @@ function parsePositiveInt(raw: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-const PAGE_SPEED_TIMEOUT_MS = parsePositiveInt(process.env.PAGESPEED_TIMEOUT_MS, 45_000);
+const PAGE_SPEED_TIMEOUT_MS = parsePositiveInt(process.env.PAGESPEED_TIMEOUT_MS, 20_000);
+const PAGE_SPEED_STRATEGY = "mobile";
+
+let pageSpeedApiKeyCursor = 0;
 
 type PageSpeedAudit = {
   title?: string;
@@ -33,15 +36,53 @@ type PageSpeedResponse = {
     categories?: Record<string, { score?: number | null }>;
     audits?: Record<string, PageSpeedAudit>;
   };
+  loadingExperience?: Record<string, unknown>;
 };
 
-function average(values: Array<number | null | undefined>) {
-  const valid = values.filter((value): value is number => typeof value === "number");
-  if (!valid.length) {
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 2, baseDelayMs = 2000) {
+  let attempt = 0;
+
+  while (true) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (attempt >= maxRetries) {
+        throw error;
+      }
+
+      const delayMs = Math.round(baseDelayMs * Math.pow(2.5, attempt));
+      attempt += 1;
+      await sleep(delayMs);
+    }
+  }
+}
+
+function getPageSpeedApiKeys() {
+  return [
+    process.env.PAGESPEED_API_KEY?.trim(),
+    process.env.PAGESPEED_API_KEY_2?.trim(),
+    process.env.PAGESPEED_API_KEY_3?.trim()
+  ].filter((value): value is string => Boolean(value));
+}
+
+function pickPageSpeedApiKey(rotationIndex?: number) {
+  const keys = getPageSpeedApiKeys();
+
+  if (!keys.length) {
     return null;
   }
 
-  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+  if (typeof rotationIndex === "number" && Number.isFinite(rotationIndex)) {
+    return keys[rotationIndex % keys.length] ?? keys[0];
+  }
+
+  const key = keys[pageSpeedApiKeyCursor % keys.length] ?? keys[0];
+  pageSpeedApiKeyCursor += 1;
+  return key;
 }
 
 function toScore(rawScore?: number | null) {
@@ -153,9 +194,9 @@ function extractRecommendations(
       return (mode === "metricSavings" || mode === "binary" || mode === "numeric") && savings > 0;
     })
     .sort((a, b) => {
-      const aSavings = a[1].details?.overallSavingsMs ?? a[1].numericValue ?? 0;
-      const bSavings = b[1].details?.overallSavingsMs ?? b[1].numericValue ?? 0;
-      return bSavings - aSavings;
+      const leftSavings = a[1].details?.overallSavingsMs ?? a[1].numericValue ?? 0;
+      const rightSavings = b[1].details?.overallSavingsMs ?? b[1].numericValue ?? 0;
+      return rightSavings - leftSavings;
     })
     .slice(0, 10)
     .map(([id, audit]) => {
@@ -172,51 +213,123 @@ function extractRecommendations(
     });
 }
 
-async function fetchStrategyReport(url: string, strategy: "mobile" | "desktop") {
-  const params = new URLSearchParams();
-  params.set("url", url);
-  params.set("strategy", strategy);
-  params.append("category", "performance");
-  params.append("category", "seo");
-  params.append("category", "accessibility");
-  params.append("category", "best-practices");
-
-  if (process.env.PAGESPEED_API_KEY) {
-    params.set("key", process.env.PAGESPEED_API_KEY);
-  }
-
-  const response = await fetch(`${PAGE_SPEED_ENDPOINT}?${params.toString()}`, {
-    headers: {
-      Accept: "application/json"
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(PAGE_SPEED_TIMEOUT_MS)
-  });
-
-  if (!response.ok) {
-    const contentType = response.headers.get("content-type") ?? "";
-
-    if (contentType.includes("application/json")) {
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: { message?: string } }
-        | null;
-      const message =
-        payload?.error?.message?.trim() || `PageSpeed ${strategy} request failed (${response.status}).`;
-      throw new Error(getFriendlyScanFailureMessage(message));
-    }
-
-    const errorText = await response.text();
-    const rawMessage = isPageSpeedRateLimitError(errorText)
-      ? errorText
-      : `PageSpeed ${strategy} request failed (${response.status}).`;
-
-    throw new Error(getFriendlyScanFailureMessage(rawMessage));
-  }
-
-  return (await response.json()) as PageSpeedResponse;
+function shortenErrorDetail(message: string) {
+  return message.replace(/\s+/g, " ").trim().slice(0, 120) || "unknown response";
 }
 
-export async function runPageSpeedScan(url: string): Promise<
+function classifyPageSpeedError(input: { status?: number; message?: string | null }) {
+  const message = input.message?.trim() ?? "";
+  const normalized = message.toLowerCase();
+
+  if (input.status === 429 || isPageSpeedRateLimitError(message) || /\brate\b|\bquota\b/.test(normalized)) {
+    return "rate-limited: PageSpeed";
+  }
+
+  if (
+    normalized.includes("aborted") ||
+    normalized.includes("timeout") ||
+    normalized.includes("timed out")
+  ) {
+    return "PageSpeed request timed out.";
+  }
+
+  if (
+    normalized.includes("network") ||
+    normalized.includes("fetch failed") ||
+    normalized.includes("econnreset") ||
+    normalized.includes("econnrefused") ||
+    normalized.includes("enotfound")
+  ) {
+    return "PageSpeed network request failed.";
+  }
+
+  return `PageSpeed response parse failed: ${shortenErrorDetail(message || `status ${input.status ?? "unknown"}`)}`;
+}
+
+async function fetchStrategyReport(
+  url: string,
+  strategy: "mobile" | "desktop",
+  rotationIndex?: number
+) {
+  return retryWithBackoff(async () => {
+    const params = new URLSearchParams();
+    params.set("url", url);
+    params.set("strategy", strategy);
+    params.append("category", "performance");
+    params.append("category", "seo");
+    params.append("category", "accessibility");
+    params.append("category", "best-practices");
+    params.set("fields", "lighthouseResult,loadingExperience");
+
+    const apiKey = pickPageSpeedApiKey(rotationIndex);
+    if (apiKey) {
+      params.set("key", apiKey);
+    }
+
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), PAGE_SPEED_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(`${PAGE_SPEED_ENDPOINT}?${params.toString()}`, {
+        headers: {
+          Accept: "application/json"
+        },
+        cache: "no-store",
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") ?? "";
+
+        if (contentType.includes("application/json")) {
+          const payload = (await response.json().catch(() => null)) as
+            | { error?: { message?: string } }
+            | null;
+          throw new Error(
+            classifyPageSpeedError({
+              status: response.status,
+              message: payload?.error?.message ?? `PageSpeed request failed (${response.status}).`
+            })
+          );
+        }
+
+        const errorText = await response.text();
+        throw new Error(
+          classifyPageSpeedError({
+            status: response.status,
+            message: errorText || `PageSpeed request failed (${response.status}).`
+          })
+        );
+      }
+
+      const payload = (await response.json()) as PageSpeedResponse;
+      if (!payload.lighthouseResult) {
+        throw new Error("Missing lighthouseResult in PageSpeed response.");
+      }
+
+      return payload;
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("PageSpeed request timed out.");
+      }
+
+      if (error instanceof Error) {
+        throw new Error(classifyPageSpeedError({ message: error.message }));
+      }
+
+      throw new Error("PageSpeed response parse failed: unknown error");
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
+  });
+}
+
+export async function runPageSpeedScan(
+  url: string,
+  options?: {
+    rotationIndex?: number;
+  }
+): Promise<
   Pick<
     ScanResult,
     | "performance_score"
@@ -236,68 +349,31 @@ export async function runPageSpeedScan(url: string): Promise<
     | "error_message"
   >
 > {
-  const uniqueMessages = (messages: string[]) => [...new Set(messages.filter(Boolean))];
-
-  const [mobileResult, desktopResult] = await Promise.allSettled([
-    fetchStrategyReport(url, "mobile"),
-    fetchStrategyReport(url, "desktop")
-  ]);
-
-  if (mobileResult.status === "rejected" && desktopResult.status === "rejected") {
-    throw new Error(
-      uniqueMessages([
-        mobileResult.reason instanceof Error ? mobileResult.reason.message : "Mobile audit failed.",
-        desktopResult.reason instanceof Error ? desktopResult.reason.message : "Desktop audit failed."
-      ]).join(" | ")
-    );
-  }
-
   const reportUrl = `https://pagespeed.web.dev/report?url=${encodeURIComponent(url)}`;
-  const mobile = mobileResult.status === "fulfilled" ? mobileResult.value : null;
-  const desktop = desktopResult.status === "fulfilled" ? desktopResult.value : null;
-
-  const mobileSummary = mobile ? parseDeviceSummary(mobile, "mobile") : undefined;
-  const desktopSummary = desktop ? parseDeviceSummary(desktop, "desktop") : undefined;
-
-  const snapshots = [mobileSummary, desktopSummary].filter(
-    (snapshot): snapshot is DeviceAuditSummary => Boolean(snapshot)
-  );
-
-  const errorMessages = uniqueMessages(
-    [mobileResult, desktopResult]
-      .filter((result) => result.status === "rejected")
-      .map((result) =>
-        getFriendlyScanFailureMessage(result.reason instanceof Error ? result.reason.message : "Unknown PageSpeed error")
-      )
-  );
+  const mobile = await fetchStrategyReport(url, PAGE_SPEED_STRATEGY, options?.rotationIndex);
+  const mobileSummary = parseDeviceSummary(mobile, "mobile");
 
   return {
-    performance_score: Math.round(average(snapshots.map((snapshot) => snapshot.performance_score)) ?? 0),
-    seo_score: Math.round(average(snapshots.map((snapshot) => snapshot.seo_score)) ?? 0),
-    accessibility_score: Math.round(average(snapshots.map((snapshot) => snapshot.accessibility_score)) ?? 0),
-    best_practices_score: Math.round(average(snapshots.map((snapshot) => snapshot.best_practices_score)) ?? 0),
-    lcp: average(snapshots.map((snapshot) => snapshot.lcp)),
-    fid: average(snapshots.map((snapshot) => snapshot.fid)),
-    cls: average(snapshots.map((snapshot) => snapshot.cls)),
-    tbt: average(snapshots.map((snapshot) => snapshot.tbt)),
-    issues: [
-      ...(mobile ? extractIssues(mobile, "mobile") : []),
-      ...(desktop ? extractIssues(desktop, "desktop") : [])
-    ],
-    recommendations: [
-      ...(mobile ? extractRecommendations(mobile, "mobile", reportUrl) : []),
-      ...(desktop ? extractRecommendations(desktop, "desktop", reportUrl) : [])
-    ],
+    performance_score: mobileSummary.performance_score,
+    seo_score: mobileSummary.seo_score,
+    accessibility_score: mobileSummary.accessibility_score,
+    best_practices_score: mobileSummary.best_practices_score,
+    lcp: mobileSummary.lcp,
+    fid: mobileSummary.fid,
+    cls: mobileSummary.cls,
+    tbt: mobileSummary.tbt,
+    issues: extractIssues(mobile, "mobile"),
+    recommendations: extractRecommendations(mobile, "mobile", reportUrl),
     raw_data: {
-      mobile: mobile ?? null,
-      desktop: desktop ?? null,
+      mobile,
+      desktop: null,
       scanned_url: url,
       report_url: reportUrl,
-      errors: errorMessages
+      errors: []
     },
     mobile_snapshot: mobileSummary,
-    desktop_snapshot: desktopSummary,
+    desktop_snapshot: undefined,
     scan_status: "success",
-    error_message: errorMessages.length ? errorMessages.join(" | ") : null
+    error_message: null
   };
 }

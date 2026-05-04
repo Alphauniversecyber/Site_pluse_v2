@@ -17,9 +17,19 @@ type FailedTaskRow = {
   status: "failed" | "retried" | "resolved";
   createdAt: string;
   retriedAt: string | null;
+  retryCount: number;
+  resolvedAt: string | null;
 };
 
-function getStatusTone(status: FailedTaskRow["status"]) {
+function isRateLimitedError(errorMessage: string) {
+  return /^rate-limited:\s*pagespeed$/i.test(errorMessage.trim());
+}
+
+function getStatusTone(status: FailedTaskRow["status"], errorMessage: string) {
+  if (status !== "resolved" && isRateLimitedError(errorMessage)) {
+    return "amber" as const;
+  }
+
   if (status === "retried") {
     return "amber" as const;
   }
@@ -29,6 +39,18 @@ function getStatusTone(status: FailedTaskRow["status"]) {
   }
 
   return "red" as const;
+}
+
+function getStatusLabel(row: FailedTaskRow) {
+  if (row.status !== "resolved" && isRateLimitedError(row.errorMessage)) {
+    return "rate-limited";
+  }
+
+  if (row.status === "retried") {
+    return "retrying";
+  }
+
+  return row.status;
 }
 
 function formatDate(value: string | null) {
@@ -77,7 +99,28 @@ async function postJson<T>(url: string, body: Record<string, unknown>) {
   return payload.data;
 }
 
-export function FailedTasksTable({ initialRows }: { initialRows: FailedTaskRow[] }) {
+function matchesStatusFilter(
+  row: FailedTaskRow,
+  statusFilter: "open" | "all" | FailedTaskRow["status"]
+) {
+  if (statusFilter === "all") {
+    return true;
+  }
+
+  if (statusFilter === "open") {
+    return row.status === "failed" || row.status === "retried";
+  }
+
+  return row.status === statusFilter;
+}
+
+export function FailedTasksTable({
+  initialRows,
+  statusFilter
+}: {
+  initialRows: FailedTaskRow[];
+  statusFilter: "open" | "all" | FailedTaskRow["status"];
+}) {
   const [rows, setRows] = useState(initialRows);
   const [pendingById, setPendingById] = useState<Record<string, "retry" | "resolve" | undefined>>({});
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
@@ -93,20 +136,28 @@ export function FailedTasksTable({ initialRows }: { initialRows: FailedTaskRow[]
           id: string;
           status: FailedTaskRow["status"];
           retried_at: string | null;
+          retry_count: number;
+          resolved_at: string | null;
         };
       }>("/api/admin/retry-task", { taskId });
 
-      setRows((current) =>
-        current.map((row) =>
-          row.id === taskId
-            ? {
-                ...row,
-                status: result.task.status,
-                retriedAt: result.task.retried_at
-              }
-            : row
-        )
-      );
+      setRows((current) => {
+        const nextRows = current
+          .map((row) =>
+            row.id === taskId
+              ? {
+                  ...row,
+                  status: result.task.status,
+                  retriedAt: result.task.retried_at,
+                  retryCount: result.task.retry_count,
+                  resolvedAt: result.task.resolved_at
+                }
+              : row
+          )
+          .filter((row) => matchesStatusFilter(row, statusFilter));
+
+        return nextRows;
+      });
     } catch (error) {
       setErrorById((current) => ({
         ...current,
@@ -126,19 +177,25 @@ export function FailedTasksTable({ initialRows }: { initialRows: FailedTaskRow[]
         task: {
           id: string;
           status: FailedTaskRow["status"];
+          resolved_at: string | null;
         };
       }>("/api/admin/failed-tasks/resolve", { taskId });
 
-      setRows((current) =>
-        current.map((row) =>
-          row.id === taskId
-            ? {
-                ...row,
-                status: result.task.status
-              }
-            : row
-        )
-      );
+      setRows((current) => {
+        const nextRows = current
+          .map((row) =>
+            row.id === taskId
+              ? {
+                  ...row,
+                  status: result.task.status,
+                  resolvedAt: result.task.resolved_at
+                }
+              : row
+          )
+          .filter((row) => matchesStatusFilter(row, statusFilter));
+
+        return nextRows;
+      });
     } catch (error) {
       setErrorById((current) => ({
         ...current,
@@ -168,6 +225,8 @@ export function FailedTasksTable({ initialRows }: { initialRows: FailedTaskRow[]
             const isExpanded = Boolean(expandedById[row.id]);
             const isLongError = row.errorMessage.length > 140;
             const pendingAction = pendingById[row.id];
+            const displayStatusLabel = getStatusLabel(row);
+            const isRateLimited = displayStatusLabel === "rate-limited";
 
             return (
               <tr key={row.id} className={`${index % 2 === 0 ? "bg-[#101010]" : "bg-[#141414]"} align-top hover:bg-[#181818]`}>
@@ -207,15 +266,31 @@ export function FailedTasksTable({ initialRows }: { initialRows: FailedTaskRow[]
                   {row.retriedAt ? (
                     <p className="mt-2 font-mono text-xs text-zinc-500">Retried {formatDate(row.retriedAt)}</p>
                   ) : null}
+                  {row.resolvedAt ? (
+                    <p className="mt-2 font-mono text-xs text-[#86EFAC]">Resolved {formatDate(row.resolvedAt)}</p>
+                  ) : null}
+                  {row.retryCount > 0 ? (
+                    <p className="mt-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
+                      {row.retryCount} retry{row.retryCount === 1 ? "" : "ies"}
+                    </p>
+                  ) : null}
                 </td>
                 <td className="px-4 py-4">
-                  <AdminBadge label={row.status} tone={getStatusTone(row.status)} />
+                  <span
+                    title={
+                      isRateLimited
+                        ? "Site will be retried automatically after cooldown."
+                        : undefined
+                    }
+                  >
+                    <AdminBadge label={displayStatusLabel} tone={getStatusTone(row.status, row.errorMessage)} />
+                  </span>
                 </td>
                 <td className="px-4 py-4">
                   <div className="flex flex-col gap-2">
                     <button
                       type="button"
-                      disabled={row.status !== "failed" || Boolean(pendingAction)}
+                      disabled={row.status === "resolved" || Boolean(pendingAction)}
                       onClick={() => handleRetry(row.id)}
                       className="rounded-full border border-[#1D4ED8] bg-[#172554] px-3 py-2 text-xs font-medium text-[#BFDBFE] disabled:cursor-not-allowed disabled:opacity-50"
                     >

@@ -4,7 +4,7 @@ import { enqueueJob, isAuthorizedCronRequest } from "@/lib/job-queue";
 import { enqueueFailedScanRetryJobs } from "@/lib/scan-job-queue";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
   if (!isAuthorizedCronRequest(request)) {

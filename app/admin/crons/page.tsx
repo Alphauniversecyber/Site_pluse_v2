@@ -42,12 +42,28 @@ export default async function AdminCronsPage({
   const scanUser = parseTextParam(searchParams?.scanUser);
   const scanStatus = parseTextParam(searchParams?.scanStatus) || "all";
   const scanDate = parseTextParam(searchParams?.scanDate);
-  const failedStatus = parseTextParam(searchParams?.failedStatus) || "all";
+  const failedStatus = parseTextParam(searchParams?.failedStatus) || "open";
   const failedRange = parseTextParam(searchParams?.failedRange) || "7d";
   const data = await getAdminCronsData();
   const failedTasks = await getAdminFailedTasksData({
-    status: failedStatus === "all" || failedStatus === "failed" || failedStatus === "retried" || failedStatus === "resolved" ? failedStatus : "all",
-    range: failedRange === "30d" || failedRange === "all" ? failedRange : "7d"
+    status:
+      failedStatus === "open" ||
+      failedStatus === "all" ||
+      failedStatus === "failed" ||
+      failedStatus === "retried" ||
+      failedStatus === "resolved"
+        ? failedStatus
+        : "open",
+    range:
+      failedRange === "today" ||
+      failedRange === "yesterday" ||
+      failedRange === "7d" ||
+      failedRange === "30d" ||
+      failedRange === "this_month" ||
+      failedRange === "last_month" ||
+      failedRange === "all"
+        ? failedRange
+        : "7d"
   });
   const monitoring = await getAdminScanMonitoringData({
     user: scanUser,
@@ -277,9 +293,10 @@ export default async function AdminCronsPage({
               defaultValue={failedTasks.filters.status}
               className="rounded-2xl border border-[#2A2A2A] bg-[#0B0B0B] px-4 py-3 text-sm text-white outline-none focus:border-[#F97316]"
             >
+              <option value="open">Open only</option>
               <option value="all">All statuses</option>
               <option value="failed">Failed</option>
-              <option value="retried">Retried</option>
+              <option value="retried">Retrying</option>
               <option value="resolved">Resolved</option>
             </select>
             <select
@@ -287,8 +304,12 @@ export default async function AdminCronsPage({
               defaultValue={failedTasks.filters.range}
               className="rounded-2xl border border-[#2A2A2A] bg-[#0B0B0B] px-4 py-3 text-sm text-white outline-none focus:border-[#F97316]"
             >
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
               <option value="7d">Last 7 days</option>
               <option value="30d">Last 30 days</option>
+              <option value="this_month">This month</option>
+              <option value="last_month">Last month</option>
               <option value="all">All time</option>
             </select>
             <button type="submit" className="rounded-2xl bg-[#F97316] px-4 py-3 text-sm font-semibold text-white">
@@ -300,7 +321,7 @@ export default async function AdminCronsPage({
         <div className="mt-6">
           {failedTasks.rows.length ? (
             <AdminCard className="overflow-hidden p-0">
-              <FailedTasksTable initialRows={failedTasks.rows} />
+              <FailedTasksTable initialRows={failedTasks.rows} statusFilter={failedTasks.filters.status} />
             </AdminCard>
           ) : (
             <AdminEmptyState

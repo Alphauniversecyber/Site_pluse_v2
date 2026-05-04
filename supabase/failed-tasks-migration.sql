@@ -8,8 +8,16 @@ create table if not exists public.failed_tasks (
   payload jsonb not null default '{}'::jsonb,
   status text not null default 'failed' check (status in ('failed', 'retried', 'resolved')),
   created_at timestamptz not null default timezone('utc', now()),
-  retried_at timestamptz
+  retried_at timestamptz,
+  retry_count integer not null default 0,
+  resolved_at timestamptz
 );
+
+alter table public.failed_tasks
+  add column if not exists retry_count integer not null default 0;
+
+alter table public.failed_tasks
+  add column if not exists resolved_at timestamptz;
 
 create index if not exists idx_failed_tasks_status_created_at
   on public.failed_tasks (status, created_at desc);

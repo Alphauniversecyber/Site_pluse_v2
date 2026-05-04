@@ -14,8 +14,11 @@ const FRIENDLY_SCAN_ERROR_PATTERNS = [
 ];
 
 const PAGE_SPEED_RATE_LIMIT_PATTERNS = [
+  /rate-limited:\s*pagespeed/i,
   /PageSpeed .*request failed \(429\)/i,
   /\b429\b/i,
+  /\brate(?: |-)?limit/i,
+  /\bquota\b/i,
   /automated queries/i,
   /protect our users/i,
   /google help/i,

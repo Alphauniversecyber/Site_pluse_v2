@@ -2,9 +2,16 @@ import "server-only";
 
 import type { ReportFrequency, ScanFrequency, UserProfile, Website } from "@/types";
 import { logAdminError, logScanExecution } from "@/lib/admin/logging";
-import { logFailedTask } from "@/lib/failed-tasks";
+import {
+  logFailedTask,
+  markFailedTaskResolved,
+  markFailedTaskRetried,
+  markFailedTaskRetryFailed,
+  type FailedTaskRecord
+} from "@/lib/failed-tasks";
 import type { CronExecutionGuard } from "@/lib/cron";
 import { executeWebsiteScan } from "@/lib/scan-service";
+import { isPageSpeedRateLimitError } from "@/lib/scan-errors";
 import { getPeriodKey, getRetryAt, isDueForPeriod, normalizeTimezone } from "@/lib/schedule-monitoring";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { hasScheduledAutomationAccess } from "@/lib/trial";
@@ -14,6 +21,9 @@ type QueueStatus = "pending" | "processing" | "completed" | "failed" | "skipped"
 type ScanFailureReason =
   | "timeout"
   | "api_error"
+  | "rate_limited"
+  | "network_error"
+  | "parse_error"
   | "plan_limit_reached"
   | "queue_backlog"
   | "account_ineligible"
@@ -71,39 +81,110 @@ export type EnqueueFailedScanRetryJobsResult = {
 };
 
 const SCAN_EXECUTION_TIMEOUT_MS = 45_000;
+const SCAN_DELAY_BETWEEN_RUNS_MS = 2_500;
+const SCAN_CRON_ELAPSED_STOP_MS = 50_000;
 const FAILED_SCAN_RETRY_LOOKBACK_HOURS = 48;
-const FAILED_SCAN_RETRY_RECENT_SCAN_LIMIT = 600;
+const FAILED_SCAN_RETRY_TASK_LIMIT = 250;
+const PAGE_SPEED_RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
 
 function buildScanQueueDedupeKey(websiteId: string, frequency: ScanFrequency, periodKey: string) {
   return `scan-queue:${websiteId}:${frequency}:${periodKey}`;
 }
 
-function buildFailedScanRetryDedupeKey(websiteId: string, failedScanId: string) {
-  return `scan-retry:${websiteId}:${failedScanId}`;
+function buildFailedScanRetryDedupeKey(taskId: string, retryCount: number) {
+  return `scan-retry:${taskId}:${retryCount + 1}`;
 }
 
-function classifyScanFailure(message: string): ScanFailureReason {
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeParseErrorMessage(message: string) {
+  const shortMessage = message.replace(/\s+/g, " ").trim().slice(0, 120) || "unknown response";
+  return `parse-error: ${shortMessage}`;
+}
+
+function classifyScanFailure(message: string): {
+  failureReason: ScanFailureReason;
+  failedTaskMessage: string;
+} {
   const normalized = message.toLowerCase();
 
-  if (normalized.includes("timeout")) {
-    return "timeout";
+  if (normalized.includes("timeout") || normalized.includes("timed out")) {
+    return {
+      failureReason: "timeout",
+      failedTaskMessage: "timeout"
+    };
+  }
+
+  if (
+    isPageSpeedRateLimitError(message) ||
+    normalized.includes("rate-limited: pagespeed") ||
+    normalized.includes("quota")
+  ) {
+    return {
+      failureReason: "rate_limited",
+      failedTaskMessage: "rate-limited: PageSpeed"
+    };
+  }
+
+  if (
+    normalized.includes("network-error") ||
+    normalized.includes("network request failed") ||
+    normalized.includes("fetch failed") ||
+    normalized.includes("econnreset") ||
+    normalized.includes("econnrefused") ||
+    normalized.includes("enotfound")
+  ) {
+    return {
+      failureReason: "network_error",
+      failedTaskMessage: "network-error"
+    };
+  }
+
+  if (
+    normalized.includes("parse-error") ||
+    normalized.includes("parse failed") ||
+    normalized.includes("unexpected token") ||
+    normalized.includes("json") ||
+    normalized.includes("missing lighthouseresult")
+  ) {
+    return {
+      failureReason: "parse_error",
+      failedTaskMessage: normalized.startsWith("parse-error:") ? message : normalizeParseErrorMessage(message)
+    };
   }
 
   if (
     normalized.includes("pagespeed") ||
     normalized.includes("lighthouse") ||
     normalized.includes("google api") ||
-    normalized.includes("429") ||
     normalized.includes("api")
   ) {
-    return "api_error";
+    return {
+      failureReason: "api_error",
+      failedTaskMessage: normalizeParseErrorMessage(message)
+    };
   }
 
-  return "queue_backlog";
+  return {
+    failureReason: "queue_backlog",
+    failedTaskMessage: normalizeParseErrorMessage(message)
+  };
 }
 
 function getFailedScanRetryLookbackIso() {
   return new Date(Date.now() - FAILED_SCAN_RETRY_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+}
+
+function getFailedTaskRetryBaseTimestamp(task: Pick<FailedTaskRecord, "created_at" | "retried_at">) {
+  return task.retried_at ?? task.created_at;
+}
+
+function getRetryFailedTaskId(metadata: Record<string, unknown>) {
+  return typeof metadata.failedTaskId === "string" && metadata.failedTaskId.trim()
+    ? metadata.failedTaskId
+    : null;
 }
 
 async function loadProfiles(userIds: string[]) {
@@ -245,26 +326,22 @@ async function loadExistingQueueRows(dedupeKeys: string[]) {
   return new Map(((data ?? []) as ScanJobQueueRow[]).map((row) => [row.dedupe_key, row]));
 }
 
-async function loadRecentScansForRetry(limit = FAILED_SCAN_RETRY_RECENT_SCAN_LIMIT) {
+async function loadFailedTasksForRetry(limit = FAILED_SCAN_RETRY_TASK_LIMIT) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
-    .from("scan_results")
-    .select("id,website_id,scan_status,error_message,scanned_at")
-    .gte("scanned_at", getFailedScanRetryLookbackIso())
-    .order("scanned_at", { ascending: false })
+    .from("failed_tasks")
+    .select("*")
+    .eq("task_type", "execute-scan")
+    .eq("status", "failed")
+    .gte("created_at", getFailedScanRetryLookbackIso())
+    .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return (data ?? []) as Array<{
-    id: string;
-    website_id: string;
-    scan_status: "success" | "failed";
-    error_message: string | null;
-    scanned_at: string;
-  }>;
+  return (data ?? []) as FailedTaskRecord[];
 }
 
 async function insertQueueRows(rows: Array<Partial<ScanJobQueueRow>>) {
@@ -341,12 +418,14 @@ function isCurrentPeriod(row: Pick<ScanJobQueueRow, "frequency" | "period_key" |
   return row.period_key === getPeriodKey(row.frequency, new Date(), row.timezone);
 }
 
-async function executeWebsiteScanWithTimeout(websiteId: string) {
+async function executeWebsiteScanWithTimeout(websiteId: string, rotationIndex?: number) {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
   try {
     return await Promise.race([
-      executeWebsiteScan(websiteId),
+      executeWebsiteScan(websiteId, {
+        rotationIndex
+      }),
       new Promise<never>((_, reject) => {
         timeoutHandle = setTimeout(() => {
           reject(new Error("timeout"));
@@ -361,7 +440,7 @@ async function executeWebsiteScanWithTimeout(websiteId: string) {
 }
 
 export async function retryWebsiteScanTask(input: { websiteId: string }) {
-  const result = await executeWebsiteScan(input.websiteId);
+  const result = await executeWebsiteScanWithTimeout(input.websiteId);
 
   if (result.scan.scan_status === "failed") {
     throw new Error(result.scan.error_message ?? "The website scan failed again.");
@@ -484,29 +563,11 @@ export async function enqueueDueScanJobs(limit?: number | null, offset = 0): Pro
 }
 
 export async function enqueueFailedScanRetryJobs(): Promise<EnqueueFailedScanRetryJobsResult> {
-  const recentScans = await loadRecentScansForRetry();
-  const latestScanByWebsite = new Map<
-    string,
-    {
-      id: string;
-      website_id: string;
-      scan_status: "success" | "failed";
-      error_message: string | null;
-      scanned_at: string;
-    }
-  >();
-
-  for (const scan of recentScans) {
-    if (!latestScanByWebsite.has(scan.website_id)) {
-      latestScanByWebsite.set(scan.website_id, scan);
-    }
-  }
-
-  const failedLatestScans = Array.from(latestScanByWebsite.values()).filter(
-    (scan) => scan.scan_status === "failed"
+  const failedTasks = await loadFailedTasksForRetry();
+  const tasksWithSites = failedTasks.filter((task) => Boolean(task.site_id));
+  const websites = await loadActiveWebsitesByIds(
+    tasksWithSites.map((task) => task.site_id).filter((value): value is string => Boolean(value))
   );
-
-  const websites = await loadActiveWebsitesByIds(failedLatestScans.map((scan) => scan.website_id));
   const websiteById = new Map(websites.map((website) => [website.id, website]));
   const profiles = await loadProfiles(Array.from(new Set(websites.map((website) => website.user_id))));
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -525,8 +586,20 @@ export async function enqueueFailedScanRetryJobs(): Promise<EnqueueFailedScanRet
   const now = new Date();
   const candidates: Array<Partial<ScanJobQueueRow>> = [];
 
-  for (const failedScan of failedLatestScans) {
-    const website = websiteById.get(failedScan.website_id);
+  for (const failedTask of tasksWithSites) {
+    if (!failedTask.site_id) {
+      continue;
+    }
+
+    const failedAt = new Date(getFailedTaskRetryBaseTimestamp(failedTask)).getTime();
+    if (
+      /^rate-limited:\s*pagespeed$/i.test(failedTask.error_message) &&
+      Date.now() - failedAt < PAGE_SPEED_RATE_LIMIT_COOLDOWN_MS
+    ) {
+      continue;
+    }
+
+    const website = websiteById.get(failedTask.site_id);
     if (!website) {
       continue;
     }
@@ -563,11 +636,11 @@ export async function enqueueFailedScanRetryJobs(): Promise<EnqueueFailedScanRet
     candidates.push({
       user_id: profile.id,
       website_id: website.id,
-      scan_result_id: failedScan.id,
+      scan_result_id: null,
       frequency,
       timezone,
       period_key: periodKey,
-      dedupe_key: buildFailedScanRetryDedupeKey(website.id, failedScan.id),
+      dedupe_key: buildFailedScanRetryDedupeKey(failedTask.id, failedTask.retry_count ?? 0),
       scheduled_for: now.toISOString(),
       next_attempt_at: now.toISOString(),
       status: "pending",
@@ -575,10 +648,11 @@ export async function enqueueFailedScanRetryJobs(): Promise<EnqueueFailedScanRet
       last_error: null,
       metadata: {
         source: "retry-failed-scans",
-        retryReason: "latest_scan_failed",
-        failedScanId: failedScan.id,
-        failedScanAt: failedScan.scanned_at,
-        failedScanError: failedScan.error_message,
+        retryReason: "failed_task",
+        failedTaskId: failedTask.id,
+        failedTaskCreatedAt: failedTask.created_at,
+        failedTaskError: failedTask.error_message,
+        retryCount: failedTask.retry_count ?? 0,
         userEmail: profile.email,
         plan: profile.plan,
         websiteUrl: website.url,
@@ -590,10 +664,19 @@ export async function enqueueFailedScanRetryJobs(): Promise<EnqueueFailedScanRet
   const existingRows = await loadExistingQueueRows(candidates.map((row) => row.dedupe_key as string));
   const rowsToInsert = candidates.filter((row) => !existingRows.has(row.dedupe_key as string));
   await insertQueueRows(rowsToInsert);
+  const queuedTaskIdsToMark = new Set(
+    rowsToInsert
+      .map((row) => getRetryFailedTaskId((row.metadata ?? {}) as Record<string, unknown>))
+      .filter((value): value is string => Boolean(value))
+  );
+
+  for (const taskId of queuedTaskIdsToMark) {
+    await markFailedTaskRetried(taskId);
+  }
 
   return {
     queuedCount: rowsToInsert.length,
-    inspectedCount: recentScans.length,
+    inspectedCount: failedTasks.length,
     candidateCount: candidates.length
   };
 }
@@ -603,6 +686,7 @@ export async function processQueuedScanJobs(
   guard?: CronExecutionGuard
 ): Promise<ProcessQueuedScanJobsResult> {
   const admin = createSupabaseAdminClient();
+  const startedAtMs = Date.now();
   const { data, error } = await admin
     .from("scan_job_queue")
     .select("*")
@@ -621,6 +705,10 @@ export async function processQueuedScanJobs(
   let settledCount = 0;
 
   for (const row of rows) {
+    if (Date.now() - startedAtMs >= SCAN_CRON_ELAPSED_STOP_MS) {
+      break;
+    }
+
     if (
       guard?.shouldStop({
         queue: "scan_job_queue",
@@ -655,6 +743,7 @@ export async function processQueuedScanJobs(
     }
 
     const startedAt = new Date().toISOString();
+    const retryFailedTaskId = getRetryFailedTaskId(row.metadata ?? {});
 
     try {
       const claimed = await claimQueueRow(row, startedAt);
@@ -706,7 +795,7 @@ export async function processQueuedScanJobs(
         continue;
       }
 
-      const result = await executeWebsiteScanWithTimeout(row.website_id);
+      const result = await executeWebsiteScanWithTimeout(row.website_id, inspectedCount - 1);
 
       await updateQueueRow(row.id, {
         scan_result_id: result.scan.id,
@@ -728,30 +817,40 @@ export async function processQueuedScanJobs(
         }
       });
       if (result.scan.scan_status === "failed") {
-        await logFailedTask({
-          cronName: row.metadata?.source === "retry-failed-scans" ? "retry-failed-scans" : "process-scans",
-          taskType: "execute-scan",
-          userId: row.user_id,
-          siteId: row.website_id,
-          errorMessage: result.scan.error_message ?? "The scheduled scan completed with a failed result.",
-          payload: {
-            scanJobQueueId: row.id,
+        const classifiedFailure = classifyScanFailure(
+          result.scan.error_message ?? "The scheduled scan completed with a failed result."
+        );
+
+        if (retryFailedTaskId) {
+          await markFailedTaskRetryFailed(retryFailedTaskId, classifiedFailure.failedTaskMessage);
+        } else {
+          await logFailedTask({
+            cronName: row.metadata?.source === "retry-failed-scans" ? "retry-failed-scans" : "process-scans",
+            taskType: "execute-scan",
             userId: row.user_id,
-            websiteId: row.website_id,
-            scanId: result.scan.id
-          }
-        });
+            siteId: row.website_id,
+            errorMessage: classifiedFailure.failedTaskMessage,
+            payload: {
+              scanJobQueueId: row.id,
+              userId: row.user_id,
+              websiteId: row.website_id,
+              scanId: result.scan.id
+            }
+          });
+        }
+      } else if (retryFailedTaskId) {
+        await markFailedTaskResolved(retryFailedTaskId);
       }
       executedWebsiteIds.push(row.website_id);
       settledCount += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown scan queue failure.";
-      const failureReason = classifyScanFailure(message);
+      const classifiedFailure = classifyScanFailure(message);
       const attemptCount = (row.attempt_count ?? 0) + 1;
 
       await updateQueueRow(row.id, {
         status: "failed",
-        failure_reason: failureReason,
+        failure_reason: classifiedFailure.failureReason,
         last_error: message,
         last_attempt_at: startedAt,
         next_attempt_at: getRetryAt(Math.min(60, attemptCount * 10)),
@@ -763,7 +862,7 @@ export async function processQueuedScanJobs(
         websiteId: row.website_id,
         userId: row.user_id,
         status: "failed",
-        failureReason,
+        failureReason: classifiedFailure.failureReason,
         errorMessage: message,
         startedAt,
         finishedAt: new Date().toISOString()
@@ -776,22 +875,30 @@ export async function processQueuedScanJobs(
         context: {
           queue: "scan_job_queue",
           queueId: row.id,
-          failureReason
+          failureReason: classifiedFailure.failureReason
         },
         dedupeWindowMinutes: 30
       });
-      await logFailedTask({
-        cronName: row.metadata?.source === "retry-failed-scans" ? "retry-failed-scans" : "process-scans",
-        taskType: "execute-scan",
-        userId: row.user_id,
-        siteId: row.website_id,
-        errorMessage: message,
-        payload: {
-          scanJobQueueId: row.id,
+      if (retryFailedTaskId) {
+        await markFailedTaskRetryFailed(retryFailedTaskId, classifiedFailure.failedTaskMessage);
+      } else {
+        await logFailedTask({
+          cronName: row.metadata?.source === "retry-failed-scans" ? "retry-failed-scans" : "process-scans",
+          taskType: "execute-scan",
           userId: row.user_id,
-          websiteId: row.website_id
-        }
-      });
+          siteId: row.website_id,
+          errorMessage: classifiedFailure.failedTaskMessage,
+          payload: {
+            scanJobQueueId: row.id,
+            userId: row.user_id,
+            websiteId: row.website_id
+          }
+        });
+      }
+    }
+
+    if (settledCount < rows.length && Date.now() - startedAtMs < SCAN_CRON_ELAPSED_STOP_MS) {
+      await sleep(SCAN_DELAY_BETWEEN_RUNS_MS);
     }
   }
 

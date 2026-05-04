@@ -32,6 +32,8 @@ export type FailedTaskRecord = {
   status: FailedTaskStatus;
   created_at: string;
   retried_at: string | null;
+  retry_count: number;
+  resolved_at: string | null;
 };
 
 function isMissingTableError(error: unknown) {
@@ -59,7 +61,9 @@ export async function logFailedTask(input: {
       site_id: input.siteId ?? null,
       error_message: input.errorMessage,
       payload: input.payload ?? {},
-      status: "failed"
+      status: "failed",
+      retry_count: 0,
+      resolved_at: null
     });
   } catch (error) {
     if (!isMissingTableError(error)) {
@@ -89,11 +93,13 @@ export async function getFailedTaskById(id: string) {
 
 export async function markFailedTaskRetried(id: string) {
   const admin = createSupabaseAdminClient();
+  const retriedAt = new Date().toISOString();
   const { data, error } = await admin
     .from("failed_tasks")
     .update({
       status: "retried",
-      retried_at: new Date().toISOString()
+      retried_at: retriedAt,
+      resolved_at: null
     })
     .eq("id", id)
     .select("*")
@@ -108,10 +114,12 @@ export async function markFailedTaskRetried(id: string) {
 
 export async function markFailedTaskResolved(id: string) {
   const admin = createSupabaseAdminClient();
+  const resolvedAt = new Date().toISOString();
   const { data, error } = await admin
     .from("failed_tasks")
     .update({
-      status: "resolved"
+      status: "resolved",
+      resolved_at: resolvedAt
     })
     .eq("id", id)
     .select("*")
@@ -119,6 +127,42 @@ export async function markFailedTaskResolved(id: string) {
 
   if (error || !data) {
     throw new Error(error?.message ?? "Unable to resolve failed task.");
+  }
+
+  return data;
+}
+
+export async function markFailedTaskRetryFailed(
+  id: string,
+  errorMessage: string,
+  status: FailedTaskStatus = "retried"
+) {
+  const admin = createSupabaseAdminClient();
+  const { data: existing, error: existingError } = await admin
+    .from("failed_tasks")
+    .select("retry_count")
+    .eq("id", id)
+    .single<{ retry_count: number }>();
+
+  if (existingError || !existing) {
+    throw new Error(existingError?.message ?? "Unable to load failed task retry state.");
+  }
+
+  const { data, error } = await admin
+    .from("failed_tasks")
+    .update({
+      status,
+      error_message: errorMessage,
+      retry_count: (existing.retry_count ?? 0) + 1,
+      retried_at: new Date().toISOString(),
+      resolved_at: null
+    })
+    .eq("id", id)
+    .select("*")
+    .single<FailedTaskRecord>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Unable to update failed task after retry.");
   }
 
   return data;

@@ -148,6 +148,8 @@ type AdminFailedTaskRecord = {
   status: FailedTaskStatus;
   created_at: string;
   retried_at: string | null;
+  retry_count: number;
+  resolved_at: string | null;
 };
 
 export type AdminOverviewData = {
@@ -392,10 +394,12 @@ export type AdminFailedTasksData = {
     status: FailedTaskStatus;
     createdAt: string;
     retriedAt: string | null;
+    retryCount: number;
+    resolvedAt: string | null;
   }>;
   filters: {
-    status: "all" | FailedTaskStatus;
-    range: "7d" | "30d" | "all";
+    status: "open" | "all" | FailedTaskStatus;
+    range: "today" | "yesterday" | "7d" | "30d" | "this_month" | "last_month" | "all";
   };
   error: string | null;
 };
@@ -419,13 +423,52 @@ function chunkPage<T>(rows: T[], page: number, pageSize: number, exportAll = fal
   };
 }
 
-function getFailedTaskRangeStart(range: "7d" | "30d" | "all") {
+function getFailedTaskRange(range: "today" | "yesterday" | "7d" | "30d" | "this_month" | "last_month" | "all") {
+  const now = new Date();
+
   if (range === "all") {
-    return null;
+    return {
+      start: null,
+      end: null
+    };
+  }
+
+  if (range === "today") {
+    return {
+      start: startOfDayIso(now),
+      end: null
+    };
+  }
+
+  if (range === "yesterday") {
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    return {
+      start: startOfDayIso(yesterday),
+      end: startOfDayIso(now)
+    };
+  }
+
+  if (range === "this_month") {
+    return {
+      start: startOfMonthIso(now),
+      end: null
+    };
+  }
+
+  if (range === "last_month") {
+    return {
+      start: startOfPreviousMonthIso(now),
+      end: startOfMonthIso(now)
+    };
   }
 
   const days = range === "30d" ? 30 : 7;
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  return {
+    start: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+    end: null
+  };
 }
 
 function latestByWebsite<T extends { website_id: string; scanned_at?: string; sent_at?: string; created_at?: string }>(
@@ -1425,27 +1468,33 @@ export async function getAdminCronsData(): Promise<AdminCronsPageData> {
 }
 
 export async function getAdminFailedTasksData(input: {
-  status?: "all" | FailedTaskStatus;
-  range?: "7d" | "30d" | "all";
+  status?: "open" | "all" | FailedTaskStatus;
+  range?: "today" | "yesterday" | "7d" | "30d" | "this_month" | "last_month" | "all";
 } = {}): Promise<AdminFailedTasksData> {
   const admin = createSupabaseAdminClient();
-  const status = input.status ?? "all";
+  const status = input.status ?? "open";
   const range = input.range ?? "7d";
-  const rangeStart = getFailedTaskRangeStart(range);
+  const rangeFilter = getFailedTaskRange(range);
 
   try {
     let query = admin
       .from("failed_tasks")
-      .select("id,cron_name,task_type,user_id,site_id,error_message,payload,status,created_at,retried_at")
+      .select("id,cron_name,task_type,user_id,site_id,error_message,payload,status,created_at,retried_at,retry_count,resolved_at")
       .order("created_at", { ascending: false })
       .limit(250);
 
-    if (status !== "all") {
+    if (status === "open") {
+      query = query.in("status", ["failed", "retried"]);
+    } else if (status !== "all") {
       query = query.eq("status", status);
     }
 
-    if (rangeStart) {
-      query = query.gte("created_at", rangeStart);
+    if (rangeFilter.start) {
+      query = query.gte("created_at", rangeFilter.start);
+    }
+
+    if (rangeFilter.end) {
+      query = query.lt("created_at", rangeFilter.end);
     }
 
     const { data, error } = await query;
@@ -1502,7 +1551,9 @@ export async function getAdminFailedTasksData(input: {
           payload: row.payload ?? {},
           status: row.status,
           createdAt: row.created_at,
-          retriedAt: row.retried_at
+          retriedAt: row.retried_at,
+          retryCount: row.retry_count ?? 0,
+          resolvedAt: row.resolved_at
         };
       }),
       filters: {
