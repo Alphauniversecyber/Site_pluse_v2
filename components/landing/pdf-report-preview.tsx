@@ -5,8 +5,8 @@ import { cn } from "@/lib/utils";
 const previewReportHtml = buildPreviewReportHtml({
   agencyName: "SitePulse",
   emailFromName: "SitePulse",
-  replyToEmail: "reports@sitepulse.io",
-  agencyWebsiteUrl: "https://sitepulse.io"
+  replyToEmail: "reports@trysitepulse.com",
+  agencyWebsiteUrl: "https://trysitepulse.com"
 });
 
 export function PdfReportPreview({

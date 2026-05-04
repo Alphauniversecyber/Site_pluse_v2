@@ -37,7 +37,7 @@ const PREVIEW_WEBSITE: Website = {
 
 const PREVIEW_PROFILE: UserProfile = {
   id: "preview-user",
-  email: "hello@sitepulse.io",
+  email: "hello@trysitepulse.com",
   full_name: "SitePulse Preview",
   plan: "agency",
   paddle_customer_id: null,
@@ -173,8 +173,8 @@ const PREVIEW_REPORT_CONTEXT: ReportContext = {
   white_label: true,
   agency_name: "SitePulse Studio",
   agency_logo_url: "",
-  agency_email: "reports@sitepulse.io",
-  agency_website_url: "https://sitepulse.io",
+  agency_email: "reports@trysitepulse.com",
+  agency_website_url: "https://trysitepulse.com",
   report_footer_text: "Automated reporting built for proactive client retention.",
   brand_color: "#2563EB",
   client_name: "Client Website",
@@ -395,8 +395,8 @@ function buildPreviewBranding(options: PreviewBrandingOptions = {}): AgencyBrand
     logo_url: options.logoUrl ?? null,
     brand_color: options.brandColor || "#2563EB",
     email_from_name: options.emailFromName?.trim() || options.agencyName?.trim() || "SitePulse Studio",
-    reply_to_email: options.replyToEmail?.trim() || "reports@sitepulse.io",
-    agency_website_url: options.agencyWebsiteUrl?.trim() || "https://sitepulse.io",
+    reply_to_email: options.replyToEmail?.trim() || "reports@trysitepulse.com",
+    agency_website_url: options.agencyWebsiteUrl?.trim() || "https://trysitepulse.com",
     report_footer_text:
       options.reportFooterText?.trim() || "Automated reporting built for proactive client retention.",
     created_at: "2026-05-04T00:00:00.000Z"
@@ -413,10 +413,10 @@ export function buildPreviewEmailHtml(options: PreviewBrandingOptions = {}) {
     previousScan: PREVIEW_PREVIOUS_SCAN,
     securityHeaders: PREVIEW_SECURITY_HEADERS,
     brokenLinks: PREVIEW_BROKEN_LINKS,
-    dashboardUrl: "https://app.sitepulse.io/d/clientwebsite-preview",
+    dashboardUrl: "https://app.trysitepulse.com/d/clientwebsite-preview",
     deliveryMode: "scheduled",
     frequency: "weekly",
-    baseUrl: "https://app.sitepulse.io"
+    baseUrl: "https://app.trysitepulse.com"
   }).html;
 }
 
@@ -427,7 +427,7 @@ export function buildPreviewReportHtml(options: PreviewBrandingOptions = {}) {
     ...PREVIEW_REPORT_CONTEXT,
     agency_name: branding.agency_name,
     agency_logo_url: branding.logo_url ?? "",
-    agency_email: branding.reply_to_email?.trim() || "reports@sitepulse.io",
+    agency_email: branding.reply_to_email?.trim() || "reports@trysitepulse.com",
     agency_website_url: branding.agency_website_url?.trim() || "",
     report_footer_text: branding.report_footer_text?.trim() || "",
     brand_color: branding.brand_color
