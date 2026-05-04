@@ -14,6 +14,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/dashboard", "/api", "/admin", "/auth"]
       }
     ],
-    sitemap: "https://www.trysitepulse.com/sitemap.xml"
+    sitemap: "https://trysitepulse.com/sitemap.xml"
   };
 }

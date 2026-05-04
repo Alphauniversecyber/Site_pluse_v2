@@ -23,13 +23,27 @@ const spaceGrotesk = localFont({
   weight: "300 700"
 });
 
+const organizationSchema = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "SitePulse",
+  url: "https://trysitepulse.com",
+  description:
+    "Automated SEO audits and white-label PDF reports for agencies. Share results with clients via magic-link dashboards. Try free for 14 days.",
+  sameAs: [
+    "https://twitter.com/trysitepulse",
+    "https://www.linkedin.com/company/trysitepulse",
+    "https://www.producthunt.com/products/sitepulse"
+  ]
+};
+
 const softwareApplicationSchema = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: "SitePulse",
-  url: "https://www.trysitepulse.com",
+  url: "https://trysitepulse.com",
   description:
-    "SEO audit and reporting tool for digital agencies. Generate white-label reports and turn audits into paying clients.",
+    "Automated SEO audits and white-label PDF reports for agencies. Share results with clients via magic-link dashboards. Try free for 14 days.",
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web",
   browserRequirements: "Requires JavaScript",
@@ -47,96 +61,76 @@ const softwareApplicationSchema = {
     "Client-facing dashboard",
     "Revenue leak detection"
   ],
-  screenshot: "https://www.trysitepulse.com/opengraph-image.png"
-};
-
-const organizationSchema = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  name: "SitePulse",
-  url: "https://www.trysitepulse.com",
-  logo: "https://www.trysitepulse.com/logo.png",
-  sameAs: [
-    "https://twitter.com/trysitepulse",
-    "https://www.linkedin.com/company/trysitepulse",
-    "https://www.producthunt.com/products/sitepulse"
-  ]
+  screenshot: "https://trysitepulse.com/opengraph-image.png"
 };
 
 const websiteSchema = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: "SitePulse",
-  url: "https://www.trysitepulse.com",
-  description: "SEO audit and reporting tool for digital agencies",
+  url: "https://trysitepulse.com",
+  description:
+    "Automated SEO audits and white-label PDF reports for agencies. Share results with clients via magic-link dashboards. Try free for 14 days.",
   potentialAction: {
     "@type": "SearchAction",
     target: {
       "@type": "EntryPoint",
-      urlTemplate: "https://www.trysitepulse.com/?q={search_term_string}"
+      urlTemplate: "https://trysitepulse.com/?q={search_term_string}"
     },
     "query-input": "required name=search_term_string"
   }
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.trysitepulse.com"),
-  title: {
-    default: "SitePulse — SEO Audit & Reporting Tool for Agencies",
-    template: "%s | SitePulse"
-  },
+  metadataBase: new URL("https://trysitepulse.com"),
+  title: "SitePulse – SEO Audit Tool for Digital Agencies",
   description:
-    "Turn website audits into paying clients. Generate white-label client-ready SEO reports, uncover revenue leaks, and prove your value automatically. 14-day free trial.",
+    "Automated SEO audits and white-label PDF reports for agencies. Share results with clients via magic-link dashboards. Try free for 14 days.",
   keywords: [
-    "SEO audit tool for agencies",
-    "white label SEO reports",
-    "automated SEO audit software",
-    "agency SEO reporting tool",
-    "client SEO reports generator",
-    "website audit SaaS"
+    "SEO audit SaaS",
+    "SEO audit tool",
+    "SEO audit software for agencies",
+    "white-label SEO reports",
+    "agency SEO reporting software",
+    "website audit platform",
+    "digital agency SEO tools",
+    "client SEO dashboard",
+    "Google Search Console reporting",
+    "GA4 reporting for agencies"
   ],
-  authors: [{ name: "SitePulse", url: "https://www.trysitepulse.com" }],
+  authors: [{ name: "SitePulse", url: "https://trysitepulse.com" }],
   creator: "SitePulse",
   publisher: "SitePulse",
   openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: "https://www.trysitepulse.com",
-    siteName: "SitePulse",
-    title: "SitePulse — SEO Audit & Reporting Tool for Agencies",
+    title: "SitePulse – SEO Audit Tool for Digital Agencies",
     description:
-      "Turn website audits into paying clients. White-label reports, revenue leak detection, automated audits.",
+      "Automated SEO audits and white-label PDF reports for agencies. Share results with clients via magic-link dashboards. Try free for 14 days.",
+    url: "https://trysitepulse.com",
+    siteName: "SitePulse",
+    type: "website",
     images: [
       {
         url: "/opengraph-image.png",
         width: 1200,
         height: 630,
-        alt: "SitePulse SEO Audit Tool for Agencies"
+        alt: "SitePulse SEO Audit Tool for Digital Agencies"
       }
     ]
   },
   twitter: {
     card: "summary_large_image",
-    title: "SitePulse — SEO Audit & Reporting Tool for Agencies",
-    description: "Turn website audits into paying clients. 14-day free trial.",
+    title: "SitePulse – SEO Audit Tool for Digital Agencies",
+    description:
+      "Automated SEO audits and white-label PDF reports for agencies. Share results with clients via magic-link dashboards. Try free for 14 days.",
     images: ["/opengraph-image.png"],
     creator: "@trysitepulse"
   },
   robots: {
     index: true,
-    follow: true,
-    nocache: false,
-    googleBot: {
-      index: true,
-      follow: true,
-      noimageindex: false,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1
-    }
+    follow: true
   },
   alternates: {
-    canonical: "https://www.trysitepulse.com"
+    canonical: "https://trysitepulse.com"
   },
   verification: {
     google: "PASTE_YOUR_GSC_VERIFICATION_CODE_HERE"
@@ -149,8 +143,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
-      <body className={`${manrope.variable} ${spaceGrotesk.variable}`}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
@@ -159,10 +155,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
         />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
-        />
+      </head>
+      <body className={`${manrope.variable} ${spaceGrotesk.variable}`}>
         <Providers>
           {children}
           <AnalyticsRoot />

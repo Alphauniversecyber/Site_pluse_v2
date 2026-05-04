@@ -1,0 +1,20 @@
+# SitePulse
+> Automated SEO audit and reporting platform for digital agencies.
+
+SitePulse helps digital agencies run automated SEO audits, generate white-label PDF reports, and share results with clients via magic-link dashboards — no login required for clients.
+
+## Key Features
+- Automated website SEO audits
+- White-label PDF report generation
+- Client-facing dashboards via magic links
+- Google Search Console & GA4 integration
+- Plain-English AI-rewritten audit summaries
+- 14-day free trial, then paid plans
+
+## Pages
+- /: Landing page and free scan tool
+- /pricing: Pricing plans for agencies
+- /dashboard: Agency dashboard (auth required)
+
+## Contact
+https://trysitepulse.com
