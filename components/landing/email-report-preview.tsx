@@ -14,10 +14,10 @@ export function EmailReportPreview({ compact = false }: { compact?: boolean }) {
   return (
     <div
       className={cn(
-        "relative origin-top overflow-hidden rounded-[1.7rem] border border-slate-300/70 bg-white shadow-[0_28px_70px_-42px_rgba(15,23,42,0.34)] transition duration-300",
+        "relative origin-top overflow-hidden rounded-[1.7rem] border border-slate-300/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(244,247,251,0.98))] shadow-[0_36px_90px_-56px_rgba(15,23,42,0.42)] transition duration-300",
         compact
-          ? "md:scale-[0.9] lg:[transform:perspective(1400px)_rotateX(1deg)_scale(0.83)] xl:[transform:perspective(1400px)_rotateX(0.9deg)_scale(0.86)]"
-          : "md:scale-[0.95] lg:[transform:perspective(1400px)_rotateX(1.2deg)_scale(0.9)] xl:[transform:perspective(1400px)_rotateX(1deg)_scale(0.92)]"
+          ? "md:scale-[0.92] lg:[transform:perspective(1400px)_rotateX(0.9deg)_scale(0.87)] xl:[transform:perspective(1400px)_rotateX(0.8deg)_scale(0.9)]"
+          : "md:scale-[0.96] lg:[transform:perspective(1400px)_rotateX(1deg)_scale(0.92)] xl:[transform:perspective(1400px)_rotateX(0.9deg)_scale(0.95)]"
       )}
     >
       <div
@@ -74,7 +74,7 @@ export function EmailReportPreview({ compact = false }: { compact?: boolean }) {
           </div>
         </aside>
 
-        <div className={cn("bg-white", compact ? "p-3 sm:p-3.5 md:p-4" : "p-3.5 sm:p-4 md:p-5")}>
+        <div className={cn("bg-transparent", compact ? "p-3 sm:p-3.5 md:p-4" : "p-3.5 sm:p-4 md:p-5")}>
           <div className="overflow-hidden rounded-[1.45rem] border border-slate-200 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.2)]">
             <div
               className={cn(

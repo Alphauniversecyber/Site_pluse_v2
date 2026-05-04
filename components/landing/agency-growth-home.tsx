@@ -1,299 +1,337 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, BellRing, BriefcaseBusiness, LayoutTemplate, SearchCheck, Smartphone } from "lucide-react";
+import {
+  ArrowRight,
+  BellRing,
+  BriefcaseBusiness,
+  LayoutTemplate,
+  SearchCheck
+} from "lucide-react";
 
 import { ClientDeliverablesSection } from "@/components/landing/client-deliverables-section";
 import { DashboardMockup } from "@/components/landing/dashboard-mockup";
-import { EmailReportPreview } from "@/components/landing/email-report-preview";
 import { FreeScanFunnel } from "@/components/landing/free-scan-funnel";
 import { PricingGrid } from "@/components/landing/pricing-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { useUser } from "@/hooks/useUser";
-import { getPlanPricing, formatUsdPrice, type BillingPlanCatalog } from "@/lib/billing";
+import { formatUsdPrice, getPlanPricing, type BillingPlanCatalog } from "@/lib/billing";
 import { marketingFaq } from "@/lib/marketing-copy";
-
-const solutionPillars = [
-  {
-    title: "Automated audits",
-    description: "Run the checks automatically so your team spends less time gathering proof and more time winning work."
-  },
-  {
-    title: "Client-friendly insights",
-    description: "Show clients what is wrong, why it matters, and what to fix without turning every review into a technical workshop."
-  },
-  {
-    title: "White-label reports",
-    description: "Deliver polished reports that reinforce your agency brand instead of looking like a third-party tool dump."
-  },
-  {
-    title: "Business-focused explanations",
-    description: "Connect performance, SEO, and usability problems to traffic, conversions, trust, and revenue."
-  }
-] as const;
 
 const workflow = [
   {
-    step: "1",
-    title: "Enter website",
-    description: "Paste a client site and let SitePulse run the first pass instantly."
+    step: "01",
+    title: "Scan the site before the call goes cold",
+    description: "Drop in a client URL and get the first score, top issues, and a clear business story while the conversation is still active."
   },
   {
-    step: "2",
-    title: "Get instant insights",
-    description: "Surface the score, the biggest leaks, and the business impact before the call ends."
+    step: "02",
+    title: "Translate the issues into client language",
+    description: "Turn performance, SEO, and accessibility problems into revenue risk, trust gaps, and concrete next steps."
   },
   {
-    step: "3",
-    title: "Send reports",
-    description: "Unlock a client-ready report you can use to close, retain, and upsell with confidence."
+    step: "03",
+    title: "Send polished follow-up without extra work",
+    description: "Deliver the white-label PDF and weekly email sequence that keeps your agency visible after the proposal."
   }
 ] as const;
 
-const repositionedFeatures = [
+const capabilityList = [
   {
     icon: SearchCheck,
     title: "Automated monitoring",
-    description: "Keep scanning live in the background so every client account has proactive proof instead of reactive excuses."
+    description: "Stay proactive between meetings instead of discovering problems after a client asks."
   },
   {
     icon: LayoutTemplate,
     title: "White-label reports",
-    description: "Turn raw scan results into branded deliverables that feel like part of your agency service, not borrowed software."
+    description: "Give every deliverable your agency brand, not someone else's software chrome."
   },
   {
     icon: BriefcaseBusiness,
-    title: "Business impact insights",
-    description: "Translate technical issues into risk, conversion loss, SEO drag, and client-facing opportunity."
+    title: "Business-impact framing",
+    description: "Explain what the issue costs in traffic, conversions, trust, or missed opportunity."
   },
   {
     icon: BellRing,
-    title: "Alerts",
-    description: "Know when scores drop, trust signals weaken, or problems start costing your clients attention."
-  },
-  {
-    icon: Smartphone,
-    title: "Device comparison",
-    description: "Show how mobile and desktop experiences differ so clients understand where the biggest user pain starts."
+    title: "Alerts that matter",
+    description: "Know when scores dip, trust signals weaken, or an account needs attention."
   }
+] as const;
+
+const heroSignals = [
+  { label: "First proof", value: "30 sec", note: "A fast scan preview they can understand immediately." },
+  { label: "Delivery", value: "1 workflow", note: "Scan, explain, and follow up without stitching tools together." },
+  { label: "Retention", value: "Weekly", note: "Ongoing reports that make your work stay visible." }
+] as const;
+
+const roiPoints = [
+  "Use the free scan to open the conversation with proof instead of promises.",
+  "Use the PDF to recap the problem and the email to keep your agency top of mind.",
+  "Use weekly reporting to show continued value after the proposal becomes a retainer."
 ] as const;
 
 export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
   const { user } = useUser();
   const isAuthenticated = Boolean(user);
   const growthMonthlyPrice = getPlanPricing("starter", "monthly", plans).salePrice;
-  const proofStats = [
-    {
-      label: "Free scan preview",
-      value: "30 sec",
-      note: isAuthenticated ? "Scan saved to your workspace" : "No-login first impression"
-    },
-    {
-      label: "Client-ready proof",
-      value: "1 click",
-      note: isAuthenticated ? "View full report" : "Unlock the full report after signup"
-    },
-    { label: "Retention angle", value: "Weekly", note: "Ongoing value delivery after close" }
-  ] as const;
+  const growthPriceLabel = formatUsdPrice(growthMonthlyPrice);
 
   return (
-    <main>
-      <section className="mx-auto grid w-full max-w-[1480px] gap-14 px-5 py-12 sm:px-6 md:px-8 md:py-16 lg:grid-cols-[minmax(0,1.08fr)_minmax(440px,0.92fr)] lg:items-center lg:px-10 xl:px-14 xl:py-20">
-        <div className="max-w-3xl">
-          <Badge className="border-primary/20 bg-primary/10 text-primary">
-            Client acquisition and retention system for agencies
-          </Badge>
-          <h1 className="mt-6 font-display text-4xl font-semibold leading-[0.98] sm:text-5xl lg:text-[4.4rem]">
-            Send your first branded audit report in 8 minutes.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-            Agencies use SitePulse to justify retainers, re-engage cold leads, and close prospects who said they'd think about it.
-          </p>
+    <main className="bg-[#08111f] text-slate-50">
+      <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.16),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.8),transparent_34%),linear-gradient(180deg,#0b1324_0%,#08111f_100%)]">
+        <div className="mx-auto grid w-full max-w-[1480px] gap-14 px-5 py-14 sm:px-6 md:px-8 md:py-18 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.96fr)] lg:items-center lg:px-10 xl:px-14 xl:py-24">
+          <div className="max-w-3xl">
+            <Badge className="border-blue-400/20 bg-blue-500/10 text-blue-100">
+              Premium audit reporting for digital agencies
+            </Badge>
+            <h1 className="mt-6 max-w-3xl font-display text-[2.8rem] font-semibold leading-[0.95] text-white sm:text-[3.5rem] lg:text-[4.7rem]">
+              Send branded audit proof that helps you close and retain better clients.
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300 md:text-xl">
+              SitePulse gives agencies one clean workflow for scanning a site, explaining the issues, and following up with deliverables clients actually read.
+            </p>
 
-          <div className="mt-8 flex flex-wrap gap-3">
-            {proofStats.map((stat) => (
-              <div key={stat.label} className="rounded-2xl border border-border/80 bg-card/75 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                  {stat.label}
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Button asChild size="lg" className="rounded-2xl bg-blue-500 px-6 text-white hover:bg-blue-600">
+                <Link href={isAuthenticated ? "/dashboard" : "/#free-scan"}>
+                  {isAuthenticated ? "Go to Dashboard" : "Scan a website (free)"}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="rounded-2xl border-white/12 bg-white/[0.03] px-6 text-slate-100 hover:bg-white/[0.06]"
+              >
+                <Link href="/pricing">See pricing</Link>
+              </Button>
+            </div>
+
+            <div className="mt-10 grid gap-4 md:grid-cols-3">
+              {heroSignals.map((signal) => (
+                <div
+                  key={signal.label}
+                  className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-4 py-4 shadow-[0_24px_60px_-44px_rgba(2,6,23,0.9)] backdrop-blur"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-200/80">
+                    {signal.label}
+                  </p>
+                  <p className="mt-3 font-display text-[1.9rem] font-semibold text-white">{signal.value}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">{signal.note}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mx-auto w-full max-w-[620px] lg:justify-self-end">
+            <FreeScanFunnel />
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-white/10 bg-[#0a1426]">
+        <div className="container py-16 md:py-20">
+          <div className="grid gap-10 rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.72),rgba(8,17,31,0.92))] p-6 shadow-[0_34px_100px_-60px_rgba(2,6,23,0.95)] lg:grid-cols-[minmax(0,0.92fr)_minmax(320px,1.08fr)] lg:items-center lg:p-8 xl:p-10">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-200">Product proof</p>
+              <h2 className="mt-4 max-w-xl font-display text-[2.2rem] font-semibold leading-tight text-white md:text-[2.7rem]">
+                Show the exact problem, the likely cost, and the next step in one view.
+              </h2>
+              <p className="mt-5 max-w-xl text-base leading-7 text-slate-300 md:text-lg md:leading-8">
+                Agencies lose momentum when the audit is technical, the explanation is vague, or the follow-up arrives too late. SitePulse keeps the story tight from first scan to delivered report.
+              </p>
+              <div className="mt-7 rounded-[1.5rem] border border-blue-400/16 bg-blue-500/[0.08] p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-200">Sales-ready example</p>
+                <p className="mt-3 text-base leading-7 text-slate-100">
+                  Your website is losing visitors due to slow load speed. Fixing three issues could improve performance by up to 30%.
                 </p>
-                <p className="mt-2 font-display text-2xl font-semibold">{stat.value}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{stat.note}</p>
+              </div>
+            </div>
+
+            <div className="mx-auto w-full max-w-[430px] justify-self-center lg:justify-self-end">
+              <DashboardMockup />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-white/10 bg-[#08111f]">
+        <div className="container grid gap-14 py-16 md:py-20 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
+          <div className="max-w-xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-200">Workflow</p>
+            <h2 className="mt-4 font-display text-[2.2rem] font-semibold leading-tight text-white md:text-[2.8rem]">
+              One clear system for proof, explanation, and follow-up.
+            </h2>
+            <p className="mt-5 text-base leading-7 text-slate-300 md:text-lg md:leading-8">
+              Each part of the page has one job because the product should too: reveal the problem fast, make it easy to explain, and keep your agency visible after the meeting.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {workflow.map((item) => (
+              <div
+                key={item.step}
+                className="grid gap-4 rounded-[1.65rem] border border-white/10 bg-white/[0.03] p-5 shadow-[0_24px_70px_-50px_rgba(2,6,23,0.9)] md:grid-cols-[84px_minmax(0,1fr)] md:items-start md:p-6"
+              >
+                <div className="flex h-14 w-14 items-center justify-center rounded-[1.2rem] border border-blue-400/16 bg-blue-500/[0.09] font-display text-lg font-semibold text-blue-100">
+                  {item.step}
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-7 text-slate-400 md:text-base">{item.description}</p>
+                </div>
               </div>
             ))}
-          </div>
-        </div>
 
-        <FreeScanFunnel />
-      </section>
+            <div className="grid gap-3 pt-2 md:grid-cols-2">
+              {capabilityList.map((item) => {
+                const Icon = item.icon;
 
-      <section className="container pb-10 md:pb-14">
-        <div className="rounded-[2rem] border border-border/80 bg-card/70 p-6 shadow-[0_24px_70px_-50px_rgba(15,23,42,0.35)]">
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] xl:items-center">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Value demo</p>
-              <h2 className="mt-3 font-display text-3xl font-semibold">Show the client the leak before they ask for a proposal</h2>
-              <p className="mt-4 text-lg leading-8 text-muted-foreground">
-                Your website is losing visitors due to slow load speed (9.6s). Fixing 3 issues could improve performance by up to 30%.
-              </p>
-              <p className="mt-4 text-sm leading-7 text-muted-foreground">
-                This is the kind of sales-ready insight agencies need in the first meeting: clear problem, clear business cost, clear next step.
-              </p>
-            </div>
-            <DashboardMockup />
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-border bg-muted/30">
-        <div className="container py-16 md:py-20">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Problem</p>
-          <h2 className="mt-4 font-display text-4xl font-semibold">Agencies lose momentum in the handoff between audit, explanation, and follow-up.</h2>
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-            Manual audits eat hours, technical reports confuse clients, and weak communication makes valuable work feel invisible. SitePulse removes that drag so your team can sell with more authority and retain clients with less effort.
-          </p>
-        </div>
-      </section>
-
-      <section className="container py-16 md:py-20">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Solution</p>
-        <h2 className="mt-4 font-display text-4xl font-semibold">Everything your agency needs to look sharp, proactive, and high value.</h2>
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
-          {solutionPillars.map((item) => (
-            <Card key={item.title} className="theme-panel border-border/80">
-              <CardContent className="p-6">
-                <p className="text-lg font-semibold">{item.title}</p>
-                <p className="mt-3 text-sm leading-7 text-muted-foreground">{item.description}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      <section className="border-y border-border bg-muted/20">
-        <div className="container py-16 md:py-20">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">How it works</p>
-          <h2 className="mt-4 font-display text-4xl font-semibold">From free scan to client-ready proof in three steps.</h2>
-          <div className="mt-10 grid gap-5 md:grid-cols-3">
-            {workflow.map((item) => (
-              <Card key={item.step} className="theme-panel border-border/80">
-                <CardContent className="p-6">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 font-display text-xl font-semibold text-primary">
-                    {item.step}
+                return (
+                  <div
+                    key={item.title}
+                    className="rounded-[1.45rem] border border-white/10 bg-[#0d1728] px-4 py-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-blue-400/14 bg-blue-500/[0.09] text-blue-100">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-white">{item.title}</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-400">{item.description}</p>
+                      </div>
+                    </div>
                   </div>
-                  <p className="mt-5 text-xl font-semibold">{item.title}</p>
-                  <p className="mt-3 text-sm leading-7 text-muted-foreground">{item.description}</p>
-                </CardContent>
-              </Card>
-            ))}
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="container py-16 md:py-20">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Repositioned features</p>
-        <h2 className="mt-4 font-display text-4xl font-semibold">A premium agency asset, not another technical dashboard.</h2>
-        <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-5">
-          {repositionedFeatures.map((item) => {
-            const Icon = item.icon;
-
-            return (
-              <Card key={item.title} className="theme-panel border-border/80">
-                <CardContent className="p-6">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <p className="mt-5 text-lg font-semibold">{item.title}</p>
-                  <p className="mt-3 text-sm leading-7 text-muted-foreground">{item.description}</p>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="border-y border-border bg-muted/25">
-        <div className="container grid gap-8 py-14 md:gap-10 md:py-18 xl:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] xl:items-center">
-          <div className="max-w-2xl space-y-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">ROI</p>
-            <h2 className="mt-4 font-display text-[2.2rem] font-semibold leading-tight md:text-[2.7rem]">
-              Close one extra client and this pays for itself.
-            </h2>
-            <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
-              The real comparison is simple: one agency client can be worth $500 or more per month. SitePulse starts at {formatUsdPrice(growthMonthlyPrice)} per month. If it helps you close one deal or retain one shaky account, the return is obvious.
-            </p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Badge variant="outline">Close 1 client = $500+</Badge>
-              <Badge variant="outline">SitePulse = {formatUsdPrice(growthMonthlyPrice)}/month</Badge>
-            </div>
-
-            <div className="max-w-xl rounded-[1.6rem] border border-border/80 bg-card/75 p-5 md:p-6">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Retention angle</p>
-              <p className="mt-3 text-lg font-semibold">Stay valuable after the close.</p>
-              <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                Use weekly reports, score movement, issue explanations, and action plans to prove that your agency is still protecting the client&apos;s revenue after the proposal is signed.
+      <section className="border-b border-white/10 bg-[#091426]">
+        <div className="container py-16 md:py-20">
+          <div className="grid gap-8 rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(12,22,38,0.96),rgba(8,17,31,0.96))] p-6 shadow-[0_34px_100px_-60px_rgba(2,6,23,0.95)] xl:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] xl:items-center xl:p-8">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-200">ROI</p>
+              <h2 className="mt-4 font-display text-[2.2rem] font-semibold leading-tight text-white md:text-[2.8rem]">
+                Close one extra client and the math becomes obvious.
+              </h2>
+              <p className="mt-5 max-w-xl text-base leading-7 text-slate-300 md:text-lg md:leading-8">
+                One solid agency client can easily be worth $500 or more per month. SitePulse starts at {growthPriceLabel} per month, so the tool only needs to help you close or retain one account to justify itself.
               </p>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Badge className="border-white/10 bg-white/[0.03] text-slate-100">Close 1 client = $500+</Badge>
+                <Badge className="border-white/10 bg-white/[0.03] text-slate-100">
+                  SitePulse = {growthPriceLabel}/month
+                </Badge>
+              </div>
             </div>
-          </div>
 
-          <div className="mx-auto w-full max-w-[620px] xl:mt-6 xl:justify-self-end xl:max-w-[660px]">
-            <EmailReportPreview compact />
+            <div className="grid gap-4">
+              <div className="grid gap-4 rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-5 md:grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] md:items-center md:p-6">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-200">Typical account value</p>
+                  <p className="mt-3 font-display text-[3rem] font-semibold leading-none text-white md:text-[3.5rem]">$500+</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">Monthly revenue from one client win or one account you keep from slipping.</p>
+                </div>
+                <div className="hidden h-full bg-white/10 md:block" />
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-200">Growth plan</p>
+                  <p className="mt-3 font-display text-[3rem] font-semibold leading-none text-white md:text-[3.5rem]">{growthPriceLabel}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">Per month for the workflow that creates the proof, the report, and the follow-up.</p>
+                </div>
+              </div>
+
+              <div className="rounded-[1.75rem] border border-blue-400/14 bg-blue-500/[0.08] p-5 md:p-6">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-100">Why agencies keep it</p>
+                <div className="mt-4 space-y-3">
+                  {roiPoints.map((point) => (
+                    <p key={point} className="text-sm leading-7 text-slate-200">
+                      {point}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       <ClientDeliverablesSection />
 
-      <section id="pricing" className="container py-10 md:py-12">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Pricing</p>
-        <h2 className="mt-3 max-w-4xl font-display text-[2.1rem] font-semibold leading-tight md:text-[2.45rem]">Plans framed around agency value, not tool complexity.</h2>
-        <p className="mt-3 max-w-[50rem] text-[15px] leading-7 text-muted-foreground md:text-base">
-          Position SitePulse as part of your revenue engine, not another software expense. Start with one free scan, then choose the plan that matches how you sell and scale.
-        </p>
-        <div className="mt-6">
-          <PricingGrid plans={plans} compact />
+      <section id="pricing" className="border-b border-white/10 bg-[#08111f]">
+        <div className="container py-16 md:py-20">
+          <div className="max-w-3xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-200">Pricing</p>
+            <h2 className="mt-4 font-display text-[2.2rem] font-semibold leading-tight text-white md:text-[2.8rem]">
+              Plans framed around agency value, not software complexity.
+            </h2>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300 md:text-lg md:leading-8">
+              Start with the free scan, standardize delivery on Growth, and scale into a premium client-reporting system as your workload grows.
+            </p>
+          </div>
+          <div className="mt-8">
+            <PricingGrid plans={plans} compact />
+          </div>
         </div>
       </section>
 
-      <section className="border-y border-border bg-muted/20">
+      <section className="border-b border-white/10 bg-[#091426]">
         <div className="container py-16 md:py-20">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">FAQ</p>
-          <h2 className="mt-4 font-display text-4xl font-semibold">Questions agencies ask before they roll this into their offer.</h2>
+          <div className="max-w-3xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-200">FAQ</p>
+            <h2 className="mt-4 font-display text-[2.2rem] font-semibold leading-tight text-white md:text-[2.8rem]">
+              Questions agencies ask before making this part of their offer.
+            </h2>
+          </div>
           <div className="mt-10 space-y-4">
             {marketingFaq.map((item) => (
-              <details key={item.question} className="theme-panel rounded-[1.8rem] p-6">
-                <summary className="cursor-pointer list-none font-display text-xl font-semibold">
+              <details
+                key={item.question}
+                className="rounded-[1.6rem] border border-white/10 bg-white/[0.03] p-6 shadow-[0_24px_70px_-50px_rgba(2,6,23,0.85)]"
+              >
+                <summary className="cursor-pointer list-none font-display text-xl font-semibold text-white">
                   {item.question}
                 </summary>
-                <p className="mt-4 text-sm leading-7 text-muted-foreground">{item.answer}</p>
+                <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-400">{item.answer}</p>
               </details>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="container pb-24 pt-16">
-        <Card className="overflow-hidden border-primary/15 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.12),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] dark:bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_42%),linear-gradient(180deg,rgba(30,41,59,0.96),rgba(15,23,42,0.92))]">
-          <CardContent className="flex flex-col items-center gap-5 p-10 text-center md:p-14">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Final CTA</p>
-            <h2 className="font-display text-4xl font-semibold">Scan a website free and start the client conversation with proof.</h2>
-            <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-              Use the free preview to start strong, unlock the full report after signup, and turn technical findings into a premium agency growth story.
+      <section className="bg-[linear-gradient(180deg,#091426_0%,#07101d_100%)]">
+        <div className="container py-16 md:py-20">
+          <div className="rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.16),transparent_34%),linear-gradient(180deg,rgba(12,22,38,0.96),rgba(8,17,31,0.98))] p-8 text-center shadow-[0_36px_110px_-70px_rgba(2,6,23,0.95)] md:p-12">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-200">Final CTA</p>
+            <h2 className="mx-auto mt-4 max-w-3xl font-display text-[2.3rem] font-semibold leading-tight text-white md:text-[3rem]">
+              Start the client conversation with proof, then keep it moving with delivery that looks expensive.
+            </h2>
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-300 md:text-lg md:leading-8">
+              Run the free scan, unlock the full report after signup, and turn technical findings into a cleaner, more premium agency workflow.
             </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="rounded-2xl px-6">
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Button asChild size="lg" className="rounded-2xl bg-blue-500 px-6 text-white hover:bg-blue-600">
                 <Link href={isAuthenticated ? "/dashboard" : "/#free-scan"}>
                   {isAuthenticated ? "Go to Dashboard" : "Scan a website (free)"}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="rounded-2xl px-6">
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="rounded-2xl border-white/12 bg-white/[0.03] px-6 text-slate-100 hover:bg-white/[0.06]"
+              >
                 <Link href="/pricing">See plan ROI</Link>
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </section>
     </main>
   );
