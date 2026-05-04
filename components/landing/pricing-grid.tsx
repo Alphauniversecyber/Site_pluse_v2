@@ -176,22 +176,35 @@ export function PricingGrid({
 
                 <PriceFade trigger={`${plan.key}-${billingCycle}`} className={compact ? "mt-4" : "mt-5"}>
                   <div className="flex items-end gap-2">
-                    <span
-                      className={cn(
-                        "font-display font-semibold tracking-tight",
-                        compact ? "text-[2.5rem] lg:text-[2.65rem]" : "text-[2.85rem] lg:text-[3rem]"
-                      )}
-                    >
-                      {formatUsdPrice(displayedAmount)}
-                    </span>
-                    <span
-                      className={cn(
-                        compact ? "pb-0.5 text-base lg:text-[1.15rem]" : "pb-1 text-lg lg:text-[1.35rem]",
-                        plan.theme === "dark" ? "text-slate-600 dark:text-slate-200" : "text-slate-500"
-                      )}
-                    >
-                      /mo
-                    </span>
+                    {paidPlan ? (
+                      <>
+                        <span
+                          className={cn(
+                            "font-display font-semibold tracking-tight",
+                            compact ? "text-[2.5rem] lg:text-[2.65rem]" : "text-[2.85rem] lg:text-[3rem]"
+                          )}
+                        >
+                          {formatUsdPrice(displayedAmount)}
+                        </span>
+                        <span
+                          className={cn(
+                            compact ? "pb-0.5 text-base lg:text-[1.15rem]" : "pb-1 text-lg lg:text-[1.35rem]",
+                            plan.theme === "dark" ? "text-slate-600 dark:text-slate-200" : "text-slate-500"
+                          )}
+                        >
+                          /mo
+                        </span>
+                      </>
+                    ) : (
+                      <span
+                        className={cn(
+                          "font-display font-semibold tracking-tight",
+                          compact ? "text-[2.35rem] lg:text-[2.5rem]" : "text-[2.65rem] lg:text-[2.8rem]"
+                        )}
+                      >
+                        Free
+                      </span>
+                    )}
                   </div>
 
                   {paidPlan && hasDiscount ? (
@@ -241,6 +254,17 @@ export function PricingGrid({
                     )}
                   >
                     Start free for 14 days — no credit card required
+                  </p>
+                ) : null}
+
+                {!paidPlan ? (
+                  <p
+                    className={cn(
+                      compact ? "mt-1 text-[12px] leading-5" : "mt-1.5 text-[13px] leading-6",
+                      plan.theme === "dark" ? "text-slate-600 dark:text-slate-300" : "text-slate-500"
+                    )}
+                  >
+                    No credit card required
                   </p>
                 ) : null}
 

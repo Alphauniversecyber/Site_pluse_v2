@@ -32,8 +32,8 @@ export function ClientDeliverablesSection() {
           </p>
         </div>
 
-        <div className="mt-12 grid gap-6 xl:grid-cols-2">
-          <div className="rounded-[1.9rem] border border-white/10 bg-white/[0.03] p-4 shadow-[0_28px_80px_-54px_rgba(2,6,23,0.95)] sm:p-5">
+        <div className="mt-12 grid gap-6 xl:grid-cols-2 xl:items-stretch">
+          <div className="flex h-full min-h-[600px] flex-col overflow-hidden rounded-[1.9rem] border border-white/10 bg-white/[0.03] p-4 shadow-[0_28px_80px_-54px_rgba(2,6,23,0.95)] sm:p-5">
             <div className="px-1 pb-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-200">
                 {deliverables[0].eyebrow}
@@ -45,12 +45,12 @@ export function ClientDeliverablesSection() {
                 {deliverables[0].description}
               </p>
             </div>
-            <div className="rounded-[1.7rem] border border-white/8 bg-[#101a2f] p-2 sm:p-3">
+            <div className="flex flex-1 flex-row items-stretch gap-6 overflow-hidden rounded-[1.7rem] border border-white/8 bg-[#101a2f] p-2 sm:p-3">
               <PdfReportPreview compact />
             </div>
           </div>
 
-          <div className="rounded-[1.9rem] border border-white/10 bg-white/[0.03] p-4 shadow-[0_28px_80px_-54px_rgba(2,6,23,0.95)] sm:p-5">
+          <div className="flex h-full min-h-[600px] flex-col overflow-hidden rounded-[1.9rem] border border-white/10 bg-white/[0.03] p-4 shadow-[0_28px_80px_-54px_rgba(2,6,23,0.95)] sm:p-5">
             <div className="px-1 pb-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-200">
                 {deliverables[1].eyebrow}
@@ -62,7 +62,7 @@ export function ClientDeliverablesSection() {
                 {deliverables[1].description}
               </p>
             </div>
-            <div className="rounded-[1.7rem] border border-white/8 bg-[#101a2f] p-2 sm:p-3">
+            <div className="flex flex-1 flex-row items-stretch gap-6 overflow-hidden rounded-[1.7rem] border border-white/8 bg-[#101a2f] p-2 sm:p-3">
               <EmailReportPreview compact />
             </div>
           </div>

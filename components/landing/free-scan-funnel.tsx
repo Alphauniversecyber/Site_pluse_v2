@@ -184,16 +184,13 @@ export function FreeScanFunnel({ className }: { className?: string }) {
           </div>
 
           {error ? <p className="text-sm text-rose-600 dark:text-rose-300">{error}</p> : null}
-          <p className="text-sm text-slate-500 dark:text-slate-300">
-            Trusted by agencies running client audits across 40+ countries.
-          </p>
         </form>
 
         {!preview && !isScanning ? (
           <div className="mt-5 rounded-[1.5rem] border border-blue-200 bg-blue-50/80 p-4 dark:border-blue-400/16 dark:bg-blue-500/[0.06]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-200">Value demo</p>
-            <p className="mt-2 text-sm leading-7 text-slate-700 dark:text-slate-200">
-              Your website is losing visitors due to slow load speed (9.6s). Fixing 3 issues could improve performance by up to 30%.
+            <p className="mt-2 max-w-[32rem] text-sm leading-6 text-slate-700 dark:text-slate-200">
+              Your website is losing visitors because pages take 9.6s to load. Fixing 3 issues could improve performance by up to 30%.
             </p>
           </div>
         ) : null}

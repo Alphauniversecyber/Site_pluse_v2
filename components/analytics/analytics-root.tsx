@@ -60,7 +60,8 @@ function toAnalyticsIdentity(user: {
 export function AnalyticsRoot() {
   const pathname = usePathname();
   const [authUser, setAuthUser] = useState<AnalyticsIdentity | null>(null);
-  const shouldHideTawk = pathname?.startsWith("/dashboard") || pathname?.startsWith("/d/") || pathname === "/d";
+  const shouldHideTawk =
+    pathname === "/" || pathname?.startsWith("/dashboard") || pathname?.startsWith("/d/") || pathname === "/d";
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -173,11 +174,6 @@ export function AnalyticsRoot() {
             {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}window.gtag=window.gtag||gtag;gtag('js', new Date());gtag('config', '${GA_MEASUREMENT_ID}');`}
           </Script>
         </>
-      ) : null}
-      {!shouldHideTawk && authUser?.firstName ? (
-        <div className="pointer-events-none fixed bottom-24 right-20 z-30 hidden rounded-2xl border border-slate-200 bg-white/96 px-5 py-3 text-sm text-slate-800 shadow-[0_20px_45px_-25px_rgba(15,23,42,0.24)] sm:block dark:border-white/10 dark:bg-slate-950/90 dark:text-slate-100">
-          {`Hi ${authUser.firstName}! How can we help?`}
-        </div>
       ) : null}
       {!shouldHideTawk && TAWK_PROPERTY_ID && TAWK_WIDGET_ID ? (
         <>

@@ -110,12 +110,9 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl transition-colors duration-300">
       <div className="container flex h-20 items-center justify-between gap-4">
-        <Link href="/" className="inline-flex min-w-0 items-center gap-3">
+        <Link href="/" className="inline-flex min-w-0 items-center">
           <SitePulseLogo variant="light" priority className="h-9 w-[148px] max-w-full dark:hidden sm:w-[164px] md:w-[180px]" />
           <SitePulseLogo variant="dark" priority className="hidden h-9 w-[148px] max-w-full dark:inline-flex sm:w-[164px] md:w-[180px]" />
-          <p className="hidden text-xs uppercase tracking-[0.24em] text-muted-foreground lg:block">
-            Agency growth system
-          </p>
         </Link>
         <nav aria-label="Main navigation" className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
           {mainLinks.map((item) => (
@@ -132,7 +129,6 @@ export function SiteHeader() {
           ))}
         </nav>
         <div className="hidden items-center gap-3 md:flex">
-          <ThemeToggle />
           {isAuthenticated ? (
             <>
               <Button asChild>
@@ -150,6 +146,7 @@ export function SiteHeader() {
                   </span>
                 </Link>
               </Button>
+              <ThemeToggle className="ml-1 gap-1.5 opacity-80 [&_button]:h-9 [&_button]:w-9 [&_svg]:h-4 [&_svg]:w-4" />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -203,6 +200,7 @@ export function SiteHeader() {
               <Button asChild>
                 <Link href="/#free-scan">Scan a website (free)</Link>
               </Button>
+              <ThemeToggle className="ml-1 gap-1.5 opacity-80 [&_button]:h-9 [&_button]:w-9 [&_svg]:h-4 [&_svg]:w-4" />
             </>
           )}
         </div>

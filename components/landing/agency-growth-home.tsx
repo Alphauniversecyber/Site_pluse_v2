@@ -86,10 +86,10 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
             <Badge className="border-blue-400/20 bg-blue-500/10 text-blue-100">
               Premium audit reporting for digital agencies
             </Badge>
-            <h1 className="mt-6 max-w-[13ch] font-display text-[2.55rem] font-semibold leading-[0.98] text-white sm:text-[3.15rem] lg:text-[4.15rem]">
+            <h1 className="mt-6 max-w-[13ch] font-display text-[clamp(2.2rem,4vw,3.2rem)] font-semibold leading-[0.98] text-white">
               Send branded audit proof that helps you close and retain better clients.
             </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 text-slate-300 md:text-lg md:leading-8">
+            <p className="mt-5 max-w-[40rem] text-[1.125rem] leading-[1.7] text-slate-300">
               SitePulse gives agencies one clean workflow for scanning a site, explaining the issues, and following up with deliverables clients actually read.
             </p>
 
@@ -159,8 +159,8 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
       </section>
 
       <section className="border-b border-white/10 bg-[#08111f]">
-        <div className="container grid gap-14 py-16 md:py-20 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
-          <div className="max-w-xl space-y-8">
+        <div className="container grid gap-14 py-16 md:py-20 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:items-center">
+          <div className="flex h-full max-w-xl flex-col justify-center space-y-8">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-200">Workflow</p>
             <h2 className="font-display text-[2.2rem] font-semibold leading-tight text-white md:text-[2.8rem]">
               One clear system for proof, explanation, and follow-up.
@@ -192,7 +192,7 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="my-auto flex h-full flex-col justify-center space-y-4">
             {workflow.map((item) => (
               <div
                 key={item.step}
