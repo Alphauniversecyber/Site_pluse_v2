@@ -44,7 +44,14 @@ function PreviewCard({
           <h3 className="mt-2 text-lg font-semibold tracking-tight text-slate-900">{title}</h3>
           <p className="mt-1 text-sm text-slate-500">{description}</p>
         </div>
-        <div className={cn("pointer-events-none bg-slate-100/90 p-4", contentClassName)}>{children}</div>
+        <div
+          className={cn(
+            "bg-slate-100/90 max-h-[60vh] overflow-y-auto overscroll-contain p-4 md:max-h-[75vh]",
+            contentClassName
+          )}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -100,10 +107,7 @@ export function BrandingPreviewPanel(props: BrandingPreviewPanelProps) {
           email: 0.58
         };
 
-  const tabContentClassName =
-    variant === "dialog"
-      ? "mt-0 pt-4"
-      : "mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 pt-4";
+  const tabContentClassName = variant === "dialog" ? "mt-0 pt-4" : "mt-0 min-h-0 flex-1 pt-4";
 
   return (
     <Tabs
@@ -114,7 +118,7 @@ export function BrandingPreviewPanel(props: BrandingPreviewPanelProps) {
         props.className
       )}
     >
-      <div className="sticky top-0 z-10 border-b border-border bg-background/95 pb-4 backdrop-blur">
+      <div className="sticky top-0 z-10 shrink-0 border-b border-border bg-background/95 pb-4 backdrop-blur">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="pdf">PDF Report preview</TabsTrigger>
           <TabsTrigger value="email">Email preview</TabsTrigger>

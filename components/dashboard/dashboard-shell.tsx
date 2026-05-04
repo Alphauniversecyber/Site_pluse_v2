@@ -18,13 +18,17 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import type { NotificationItem, UserProfile } from "@/types";
 import { cn, getPlanAudience, getPlanDisplayName } from "@/lib/utils";
 
-const navigation = [
+const primaryNavigation = [
   { href: "/dashboard", label: "Overview", icon: Gauge },
   { href: "/dashboard/websites", label: "Websites", icon: Globe2 },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
   { href: "/dashboard/branding", label: "Branding", icon: Palette }
 ] as const;
+
+const secondaryNavigation = [{ href: "/dashboard/settings", label: "Settings", icon: Settings }] as const;
+
+type NavigationItem = (typeof primaryNavigation)[number] | (typeof secondaryNavigation)[number];
 
 export function DashboardShell({
   children,
@@ -56,10 +60,10 @@ export function DashboardShell({
     pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
 
   const navigationItems = activeWorkspace.isOwner
-    ? navigation
-    : navigation.filter((item) => item.href !== "/dashboard/billing");
+    ? primaryNavigation
+    : primaryNavigation.filter((item) => item.href !== "/dashboard/billing");
 
-  const renderNavLink = (item: (typeof navigation)[number]) => {
+  const renderNavLink = (item: NavigationItem) => {
     const Icon = item.icon;
     const active = isActive(item.href);
 
@@ -89,7 +93,7 @@ export function DashboardShell({
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
       <div className="mx-auto flex min-h-screen w-full max-w-[2720px] [--dashboard-content-max:1580px] [--dashboard-sidebar-width:276px] xl:[--dashboard-sidebar-width:304px] 2xl:[--dashboard-sidebar-width:336px] min-[1800px]:[--dashboard-content-max:1760px] min-[1800px]:[--dashboard-sidebar-width:376px] min-[2200px]:[--dashboard-content-max:1960px] min-[2200px]:[--dashboard-sidebar-width:408px]">
-        <aside className="hidden border-r border-border/80 bg-card/65 backdrop-blur lg:block lg:w-[var(--dashboard-sidebar-width)]">
+        <aside className="hidden border-r border-border/80 bg-card/65 backdrop-blur md:block md:w-[var(--dashboard-sidebar-width)]">
           <div className="sticky top-0 flex h-screen flex-col px-6 py-6 xl:px-7 xl:py-7 2xl:px-8 min-[1800px]:px-10 min-[2200px]:px-11 [@media(max-height:900px)]:py-5 [@media(max-height:820px)]:py-4">
             <div className="border-b border-border/70 pb-6 [@media(max-height:900px)]:pb-5 [@media(max-height:820px)]:pb-4">
               <Link href="/" className="inline-flex max-w-full flex-col items-start gap-2.5">
@@ -165,7 +169,7 @@ export function DashboardShell({
               <div className="flex min-w-0 items-center gap-3">
                 <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
                   <SheetTrigger asChild>
-                    <Button variant="outline" size="icon" className="lg:hidden">
+                    <Button variant="outline" size="icon" className="md:hidden">
                       <Menu className="h-4 w-4" />
                       <span className="sr-only">Open dashboard menu</span>
                     </Button>
@@ -181,7 +185,7 @@ export function DashboardShell({
                       </Link>
                       <SheetTitle className="pt-4">Dashboard navigation</SheetTitle>
                       <SheetDescription>
-                        Jump between websites, reports, branding, and billing on smaller screens.
+                        Jump between websites, reports, branding, billing, and settings on smaller screens.
                       </SheetDescription>
                     </SheetHeader>
 
@@ -224,7 +228,22 @@ export function DashboardShell({
                           </Select>
                         </div>
                       ) : null}
-                      {navItems}
+                      <div className="flex flex-col gap-6">
+                        <div>
+                          <p className="mb-3 px-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-foreground/56">
+                            Workspace
+                          </p>
+                          {navItems}
+                        </div>
+                        <div className="border-t border-border pt-6">
+                          <p className="mb-3 px-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-foreground/56">
+                            Account
+                          </p>
+                          <nav className="space-y-2">
+                            {secondaryNavigation.map((item) => renderNavLink(item))}
+                          </nav>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="mt-8 border-t border-border pt-6">
@@ -233,12 +252,12 @@ export function DashboardShell({
                   </SheetContent>
                 </Sheet>
 
-                <Link href="/" className="inline-flex max-w-full items-center lg:hidden">
+                <Link href="/" className="inline-flex max-w-full items-center md:hidden">
                   <SitePulseLogo variant="light" className="h-9 w-[144px] max-w-full dark:hidden" />
                   <SitePulseLogo variant="dark" className="hidden h-9 w-[144px] max-w-full dark:inline-flex" />
                 </Link>
 
-                <div className="hidden min-w-0 lg:block">
+                <div className="hidden min-w-0 md:block">
                   <p className="text-xs uppercase tracking-[0.24em] text-primary">Agency growth system</p>
                   <p className="text-sm text-foreground/66 xl:text-[15px]">
                     {activeWorkspace.isOwner ? getPlanAudience(activeWorkspace.plan) : `Viewing ${activeWorkspace.name} as ${activeWorkspace.role}`}

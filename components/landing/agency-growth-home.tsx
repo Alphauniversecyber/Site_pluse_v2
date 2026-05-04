@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, BellRing, BriefcaseBusiness, Gauge, LayoutTemplate, SearchCheck, ShieldAlert, Smartphone } from "lucide-react";
+import { ArrowRight, BellRing, BriefcaseBusiness, LayoutTemplate, SearchCheck, Smartphone } from "lucide-react";
 
+import { ClientDeliverablesSection } from "@/components/landing/client-deliverables-section";
 import { DashboardMockup } from "@/components/landing/dashboard-mockup";
 import { EmailReportPreview } from "@/components/landing/email-report-preview";
 import { FreeScanFunnel } from "@/components/landing/free-scan-funnel";
@@ -241,6 +242,8 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
           </div>
         </div>
       </section>
+
+      <ClientDeliverablesSection />
 
       <section id="pricing" className="container py-10 md:py-12">
         <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Pricing</p>
