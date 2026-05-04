@@ -36,6 +36,37 @@ function Spinner() {
   return <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />;
 }
 
+function formatRelativeTime(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = new Date(value).getTime();
+
+  if (Number.isNaN(timestamp)) {
+    return null;
+  }
+
+  const diffMs = timestamp - Date.now();
+  const absMs = Math.abs(diffMs);
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const units = [
+    { unit: "year" as const, ms: 1000 * 60 * 60 * 24 * 365 },
+    { unit: "month" as const, ms: 1000 * 60 * 60 * 24 * 30 },
+    { unit: "day" as const, ms: 1000 * 60 * 60 * 24 },
+    { unit: "hour" as const, ms: 1000 * 60 * 60 },
+    { unit: "minute" as const, ms: 1000 * 60 }
+  ];
+
+  for (const entry of units) {
+    if (absMs >= entry.ms) {
+      return formatter.format(Math.round(diffMs / entry.ms), entry.unit);
+    }
+  }
+
+  return "just now";
+}
+
 function hexToRgba(hex: string, alpha: number) {
   const normalized = hex.trim().replace("#", "");
   const expanded =
@@ -65,7 +96,9 @@ export function Issues({
   auditData,
   gsc,
   ga,
-  accentColor
+  accentColor,
+  initialResults,
+  initialGeneratedAt
 }: {
   token: string;
   siteId: string;
@@ -75,8 +108,11 @@ export function Issues({
   gsc: GscDashboardData;
   ga: GaDashboardData;
   accentColor: string;
+  initialResults: IssueResult[] | null;
+  initialGeneratedAt: string | null;
 }) {
-  const [results, setResults] = useState<IssueResult[] | null>(null);
+  const [results, setResults] = useState<IssueResult[] | null>(initialResults);
+  const [lastAnalyzedAt, setLastAnalyzedAt] = useState<string | null>(initialGeneratedAt);
   const [loading, setLoading] = useState(false);
   const [doneMap, setDoneMap] = useState<Record<string, boolean>>({});
 
@@ -107,12 +143,18 @@ export function Issues({
     setDoneMap((current) => ({ ...current, [title]: checked }));
   }
 
-  async function analyze() {
+  async function analyze(clearSaved: boolean) {
     setLoading(true);
+
+    if (clearSaved) {
+      setResults(null);
+      setLastAnalyzedAt(null);
+    }
 
     try {
       const requestBody = {
         token,
+        clearSaved,
         auditData,
         gscData: gsc,
         ga4Data: ga
@@ -129,7 +171,7 @@ export function Issues({
       });
 
       const payload = (await response.json().catch(() => null)) as
-        | { data?: { issues?: IssueResult[] }; error?: string; rawText?: string }
+        | { data?: { issues?: IssueResult[]; generatedAt?: string }; error?: string; rawText?: string }
         | null;
 
       console.log("[client-dashboard][issues] analyze response status", response.status);
@@ -147,6 +189,7 @@ export function Issues({
           (left, right) => ISSUE_ORDER.indexOf(left.severity) - ISSUE_ORDER.indexOf(right.severity)
         )
       );
+      setLastAnalyzedAt(payload?.data?.generatedAt ?? new Date().toISOString());
       console.log("[client-dashboard][issues] state update requested");
     } catch (error) {
       console.error("[client-dashboard][issues] analyze failed", error);
@@ -182,7 +225,7 @@ export function Issues({
           {!results ? (
             <button
               type="button"
-              onClick={() => void analyze()}
+              onClick={() => void analyze(false)}
               disabled={loading}
               className="inline-flex items-center gap-2 rounded-2xl border px-5 py-3 text-sm font-semibold text-white transition-opacity disabled:opacity-70"
               style={{
@@ -196,7 +239,7 @@ export function Issues({
           ) : (
             <button
               type="button"
-              onClick={() => void analyze()}
+              onClick={() => void analyze(true)}
               disabled={loading}
               className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background/80 px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-accent disabled:opacity-70"
             >
@@ -209,6 +252,11 @@ export function Issues({
 
       {results ? (
         <div className="space-y-6">
+          {lastAnalyzedAt ? (
+            <p className="text-xs font-medium text-muted-foreground">
+              Last analyzed: {formatRelativeTime(lastAnalyzedAt)}
+            </p>
+          ) : null}
           {groupedResults.map((group) => (
             <section key={group.severity} className="space-y-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">

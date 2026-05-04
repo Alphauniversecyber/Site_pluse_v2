@@ -35,11 +35,68 @@ type AuditDataPayload = {
   rawData?: Record<string, unknown>;
 } | null;
 
+type SlimIssuePayload = {
+  title: string;
+  severity: "high" | "medium" | "low";
+  metric: string | null;
+};
+
+type SlimRecommendationPayload = {
+  title: string;
+  priority: string | null;
+  potentialSavingsSec: string;
+};
+
+export type SlimClientDashboardPayload = {
+  scores: {
+    performance: number | null;
+    seo: number | null;
+    accessibility: number | null;
+    bestPractices: number | null;
+  };
+  vitals: {
+    lcp: string | null;
+    fcp: string | null;
+    tbt: string | null;
+    cls: number | null;
+    tti: string | null;
+    speedIndex: string | null;
+  };
+  topIssues: SlimIssuePayload[];
+  topRecommendations: SlimRecommendationPayload[];
+  gsc:
+    | {
+        connected: true;
+        clicks28d: number;
+        impressions28d: number;
+        avgPosition: number;
+        ctr: number;
+        indexedPages: number;
+        topQueries: Array<{
+          query: string;
+          clicks: number;
+          position: number;
+        }>;
+      }
+    | { connected: false };
+  ga4:
+    | {
+        connected: true;
+        sessions28d: number;
+        bounceRate: number;
+        avgSessionDurationSec: number;
+        topPages: Array<{
+          page: string;
+          sessions: number;
+        }>;
+        topDevices: GaDashboardData["devices"];
+        topCountries: string[];
+      }
+    | { connected: false };
+};
+
 type ClientAiInput = {
-  token: string;
-  auditData: AuditDataPayload;
-  gscData?: GscDashboardData | null;
-  ga4Data?: GaDashboardData | null;
+  slimPayload: SlimClientDashboardPayload;
 };
 
 export class ClientAiParseError extends Error {
@@ -114,16 +171,170 @@ function parseGroqJsonArray(text: string) {
   return JSON.parse(clean) as Array<Record<string, unknown>>;
 }
 
-async function runGroqJsonArray(systemPrompt: string, auditPayload: ClientAiInput) {
+function asNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function asString(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function normalizeSlimSeverity(value: unknown): SlimIssuePayload["severity"] {
+  return value === "high" || value === "medium" || value === "low" ? value : "low";
+}
+
+export function buildSlimPayload(
+  auditData: AuditDataPayload,
+  gscData?: GscDashboardData | null,
+  ga4Data?: GaDashboardData | null
+): SlimClientDashboardPayload {
+  const severityRank = { high: 3, medium: 2, low: 1 } as const;
+  const overview = auditData?.overview ?? {};
+  const seenTitles = new Map<string, { title: string; severity: SlimIssuePayload["severity"]; metric: string | null }>();
+
+  for (const issue of auditData?.issues ?? []) {
+    const title = asString(issue.title);
+
+    if (!title) {
+      continue;
+    }
+
+    const normalizedIssue = {
+      title,
+      severity: normalizeSlimSeverity(issue.severity),
+      metric: asString(issue.metric)
+    };
+    const existing = seenTitles.get(normalizedIssue.title);
+
+    if (
+      !existing ||
+      severityRank[normalizedIssue.severity] > severityRank[existing.severity]
+    ) {
+      seenTitles.set(normalizedIssue.title, normalizedIssue);
+    }
+  }
+
+  const uniqueIssues = Array.from(seenTitles.values())
+    .sort((a, b) => severityRank[b.severity] - severityRank[a.severity])
+    .slice(0, 10)
+    .map((issue) => ({
+      title: issue.title,
+      severity: issue.severity,
+      metric: issue.metric ?? null
+    }));
+
+  const seenRecs = new Map<
+    string,
+    { title: string; priority: string | null; potentialSavingsMs: number }
+  >();
+
+  for (const rec of auditData?.recommendations ?? []) {
+    const title = asString(rec.title);
+
+    if (!title) {
+      continue;
+    }
+
+    const normalizedRec = {
+      title,
+      priority: asString(rec.priority),
+      potentialSavingsMs: asNumber(rec.potentialSavingsMs) ?? 0
+    };
+    const existing = seenRecs.get(normalizedRec.title);
+
+    if (!existing || normalizedRec.potentialSavingsMs > existing.potentialSavingsMs) {
+      seenRecs.set(normalizedRec.title, normalizedRec);
+    }
+  }
+
+  const uniqueRecs = Array.from(seenRecs.values())
+    .sort((a, b) => b.potentialSavingsMs - a.potentialSavingsMs)
+    .slice(0, 8)
+    .map((rec) => ({
+      title: rec.title,
+      priority: rec.priority,
+      potentialSavingsSec:
+        rec.potentialSavingsMs > 1000
+          ? `${(rec.potentialSavingsMs / 1000).toFixed(1)}s`
+          : `${rec.potentialSavingsMs}ms`
+    }));
+
+  const gscSummary =
+    gscData?.connected
+      ? {
+          connected: true as const,
+          clicks28d: gscData.summary.clicks,
+          impressions28d: gscData.summary.impressions,
+          avgPosition: gscData.summary.avgPosition,
+          ctr: gscData.summary.ctr,
+          indexedPages: gscData.summary.indexedPages,
+          topQueries: (gscData.topQueries ?? []).slice(0, 5).map((query) => ({
+            query: query.query,
+            clicks: query.clicks,
+            position: query.position
+          }))
+        }
+      : { connected: false as const };
+
+  const ga4Summary =
+    ga4Data?.connected
+      ? {
+          connected: true as const,
+          sessions28d: ga4Data.summary.sessions,
+          bounceRate: ga4Data.summary.bounceRate,
+          avgSessionDurationSec: Math.round(ga4Data.summary.averageSessionDuration),
+          topPages: (ga4Data.topPages ?? []).slice(0, 5).map((page) => ({
+            page: page.page,
+            sessions: page.sessions
+          })),
+          topDevices: (ga4Data.devices ?? []).slice(0, 3),
+          topCountries: (ga4Data.countries ?? [])
+            .slice(0, 5)
+            .map((country) => {
+              const countryName = (country as { country?: string | null; name?: string | null }).country;
+              const fallbackName = (country as { country?: string | null; name?: string | null }).name;
+              return countryName ?? fallbackName ?? "";
+            })
+        }
+      : { connected: false as const };
+
+  return {
+    scores: {
+      performance: asNumber(overview.performance),
+      seo: asNumber(overview.seo),
+      accessibility: asNumber(overview.accessibility),
+      bestPractices: asNumber(overview.bestPractices)
+    },
+    vitals: {
+      lcp: asNumber(overview.lcp) ? `${(Number(overview.lcp) / 1000).toFixed(2)}s` : null,
+      fcp: asNumber(overview.fcp) ? `${(Number(overview.fcp) / 1000).toFixed(2)}s` : null,
+      tbt: asNumber(overview.tbt) ? `${Number(overview.tbt)}ms` : null,
+      cls: asNumber(overview.cls),
+      tti: asNumber(overview.tti) ? `${(Number(overview.tti) / 1000).toFixed(2)}s` : null,
+      speedIndex: asNumber(overview.speedIndex)
+        ? `${(Number(overview.speedIndex) / 1000).toFixed(2)}s`
+        : null
+    },
+    topIssues: uniqueIssues,
+    topRecommendations: uniqueRecs,
+    gsc: gscSummary,
+    ga4: ga4Summary
+  };
+}
+
+async function runGroqJsonArray(systemPrompt: string, slimPayload: SlimClientDashboardPayload) {
   if (!process.env.GROQ_API_KEY) {
     throw new Error("Missing GROQ_API_KEY.");
   }
+
+  const slimPayloadJson = JSON.stringify(slimPayload);
+  console.log("[client-dashboard-ai] slim payload size", slimPayloadJson.length);
 
   const groqPayload = {
     model: MODEL,
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: JSON.stringify(auditPayload) }
+      { role: "user", content: slimPayloadJson }
     ],
     temperature: 0.4,
     max_tokens: 2000
@@ -168,11 +379,11 @@ async function runGroqJsonArray(systemPrompt: string, auditPayload: ClientAiInpu
 }
 
 export async function analyzeClientIssues(input: ClientAiInput) {
-  const parsed = await runGroqJsonArray(ISSUES_SYSTEM_PROMPT, input);
+  const parsed = await runGroqJsonArray(ISSUES_SYSTEM_PROMPT, input.slimPayload);
   return parsed.map(sanitizeIssue);
 }
 
 export async function analyzeClientRecommendations(input: ClientAiInput) {
-  const parsed = await runGroqJsonArray(RECOMMENDATIONS_SYSTEM_PROMPT, input);
+  const parsed = await runGroqJsonArray(RECOMMENDATIONS_SYSTEM_PROMPT, input.slimPayload);
   return parsed.map(sanitizeRecommendation);
 }

@@ -19,6 +19,41 @@ import { buildEmptyGaData } from "@/lib/ga";
 import { buildEmptyGscData } from "@/lib/gsc";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
+type SavedClientAiIssue = {
+  title: string;
+  severity: "critical" | "warning" | "info";
+  description: string;
+  impact: string;
+  category: string;
+};
+
+type SavedClientAiRecommendation = {
+  title: string;
+  priority: "high" | "medium" | "low";
+  description: string;
+  expectedResult: string;
+  effort: "low" | "medium" | "high";
+  category: string;
+};
+
+type WebsiteWithSavedAi = Website & {
+  ai_issues?: SavedClientAiIssue[] | null;
+  ai_recommendations?: SavedClientAiRecommendation[] | null;
+  ai_issues_generated_at?: string | null;
+  ai_recommendations_generated_at?: string | null;
+};
+
+type ClientDashboardPayloadWithSavedAi = ClientDashboardPayload & {
+  aiIssues: {
+    items: SavedClientAiIssue[] | null;
+    generatedAt: string | null;
+  };
+  aiRecommendations: {
+    items: SavedClientAiRecommendation[] | null;
+    generatedAt: string | null;
+  };
+};
+
 function stripProtocol(url: string) {
   return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 }
@@ -552,8 +587,10 @@ export async function disconnectClientGoogleService(token: string, service: "gsc
   return data;
 }
 
-export async function buildClientDashboardPayload(token: string): Promise<ClientDashboardPayload | null> {
-  const website = await getClientByToken(token);
+export async function buildClientDashboardPayload(
+  token: string
+): Promise<ClientDashboardPayloadWithSavedAi | null> {
+  const website = (await getClientByToken(token)) as WebsiteWithSavedAi | null;
 
   if (!website) {
     return null;
@@ -643,6 +680,14 @@ export async function buildClientDashboardPayload(token: string): Promise<Client
       scan,
       seoAudit,
       brokenLinks
-    })
+    }),
+    aiIssues: {
+      items: Array.isArray(website.ai_issues) ? website.ai_issues : null,
+      generatedAt: website.ai_issues_generated_at ?? null
+    },
+    aiRecommendations: {
+      items: Array.isArray(website.ai_recommendations) ? website.ai_recommendations : null,
+      generatedAt: website.ai_recommendations_generated_at ?? null
+    }
   };
 }

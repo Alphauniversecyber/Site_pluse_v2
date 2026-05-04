@@ -14,6 +14,33 @@ import { fetchJson } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/utils";
 
 type TabKey = "overview" | "issues" | "recommendations" | "google-signals";
+type SavedAiIssue = {
+  title: string;
+  severity: "critical" | "warning" | "info";
+  description: string;
+  impact: string;
+  category: string;
+};
+
+type SavedAiRecommendation = {
+  title: string;
+  priority: "high" | "medium" | "low";
+  description: string;
+  expectedResult: string;
+  effort: "low" | "medium" | "high";
+  category: string;
+};
+
+type DashboardWithSavedAi = ClientDashboardPayload & {
+  aiIssues?: {
+    items: SavedAiIssue[] | null;
+    generatedAt: string | null;
+  };
+  aiRecommendations?: {
+    items: SavedAiRecommendation[] | null;
+    generatedAt: string | null;
+  };
+};
 
 const TAB_ITEMS: Array<{ key: TabKey; label: string }> = [
   { key: "overview", label: "Overview" },
@@ -217,7 +244,7 @@ export function TabNav({
   dashboard,
   connectionNotice
 }: {
-  dashboard: ClientDashboardPayload;
+  dashboard: DashboardWithSavedAi;
   connectionNotice?:
     | "gsc_connected"
     | "ga_connected"
@@ -363,6 +390,8 @@ export function TabNav({
             gsc={gsc}
             ga={ga}
             accentColor={accentColor}
+            initialResults={dashboard.aiIssues?.items ?? null}
+            initialGeneratedAt={dashboard.aiIssues?.generatedAt ?? null}
           />
         );
       case "recommendations":
@@ -376,6 +405,8 @@ export function TabNav({
             gsc={gsc}
             ga={ga}
             accentColor={accentColor}
+            initialResults={dashboard.aiRecommendations?.items ?? null}
+            initialGeneratedAt={dashboard.aiRecommendations?.generatedAt ?? null}
           />
         );
       case "google-signals":
