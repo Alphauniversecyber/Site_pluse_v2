@@ -166,6 +166,7 @@ export const brandingSchema = z.object({
   brand_color: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "Use a valid hex color."),
   email_from_name: z.string().trim().min(2, "Email from name is required."),
   logo_url: z.string().url().optional().or(z.literal("")).nullable(),
+  client_dashboard_use_branding_logo: z.boolean().optional(),
   reply_to_email: z.string().trim().email("Enter a valid reply-to email.").optional().or(z.literal("")).nullable(),
   agency_website_url: z
     .string()

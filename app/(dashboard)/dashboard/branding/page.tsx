@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { isTrialActive } from "@/lib/trial";
@@ -40,6 +41,7 @@ export default function BrandingPage() {
       brand_color: "#3B82F6",
       email_from_name: "",
       logo_url: "",
+      client_dashboard_use_branding_logo: true,
       reply_to_email: "",
       agency_website_url: "",
       report_footer_text: ""
@@ -56,6 +58,7 @@ export default function BrandingPage() {
       brand_color: branding.brand_color,
       email_from_name: branding.email_from_name ?? branding.agency_name,
       logo_url: branding.logo_url ?? "",
+      client_dashboard_use_branding_logo: branding.client_dashboard_use_branding_logo ?? true,
       reply_to_email: branding.reply_to_email ?? "",
       agency_website_url: branding.agency_website_url ?? "",
       report_footer_text: branding.report_footer_text ?? ""
@@ -124,7 +127,7 @@ export default function BrandingPage() {
       <PageHeader
         eyebrow="Branding"
         title="White-label branding"
-        description="Upload your agency logo, set a brand color, customize report sender details, and preview how client-facing reports will look."
+        description="Upload your agency logo, set a brand color, customize report sender details, control the client dashboard logo, and preview how client-facing reports will look."
       />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.92fr] xl:items-stretch min-[1800px]:grid-cols-[1.05fr_0.95fr]">
@@ -214,6 +217,24 @@ export default function BrandingPage() {
                 <p className="text-sm text-muted-foreground">
                   Horizontal and square logos are both supported. Previews use contain mode so nothing gets cropped.
                 </p>
+              </div>
+              <div className="rounded-2xl border border-border bg-card/60 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="font-medium text-foreground">Client dashboard logo</p>
+                    <p className="text-sm text-muted-foreground">
+                      Turn this on to show your branding logo on Pro and Enterprise client dashboards instead of SitePulse.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={Boolean(form.watch("client_dashboard_use_branding_logo"))}
+                    onCheckedChange={(checked) =>
+                      form.setValue("client_dashboard_use_branding_logo", checked, {
+                        shouldDirty: true
+                      })
+                    }
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="agency-website-url">Agency website URL</Label>

@@ -11,18 +11,38 @@ export async function GET() {
   }
 
   const workspace = await resolveWorkspaceContext(profile);
+  const admin = createSupabaseAdminClient();
 
-  const { data: branding, error } = await supabase
-    .from("agency_branding")
-    .select("*")
-    .eq("user_id", workspace.workspaceOwnerId)
-    .maybeSingle();
+  const [{ data: branding, error }, { data: brandedWebsites, error: websitesError }] = await Promise.all([
+    supabase
+      .from("agency_branding")
+      .select("*")
+      .eq("user_id", workspace.workspaceOwnerId)
+      .maybeSingle(),
+    admin
+      .from("websites")
+      .select("client_dashboard_use_branding_logo, package")
+      .eq("user_id", workspace.workspaceOwnerId)
+      .in("package", ["pro", "enterprise"])
+  ]);
 
-  if (error) {
-    return apiError(error.message, 500);
+  if (error || websitesError) {
+    return apiError(error?.message ?? websitesError?.message ?? "Unable to load branding.", 500);
   }
 
-  return apiSuccess(branding);
+  const clientDashboardUseBrandingLogo =
+    (brandedWebsites ?? []).length > 0
+      ? (brandedWebsites ?? []).some((website) => website.client_dashboard_use_branding_logo !== false)
+      : true;
+
+  return apiSuccess(
+    branding
+      ? {
+          ...branding,
+          client_dashboard_use_branding_logo: clientDashboardUseBrandingLogo
+        }
+      : null
+  );
 }
 
 export async function PUT(request: Request) {
@@ -49,7 +69,9 @@ export async function PUT(request: Request) {
 
   const admin = createSupabaseAdminClient();
   const normalizedBranding = {
-    ...parsed.data,
+    agency_name: parsed.data.agency_name,
+    brand_color: parsed.data.brand_color,
+    email_from_name: parsed.data.email_from_name,
     logo_url: parsed.data.logo_url?.trim() || null,
     reply_to_email: parsed.data.reply_to_email?.trim() || null,
     agency_website_url: parsed.data.agency_website_url?.trim() || null,
@@ -73,5 +95,22 @@ export async function PUT(request: Request) {
     return apiError(error?.message ?? "Unable to update branding.", 500);
   }
 
-  return apiSuccess(branding);
+  if (parsed.data.client_dashboard_use_branding_logo !== undefined) {
+    const { error: websitesError } = await admin
+      .from("websites")
+      .update({
+        client_dashboard_use_branding_logo: parsed.data.client_dashboard_use_branding_logo
+      })
+      .eq("user_id", workspace.workspaceOwnerId)
+      .in("package", ["pro", "enterprise"]);
+
+    if (websitesError) {
+      return apiError(websitesError.message, 500);
+    }
+  }
+
+  return apiSuccess({
+    ...branding,
+    client_dashboard_use_branding_logo: parsed.data.client_dashboard_use_branding_logo ?? true
+  });
 }

@@ -86,10 +86,10 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
             <Badge className="border-blue-400/20 bg-blue-500/10 text-blue-100">
               Premium audit reporting for digital agencies
             </Badge>
-            <h1 className="mt-6 max-w-3xl font-display text-[2.8rem] font-semibold leading-[0.95] text-white sm:text-[3.5rem] lg:text-[4.7rem]">
+            <h1 className="mt-6 max-w-[13ch] font-display text-[2.55rem] font-semibold leading-[0.98] text-white sm:text-[3.15rem] lg:text-[4.15rem]">
               Send branded audit proof that helps you close and retain better clients.
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300 md:text-xl">
+            <p className="mt-5 max-w-xl text-base leading-7 text-slate-300 md:text-lg md:leading-8">
               SitePulse gives agencies one clean workflow for scanning a site, explaining the issues, and following up with deliverables clients actually read.
             </p>
 
@@ -159,34 +159,16 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
       </section>
 
       <section className="border-b border-white/10 bg-[#08111f]">
-        <div className="container grid gap-14 py-16 md:py-20 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
-          <div className="max-w-xl">
+        <div className="container grid gap-14 py-16 md:py-20 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
+          <div className="max-w-xl space-y-8">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-200">Workflow</p>
-            <h2 className="mt-4 font-display text-[2.2rem] font-semibold leading-tight text-white md:text-[2.8rem]">
+            <h2 className="font-display text-[2.2rem] font-semibold leading-tight text-white md:text-[2.8rem]">
               One clear system for proof, explanation, and follow-up.
             </h2>
-            <p className="mt-5 text-base leading-7 text-slate-300 md:text-lg md:leading-8">
+            <p className="text-base leading-7 text-slate-300 md:text-lg md:leading-8">
               Each part of the page has one job because the product should too: reveal the problem fast, make it easy to explain, and keep your agency visible after the meeting.
             </p>
-          </div>
-
-          <div className="space-y-4">
-            {workflow.map((item) => (
-              <div
-                key={item.step}
-                className="grid gap-4 rounded-[1.65rem] border border-white/10 bg-white/[0.03] p-5 shadow-[0_24px_70px_-50px_rgba(2,6,23,0.9)] md:grid-cols-[84px_minmax(0,1fr)] md:items-start md:p-6"
-              >
-                <div className="flex h-14 w-14 items-center justify-center rounded-[1.2rem] border border-blue-400/16 bg-blue-500/[0.09] font-display text-lg font-semibold text-blue-100">
-                  {item.step}
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-white">{item.title}</h3>
-                  <p className="mt-2 text-sm leading-7 text-slate-400 md:text-base">{item.description}</p>
-                </div>
-              </div>
-            ))}
-
-            <div className="grid gap-3 pt-2 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2">
               {capabilityList.map((item) => {
                 const Icon = item.icon;
 
@@ -208,6 +190,23 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
                 );
               })}
             </div>
+          </div>
+
+          <div className="space-y-4">
+            {workflow.map((item) => (
+              <div
+                key={item.step}
+                className="grid gap-4 rounded-[1.65rem] border border-white/10 bg-white/[0.03] p-5 shadow-[0_24px_70px_-50px_rgba(2,6,23,0.9)] md:grid-cols-[84px_minmax(0,1fr)] md:items-start md:p-6"
+              >
+                <div className="flex h-14 w-14 items-center justify-center rounded-[1.2rem] border border-blue-400/16 bg-blue-500/[0.09] font-display text-lg font-semibold text-blue-100">
+                  {item.step}
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-7 text-slate-400 md:text-base">{item.description}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

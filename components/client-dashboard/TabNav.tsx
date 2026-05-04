@@ -463,14 +463,11 @@ export function TabNav({
                 {!dashboard.branding.useCustomLogo ? (
                   <img src={growthLogoSrc} alt="SitePulse" className="h-8 w-auto sm:h-9" />
                 ) : dashboard.branding.logoUrl ? (
-                  <div className="flex flex-col gap-2">
-                    <img src={dashboard.branding.logoUrl} alt={dashboard.branding.placeholderName} className="h-8 w-auto max-w-[160px] object-contain sm:h-9" />
-                    {dashboard.branding.label ? (
-                      <span className="text-xs font-medium" style={{ color: accentColor }}>
-                        {dashboard.branding.label}
-                      </span>
-                    ) : null}
-                  </div>
+                  <img
+                    src={dashboard.branding.logoUrl}
+                    alt={dashboard.branding.placeholderName}
+                    className="h-8 w-auto max-w-[180px] object-contain sm:h-9"
+                  />
                 ) : (
                   <div className="flex items-center gap-3">
                     <PlaceholderLogo name={dashboard.branding.placeholderName} accentColor={accentColor} />

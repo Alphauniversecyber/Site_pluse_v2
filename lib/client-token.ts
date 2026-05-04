@@ -1,6 +1,7 @@
 import "server-only";
 
 import type {
+  AgencyBranding,
   BrokenLinkRecord,
   ClientDashboardIssue,
   ClientDashboardPayload,
@@ -596,9 +597,16 @@ export async function buildClientDashboardPayload(
     return null;
   }
 
-  const { scan, seoAudit, sslCheck, securityHeaders, brokenLinks, uptimeChecks } = await loadLatestScan(
-    website.id
-  );
+  const admin = createSupabaseAdminClient();
+  const [{ scan, seoAudit, sslCheck, securityHeaders, brokenLinks, uptimeChecks }, { data: agencyBranding }] =
+    await Promise.all([
+      loadLatestScan(website.id),
+      admin
+        .from("agency_branding")
+        .select("*")
+        .eq("user_id", website.user_id)
+        .maybeSingle<AgencyBranding>()
+    ]);
   const hasScan = Boolean(scan);
   const healthScore = scan
     ? buildHealthScore({
@@ -622,8 +630,13 @@ export async function buildClientDashboardPayload(
   const clientPackage = normalizeClientPackage(website.package);
   const useCustomDashboardLogo =
     clientPackage !== "growth" && website.client_dashboard_use_branding_logo !== false;
-  const brandingAccent = website.branding_color?.trim() || "#3b82f6";
+  const brandingAccent =
+    agencyBranding?.brand_color?.trim() || website.branding_color?.trim() || "#3b82f6";
   const clientName = website.label.trim() || hostFromUrl(website.url);
+  const agencyBrandName =
+    agencyBranding?.agency_name?.trim() || website.branding_name?.trim() || clientName;
+  const dashboardLogoUrl =
+    agencyBranding?.logo_url?.trim() || website.branding_logo?.trim() || null;
 
   return {
     token,
@@ -639,18 +652,13 @@ export async function buildClientDashboardPayload(
       logoUrl:
         !useCustomDashboardLogo
           ? null
-          : website.branding_logo?.trim()
-            ? website.branding_logo.trim()
-            : null,
+          : dashboardLogoUrl,
       accentColor: brandingAccent,
       label:
         !useCustomDashboardLogo
           ? "SitePulse"
-          : website.branding_name?.trim()
-            ? website.branding_name.trim()
-            : null,
-      placeholderName:
-        website.branding_name?.trim() || clientName
+          : agencyBrandName,
+      placeholderName: agencyBrandName
     },
     lastUpdated,
     hasScan,

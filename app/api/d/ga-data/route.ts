@@ -70,27 +70,27 @@ export async function GET(request: NextRequest) {
 
         return apiSuccess(data);
       } catch (refreshError) {
-        console.error("[api:d:ga-data] refresh failed", {
-          token,
-          error: refreshError instanceof Error ? refreshError.message : "Unable to refresh GA4 token."
-        });
-
         if (shouldClearGaConnection(refreshError)) {
           await disconnectClientGoogleService(token, "ga");
           return apiSuccess(clearedDisconnected);
         }
+
+        console.error("[api:d:ga-data] refresh failed", {
+          token,
+          error: refreshError instanceof Error ? refreshError.message : "Unable to refresh GA4 token."
+        });
       }
+    }
+
+    if (shouldClearGaConnection(error)) {
+      await disconnectClientGoogleService(token, "ga");
+      return apiSuccess(clearedDisconnected);
     }
 
     console.error("[api:d:ga-data] live fetch failed", {
       token,
       error: error instanceof Error ? error.message : "Unable to load GA4 data."
     });
-
-    if (shouldClearGaConnection(error)) {
-      await disconnectClientGoogleService(token, "ga");
-      return apiSuccess(clearedDisconnected);
-    }
 
     return apiSuccess(unavailable);
   }

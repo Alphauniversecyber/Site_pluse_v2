@@ -194,6 +194,7 @@ export interface AgencyBranding {
   reply_to_email?: string | null;
   agency_website_url?: string | null;
   report_footer_text?: string | null;
+  client_dashboard_use_branding_logo?: boolean;
   created_at: string;
 }
 
