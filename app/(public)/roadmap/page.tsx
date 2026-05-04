@@ -3,15 +3,21 @@ import type { Metadata } from "next";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { buildPageMetadata, PUBLIC_SITE_URL } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildPageMetadata({
   title: "SitePulse Product Roadmap",
   description:
     "See the SitePulse product roadmap for upcoming SEO audit, reporting, retention, and agency workflow improvements.",
-  alternates: {
-    canonical: "https://www.trysitepulse.com/roadmap"
-  }
-};
+  path: "/roadmap",
+  keywords: [
+    "SitePulse roadmap",
+    "SEO audit software roadmap",
+    "agency reporting platform roadmap",
+    "upcoming SitePulse features"
+  ],
+  imageAlt: "SitePulse roadmap page preview"
+});
 
 const roadmapItems = [
   {
@@ -34,14 +40,34 @@ const roadmapItems = [
   }
 ] as const;
 
+const roadmapSchema = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "SitePulse Product Roadmap",
+  url: `${PUBLIC_SITE_URL}/roadmap`,
+  mainEntity: {
+    "@type": "ItemList",
+    itemListElement: roadmapItems.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.title,
+      description: item.details
+    }))
+  }
+};
+
 export default function RoadmapPage() {
   return (
     <>
       <BreadcrumbJsonLd
         items={[
-          { name: "Home", item: "https://www.trysitepulse.com" },
-          { name: "Roadmap", item: "https://www.trysitepulse.com/roadmap" }
+          { name: "Home", item: PUBLIC_SITE_URL },
+          { name: "Roadmap", item: `${PUBLIC_SITE_URL}/roadmap` }
         ]}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(roadmapSchema) }}
       />
       <main className="container py-14 md:py-20">
         <div className="mx-auto max-w-4xl">

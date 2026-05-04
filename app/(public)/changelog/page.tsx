@@ -3,15 +3,21 @@ import type { Metadata } from "next";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { buildPageMetadata, PUBLIC_SITE_URL } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildPageMetadata({
   title: "SitePulse Product Changelog",
   description:
     "Read the latest SitePulse product updates, including new SEO audit workflows, reporting improvements, billing changes, and agency features.",
-  alternates: {
-    canonical: "https://www.trysitepulse.com/changelog"
-  }
-};
+  path: "/changelog",
+  keywords: [
+    "SitePulse changelog",
+    "SEO audit software updates",
+    "agency reporting platform updates",
+    "product updates SitePulse"
+  ],
+  imageAlt: "SitePulse changelog page preview"
+});
 
 const updates = [
   {
@@ -34,14 +40,34 @@ const updates = [
   }
 ] as const;
 
+const changelogSchema = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "SitePulse Product Changelog",
+  url: `${PUBLIC_SITE_URL}/changelog`,
+  mainEntity: {
+    "@type": "ItemList",
+    itemListElement: updates.map((update, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: update.title,
+      description: update.details
+    }))
+  }
+};
+
 export default function ChangelogPage() {
   return (
     <>
       <BreadcrumbJsonLd
         items={[
-          { name: "Home", item: "https://www.trysitepulse.com" },
-          { name: "Changelog", item: "https://www.trysitepulse.com/changelog" }
+          { name: "Home", item: PUBLIC_SITE_URL },
+          { name: "Changelog", item: `${PUBLIC_SITE_URL}/changelog` }
         ]}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(changelogSchema) }}
       />
       <main className="container py-14 md:py-20">
         <div className="mx-auto max-w-4xl">
@@ -50,8 +76,8 @@ export default function ChangelogPage() {
             SitePulse Product Changelog
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-            Follow the latest improvements across monitoring, reporting, billing, and client-delivery
-            workflows.
+            Follow the latest improvements across monitoring, reporting, billing, and
+            client-delivery workflows.
           </p>
 
           <div className="mt-10 space-y-6">
