@@ -51,6 +51,56 @@ function cleanText(value: string, maxLength = 180) {
   return `${shortened.slice(0, boundary > 0 ? boundary : shortened.length)}…`;
 }
 
+function normalizeClientPackage(value: string | null | undefined): "growth" | "pro" | "enterprise" {
+  if (value === "pro" || value === "enterprise") {
+    return value;
+  }
+
+  return "growth";
+}
+
+function extractAuditValue(rawData: Record<string, unknown> | null | undefined, auditKey: string) {
+  const mobile = (rawData?.mobile as
+    | { lighthouseResult?: { audits?: Record<string, { numericValue?: number | null }> } }
+    | null
+    | undefined)?.lighthouseResult?.audits?.[auditKey]?.numericValue;
+  const desktop = (rawData?.desktop as
+    | { lighthouseResult?: { audits?: Record<string, { numericValue?: number | null }> } }
+    | null
+    | undefined)?.lighthouseResult?.audits?.[auditKey]?.numericValue;
+  const values = [mobile, desktop].filter((value): value is number => typeof value === "number");
+
+  if (!values.length) {
+    return null;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function buildAuditData(scan: ScanResult | null): ClientDashboardPayload["auditData"] {
+  if (!scan) {
+    return null;
+  }
+
+  return {
+    overview: {
+      performance: scan.performance_score ?? null,
+      seo: scan.seo_score ?? null,
+      accessibility: scan.accessibility_score ?? null,
+      bestPractices: scan.best_practices_score ?? null,
+      lcp: scan.lcp ?? null,
+      fcp: extractAuditValue(scan.raw_data, "first-contentful-paint"),
+      tbt: scan.tbt ?? null,
+      cls: scan.cls ?? null,
+      tti: extractAuditValue(scan.raw_data, "interactive"),
+      speedIndex: extractAuditValue(scan.raw_data, "speed-index")
+    },
+    issues: scan.issues ?? [],
+    recommendations: scan.recommendations ?? [],
+    rawData: scan.raw_data ?? {}
+  };
+}
+
 function scoreLabel(score: number): ClientDashboardPayload["statusLabel"] {
   if (score > 70) {
     return "EXCELLENT";
@@ -458,6 +508,37 @@ export async function saveGATokens(
   return data;
 }
 
+export async function disconnectClientGoogleService(token: string, service: "gsc" | "ga") {
+  const admin = createSupabaseAdminClient();
+  const updates =
+    service === "gsc"
+      ? {
+          gsc_access_token: null,
+          gsc_refresh_token: null,
+          gsc_property: null,
+          gsc_connected_at: null
+        }
+      : {
+          ga_access_token: null,
+          ga_refresh_token: null,
+          ga_property_id: null,
+          ga_connected_at: null
+        };
+
+  const { data, error } = await admin
+    .from("websites")
+    .update(updates)
+    .eq("magic_token", token)
+    .select("*")
+    .maybeSingle<Website>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Unable to disconnect Google service.");
+  }
+
+  return data;
+}
+
 export async function buildClientDashboardPayload(token: string): Promise<ClientDashboardPayload | null> {
   const website = await getClientByToken(token);
 
@@ -488,14 +569,35 @@ export async function buildClientDashboardPayload(token: string): Promise<Client
 
   const gscConnected = Boolean((website.gsc_refresh_token || website.gsc_access_token) && website.gsc_property);
   const gaConnected = Boolean((website.ga_refresh_token || website.ga_access_token) && website.ga_property_id);
+  const clientPackage = normalizeClientPackage(website.package);
+  const brandingAccent = website.branding_color?.trim() || "#3b82f6";
+  const clientName = website.label.trim() || hostFromUrl(website.url);
 
   return {
     token,
-    clientName: website.label.trim() || hostFromUrl(website.url),
+    clientName,
     website: {
       id: website.id,
       url: website.url,
       label: website.label
+    },
+    branding: {
+      package: clientPackage,
+      logoUrl:
+        clientPackage === "growth"
+          ? null
+          : website.branding_logo?.trim()
+            ? website.branding_logo.trim()
+            : null,
+      accentColor: brandingAccent,
+      label:
+        clientPackage === "growth"
+          ? "SitePulse"
+          : website.branding_name?.trim()
+            ? website.branding_name.trim()
+            : null,
+      placeholderName:
+        website.branding_name?.trim() || clientName
     },
     lastUpdated,
     hasScan,
@@ -505,6 +607,7 @@ export async function buildClientDashboardPayload(token: string): Promise<Client
       gsc: gscConnected,
       ga: gaConnected
     },
+    auditData: buildAuditData(scan),
     gsc: buildEmptyGscData({
       connected: gscConnected,
       property: website.gsc_property ?? null,

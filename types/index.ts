@@ -149,6 +149,10 @@ export interface Website {
   user_id: string;
   url: string;
   label: string;
+  package?: "growth" | "pro" | "enterprise" | null;
+  branding_logo?: string | null;
+  branding_color?: string | null;
+  branding_name?: string | null;
   is_active: boolean;
   report_frequency?: ReportFrequency;
   extra_recipients?: string[];
@@ -783,6 +787,13 @@ export interface ClientDashboardPayload {
     url: string;
     label: string;
   };
+  branding: {
+    package: "growth" | "pro" | "enterprise";
+    logoUrl: string | null;
+    accentColor: string;
+    label: string | null;
+    placeholderName: string;
+  };
   lastUpdated: string | null;
   hasScan: boolean;
   healthScore: number | null;
@@ -791,6 +802,23 @@ export interface ClientDashboardPayload {
     gsc: boolean;
     ga: boolean;
   };
+  auditData: {
+    overview: {
+      performance: number | null;
+      seo: number | null;
+      accessibility: number | null;
+      bestPractices: number | null;
+      lcp: number | null;
+      fcp: number | null;
+      tbt: number | null;
+      cls: number | null;
+      tti: number | null;
+      speedIndex: number | null;
+    };
+    issues: ScanIssue[];
+    recommendations: ScanRecommendation[];
+    rawData: Record<string, unknown>;
+  } | null;
   gsc: GscDashboardData;
   ga: GaDashboardData;
   issues: ClientDashboardIssue[];

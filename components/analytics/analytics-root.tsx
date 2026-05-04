@@ -60,7 +60,7 @@ function toAnalyticsIdentity(user: {
 export function AnalyticsRoot() {
   const pathname = usePathname();
   const [authUser, setAuthUser] = useState<AnalyticsIdentity | null>(null);
-  const shouldHideTawk = pathname?.startsWith("/dashboard") ?? false;
+  const shouldHideTawk = pathname?.startsWith("/dashboard") || pathname?.startsWith("/d/") || pathname === "/d";
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();

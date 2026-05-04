@@ -66,11 +66,15 @@ function TrafficTooltip({
 export function GSCChart({
   data,
   variant,
-  loading
+  loading,
+  emptyTitle,
+  emptyBody
 }: {
   data: GscDailyPoint[];
   variant: "traffic" | "position";
   loading?: boolean;
+  emptyTitle?: string;
+  emptyBody?: string;
 }) {
   const title = variant === "traffic" ? "Clicks + Impressions" : "Average Position Trend";
   const description =
@@ -97,8 +101,8 @@ export function GSCChart({
         </div>
         <div className="h-[290px] w-full">
           <ChartEmptyState
-            title={variant === "traffic" ? "No search trend yet" : "No ranking history yet"}
-            body="This chart will populate after Search Console returns live data for this site."
+            title={emptyTitle ?? (variant === "traffic" ? "No search trend yet" : "No ranking history yet")}
+            body={emptyBody ?? "This chart will populate after Search Console returns live data for this site."}
           />
         </div>
       </div>

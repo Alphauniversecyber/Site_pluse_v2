@@ -81,13 +81,17 @@ export function GAChart({
   daily,
   devices,
   countries,
-  loading
+  loading,
+  emptyTitle,
+  emptyBody
 }: {
   variant: "sessions" | "device" | "country";
   daily?: GaDailyPoint[];
   devices?: DeviceBreakdownPoint[];
   countries?: CountryBreakdownPoint[];
   loading?: boolean;
+  emptyTitle?: string;
+  emptyBody?: string;
 }) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
@@ -99,8 +103,8 @@ export function GAChart({
       return (
         <div className="h-24 w-full">
           <ChartEmptyState
-            title="Waiting for live analytics"
-            body="Sessions will appear here after GA4 returns the first successful sync."
+            title={emptyTitle ?? "Waiting for live analytics"}
+            body={emptyBody ?? "Sessions will appear here after GA4 returns the first successful sync."}
           />
         </div>
       );
@@ -153,8 +157,8 @@ export function GAChart({
       return (
         <div className="h-[300px] w-full">
           <ChartEmptyState
-            title="No device mix yet"
-            body="Device breakdown will show up here once enough GA4 session data has synced."
+            title={emptyTitle ?? "No device mix yet"}
+            body={emptyBody ?? "Device breakdown will show up here once enough GA4 session data has synced."}
           />
         </div>
       );
@@ -214,8 +218,8 @@ export function GAChart({
     return (
       <div className="h-[300px] w-full">
         <ChartEmptyState
-          title="No country data yet"
-          body="Top country traffic will appear here after GA4 has enough live data to report."
+          title={emptyTitle ?? "No country data yet"}
+          body={emptyBody ?? "Top country traffic will appear here after GA4 has enough live data to report."}
         />
       </div>
     );
