@@ -81,29 +81,8 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
   return (
     <main className="bg-[#08111f] text-slate-50">
       <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.16),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.8),transparent_34%),linear-gradient(180deg,#0b1324_0%,#08111f_100%)]">
-        <div className="mx-auto flex min-h-[680px] w-full max-w-[1480px] flex-col items-center gap-10 px-5 py-14 sm:px-6 md:px-8 md:py-18 lg:px-10 xl:min-h-[760px] xl:px-14 xl:py-24">
-          <div className="w-full max-w-[620px]">
-            <FreeScanFunnel />
-          </div>
-
-          <div className="grid w-full max-w-[620px] grid-cols-3 gap-3">
-            {heroSignals.map((signal) => (
-              <div
-                key={signal.label}
-                className="rounded-[1.2rem] border border-white/10 bg-white/[0.03] p-3 shadow-[0_20px_50px_-40px_rgba(2,6,23,0.9)] backdrop-blur"
-              >
-                <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-blue-200/80">
-                  {signal.label}
-                </p>
-                <p className="mt-2 font-display text-[1.35rem] font-semibold leading-none text-white">
-                  {signal.value}
-                </p>
-                <p className="mt-1.5 text-[11px] leading-5 text-slate-400">{signal.note}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex w-full max-w-3xl flex-col justify-center">
+        <div className="mx-auto grid min-h-[680px] w-full max-w-[1480px] gap-14 px-5 py-14 sm:px-6 md:px-8 md:py-18 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.96fr)] lg:items-stretch lg:px-10 xl:min-h-[760px] xl:px-14 xl:py-24">
+          <div className="flex h-full max-w-3xl flex-col justify-center">
             <Badge className="border-blue-400/20 bg-blue-500/10 text-blue-100">
               Premium audit reporting for digital agencies
             </Badge>
@@ -129,6 +108,26 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
               >
                 <Link href="/pricing">See pricing</Link>
               </Button>
+            </div>
+          </div>
+
+          <div className="mx-auto flex w-full max-w-[620px] flex-col justify-start lg:self-start lg:justify-self-end">
+            <FreeScanFunnel />
+            <div className="mt-3 grid grid-cols-3 gap-3">
+              {heroSignals.map((signal) => (
+                <div
+                  key={signal.label}
+                  className="rounded-[1.2rem] border border-white/10 bg-white/[0.03] p-3 shadow-[0_20px_50px_-40px_rgba(2,6,23,0.9)] backdrop-blur"
+                >
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-blue-200/80">
+                    {signal.label}
+                  </p>
+                  <p className="mt-2 font-display text-[1.35rem] font-semibold leading-none text-white">
+                    {signal.value}
+                  </p>
+                  <p className="mt-1.5 text-[11px] leading-5 text-slate-400">{signal.note}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
