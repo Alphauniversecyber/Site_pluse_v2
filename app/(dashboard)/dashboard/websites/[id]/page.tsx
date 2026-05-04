@@ -54,6 +54,7 @@ import type {
 import { fetchJson } from "@/lib/api-client";
 import { buildSiteBusinessImpact } from "@/lib/business-impact";
 import { buildUptimeSummary } from "@/lib/health-score";
+import { markOnboardingStepComplete } from "@/lib/onboarding";
 import { getFriendlyScanFailureMessage } from "@/lib/scan-errors";
 import { cn } from "@/lib/utils";
 
@@ -1149,6 +1150,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             websiteId: params.id
           })
         });
+        markOnboardingStepComplete(1);
         toast.success("Manual scan complete.");
         await refetch();
       } catch (error) {
@@ -1192,6 +1194,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
         link.remove();
         URL.revokeObjectURL(downloadUrl);
 
+        markOnboardingStepComplete(2);
         toast.success("PDF report downloaded.");
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to generate report.");
@@ -1241,6 +1244,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
               : `Report emailed to ${result.deliveries.length} recipients.`
           );
         }
+        markOnboardingStepComplete(2);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to email report.");
       }
@@ -1304,6 +1308,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
 
     try {
       await navigator.clipboard.writeText(clientDashboardUrl);
+      markOnboardingStepComplete(4);
       toast.success("Client dashboard URL copied.");
     } catch {
       toast.error("Unable to copy the client dashboard URL.");

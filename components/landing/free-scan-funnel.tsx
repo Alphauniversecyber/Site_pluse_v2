@@ -184,6 +184,9 @@ export function FreeScanFunnel({ className }: { className?: string }) {
           </div>
 
           {error ? <p className="text-sm text-rose-600 dark:text-rose-300">{error}</p> : null}
+          <p className="text-sm text-slate-500 dark:text-slate-300">
+            Trusted by agencies running client audits across 40+ countries.
+          </p>
         </form>
 
         {!preview && !isScanning ? (
@@ -207,7 +210,7 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                     ? "Saving your account scan"
                     : "Running your free client-closing scan"}
                 </p>
-                <p className="mt-1 text-sm text-slate-400">We’re building a near-full preview you can show before signup.</p>
+                <p className="mt-1 text-sm text-slate-400">We're building a near-full preview you can show before signup.</p>
               </div>
             </div>
             <div className="mt-5 space-y-3">
@@ -337,3 +340,4 @@ export function FreeScanFunnel({ className }: { className?: string }) {
     </div>
   );
 }
+

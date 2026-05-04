@@ -19,6 +19,7 @@ import { useTrialPaywall } from "@/hooks/useTrialPaywall";
 import { useWebsites } from "@/hooks/useWebsites";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { fetchJson } from "@/lib/api-client";
+import { markOnboardingStepComplete } from "@/lib/onboarding";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { Report } from "@/types";
 
@@ -167,6 +168,7 @@ export default function ReportsPage() {
     startTransition(async () => {
       try {
         const result = await fetchJson<{ signedUrl: string }>(`/api/reports/${id}`);
+        markOnboardingStepComplete(2);
         window.open(result.signedUrl, "_blank", "noopener,noreferrer");
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to download report.");
@@ -177,6 +179,7 @@ export default function ReportsPage() {
     try {
       setViewerLoadingId(report.id);
       const result = await fetchJson<{ signedUrl: string }>(`/api/reports/${report.id}`);
+      markOnboardingStepComplete(2);
       setViewerReport({
         id: report.id,
         websiteLabel: websiteLabels.get(report.website_id)?.label ?? report.website_id,
@@ -218,6 +221,7 @@ export default function ReportsPage() {
               : `Report emailed to ${result.deliveries.length} recipients.`
           );
         }
+        markOnboardingStepComplete(2);
         await refetch();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to send report.");

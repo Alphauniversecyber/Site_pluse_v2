@@ -6,6 +6,7 @@ import { ensureBrokenLinkCheck } from "@/lib/broken-links";
 import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
 import { buildEmailDedupeKey, escapeHtml, normalizeIssueKey } from "@/lib/email-utils";
 import { ensureCruxData } from "@/lib/crux";
+import { sendDay1Email } from "@/lib/lifecycle-email-service";
 import { runAccessibilityScan } from "@/lib/pa11y";
 import { runPageSpeedScan } from "@/lib/pagespeed";
 import { sendProductEmail, trySendCriticalAlertEmail } from "@/lib/resend";
@@ -559,6 +560,25 @@ export async function executeWebsiteScan(
         },
         triggeredAt: currentScan.scanned_at
       });
+
+      const topIssues = [...currentScan.issues]
+        .sort((left, right) => {
+          const severityOrder = { high: 3, medium: 2, low: 1 };
+          return severityOrder[right.severity] - severityOrder[left.severity];
+        })
+        .slice(0, 3)
+        .map((issue) => ({
+          title: issue.title,
+          description: issue.description
+        }));
+
+      await sendDay1Email(profile, {
+        domain: website.url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/.*$/, ""),
+        websiteId: website.id,
+        scanId: currentScan.id,
+        scannedAt: currentScan.scanned_at,
+        topIssues
+      });
     }
 
     if (delta !== null && delta <= -10) {
@@ -620,51 +640,50 @@ export async function executeWebsiteScan(
     }
 
     if ((website.email_notifications ?? true) && delta !== null && delta >= 8) {
-      // Disabled to stay within daily send limits.
-      // await trySendEngagementEmail({
-      //   templateId: "score_improved",
-      //   dedupeKey: buildEmailDedupeKey("engagement", "score_improved", website.id, currentScan.id),
-      //   campaign: "engagement",
-      //   to: profile.email,
-      //   subject: `Good news: ${website.label} improved by ${delta} points`,
-      //   preheader: `${website.label} improved by ${delta} performance points in the latest SitePulse scan.`,
-      //   eyebrow: "Score improved",
-      //   title: `${website.label} moved in the right direction`,
-      //   summary: "The latest scan shows meaningful score improvement, which is a useful moment to reinforce momentum and package the win clearly.",
-      //   bodyHtml: `
-      //     <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
-      //       Performance improved by ${escapeHtml(delta)} points compared with the previous successful scan. Review what changed, lock in the win, and decide whether it is worth highlighting in the next client update.
-      //     </p>
-      //     <p style="margin:0;font-size:15px;line-height:24px;color:#475569;">
-      //       When score gains are fresh, it is easier to connect the technical changes to business confidence and forward progress.
-      //     </p>
-      //   `,
-      //   ctaLabel: "Review the latest scan",
-      //   ctaUrl: getWebsiteDashboardUrl(website.id),
-      //   secondaryLabel: "Open reports",
-      //   secondaryUrl: `${getBaseUrl().replace(/\/$/, "")}/dashboard/reports`,
-      //   details: [
-      //     {
-      //       label: "Previous score",
-      //       value: String(previousScore)
-      //     },
-      //     {
-      //       label: "Current score",
-      //       value: String(currentScan.performance_score)
-      //     },
-      //     {
-      //       label: "Change",
-      //       value: `+${delta}`
-      //     }
-      //   ],
-      //   metadata: {
-      //     websiteId: website.id,
-      //     userId: profile.id,
-      //     scanId: currentScan.id,
-      //     delta
-      //   },
-      //   triggeredAt: currentScan.scanned_at
-      // });
+      await trySendEngagementEmail({
+        templateId: "score_improved",
+        dedupeKey: buildEmailDedupeKey("engagement", "score_improved", website.id, currentScan.id),
+        campaign: "engagement",
+        to: profile.email,
+        subject: `Good news: ${website.label} improved by ${delta} points`,
+        preheader: `${website.label} improved by ${delta} performance points in the latest SitePulse scan.`,
+        eyebrow: "Score improved",
+        title: `${website.label} moved in the right direction`,
+        summary: "The latest scan shows meaningful score improvement, which is a useful moment to reinforce momentum and package the win clearly.",
+        bodyHtml: `
+          <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
+            Performance improved by ${escapeHtml(delta)} points compared with the previous successful scan. Review what changed, lock in the win, and decide whether it is worth highlighting in the next client update.
+          </p>
+          <p style="margin:0;font-size:15px;line-height:24px;color:#475569;">
+            When score gains are fresh, it is easier to connect the technical changes to business confidence and forward progress.
+          </p>
+        `,
+        ctaLabel: "Review the latest scan",
+        ctaUrl: getWebsiteDashboardUrl(website.id),
+        secondaryLabel: "Open reports",
+        secondaryUrl: `${getBaseUrl().replace(/\/$/, "")}/dashboard/reports`,
+        details: [
+          {
+            label: "Previous score",
+            value: String(previousScore)
+          },
+          {
+            label: "Current score",
+            value: String(currentScan.performance_score)
+          },
+          {
+            label: "Change",
+            value: `+${delta}`
+          }
+        ],
+        metadata: {
+          websiteId: website.id,
+          userId: profile.id,
+          scanId: currentScan.id,
+          delta
+        },
+        triggeredAt: currentScan.scanned_at
+      });
     }
 
     if ((website.email_notifications ?? true) && previousSuccessfulScan) {
@@ -675,48 +694,47 @@ export async function executeWebsiteScan(
       if (fixedIssueKeys.length) {
         const issueTitles = getIssueTitlesForKeys(previousSuccessfulScan, fixedIssueKeys);
 
-        // Disabled to stay within daily send limits.
-        // await trySendEngagementEmail({
-        //   templateId: "issue_fixed",
-        //   dedupeKey: buildEmailDedupeKey("engagement", "issue_fixed", website.id, currentScan.id),
-        //   campaign: "engagement",
-        //   to: profile.email,
-        //   subject: `Nice work: issues were resolved on ${website.label}`,
-        //   preheader: `${fixedIssueKeys.length} high-priority issue(s) are no longer showing on ${website.label}.`,
-        //   eyebrow: "Issue fixed",
-        //   title: `${website.label} cleared key issues`,
-        //   summary: "The latest scan no longer shows one or more previously high-priority problems, which is a strong checkpoint worth keeping visible.",
-        //   bodyHtml: `
-        //     <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
-        //       One or more high-priority issues dropped out of the latest scan results. That is usually worth confirming, documenting, and carrying into the next client-facing update.
-        //     </p>
-        //     ${renderIssueSummaryList(issueTitles)}
-        //   `,
-        //   ctaLabel: "Review resolved issues",
-        //   ctaUrl: getWebsiteDashboardUrl(website.id),
-        //   details: [
-        //     {
-        //       label: "Resolved",
-        //       value: String(fixedIssueKeys.length)
-        //     },
-        //     {
-        //       label: "Previous high-priority",
-        //       value: String(previousHighPriorityIssueKeys.length)
-        //     },
-        //     {
-        //       label: "Current high-priority",
-        //       value: String(currentHighPriorityIssueKeys.length)
-        //     }
-        //   ],
-        //   metadata: {
-        //     websiteId: website.id,
-        //     userId: profile.id,
-        //     scanId: currentScan.id,
-        //     issueKeys: fixedIssueKeys,
-        //     issueTitles
-        //   },
-        //   triggeredAt: currentScan.scanned_at
-        // });
+        await trySendEngagementEmail({
+          templateId: "issue_fixed",
+          dedupeKey: buildEmailDedupeKey("engagement", "issue_fixed", website.id, currentScan.id),
+          campaign: "engagement",
+          to: profile.email,
+          subject: `Nice work: issues were resolved on ${website.label}`,
+          preheader: `${fixedIssueKeys.length} high-priority issue(s) are no longer showing on ${website.label}.`,
+          eyebrow: "Issue fixed",
+          title: `${website.label} cleared key issues`,
+          summary: "The latest scan no longer shows one or more previously high-priority problems, which is a strong checkpoint worth keeping visible.",
+          bodyHtml: `
+            <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
+              One or more high-priority issues dropped out of the latest scan results. That is usually worth confirming, documenting, and carrying into the next client-facing update.
+            </p>
+            ${renderIssueSummaryList(issueTitles)}
+          `,
+          ctaLabel: "Review resolved issues",
+          ctaUrl: getWebsiteDashboardUrl(website.id),
+          details: [
+            {
+              label: "Resolved",
+              value: String(fixedIssueKeys.length)
+            },
+            {
+              label: "Previous high-priority",
+              value: String(previousHighPriorityIssueKeys.length)
+            },
+            {
+              label: "Current high-priority",
+              value: String(currentHighPriorityIssueKeys.length)
+            }
+          ],
+          metadata: {
+            websiteId: website.id,
+            userId: profile.id,
+            scanId: currentScan.id,
+            issueKeys: fixedIssueKeys,
+            issueTitles
+          },
+          triggeredAt: currentScan.scanned_at
+        });
       }
     }
 

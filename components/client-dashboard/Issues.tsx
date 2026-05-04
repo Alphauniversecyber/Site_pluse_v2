@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useDeferredValue, useMemo, useState } from "react";
 import { AlertCircle, AlertTriangle, ChevronDown, ChevronUp, Info } from "lucide-react";
@@ -164,3 +164,4 @@ export function Issues({ issues }: { issues: ClientDashboardIssue[] }) {
     </div>
   );
 }
+

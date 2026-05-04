@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { fetchJson } from "@/lib/api-client";
+import { markOnboardingStepComplete } from "@/lib/onboarding";
 import { websiteSchema } from "@/lib/validation";
 import type { Website } from "@/types";
 
@@ -68,6 +69,7 @@ export default function AddWebsitePage() {
                       .slice(0, 3)
                   })
                 });
+                markOnboardingStepComplete(0);
                 toast.success("Website added.");
                 router.push("/dashboard/websites");
                 router.refresh();

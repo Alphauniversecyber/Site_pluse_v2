@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useUser } from "@/hooks/useUser";
 import { getPlanPricing, formatUsdPrice, type BillingPlanCatalog } from "@/lib/billing";
-import { marketingCopy, marketingFaq } from "@/lib/marketing-copy";
+import { marketingFaq } from "@/lib/marketing-copy";
 
 const solutionPillars = [
   {
@@ -105,13 +105,10 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
             Client acquisition and retention system for agencies
           </Badge>
           <h1 className="mt-6 font-display text-4xl font-semibold leading-[0.98] sm:text-5xl lg:text-[4.4rem]">
-            The SEO Audit Tool Built for Agencies
+            Send your first branded audit report in 8 minutes.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-            {marketingCopy.subTagline}
-          </p>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
-            {marketingCopy.heroSubheadline}
+            Agencies use SitePulse to justify retainers, re-engage cold leads, and close prospects who said they'd think about it.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">

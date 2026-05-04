@@ -20,6 +20,7 @@ import { isTrialActive } from "@/lib/trial";
 import { buildStoragePath } from "@/lib/utils";
 import { brandingSchema } from "@/lib/validation";
 import { fetchJson } from "@/lib/api-client";
+import { markOnboardingStepComplete } from "@/lib/onboarding";
 import { useBranding } from "@/hooks/useBranding";
 import { useUser } from "@/hooks/useUser";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -141,6 +142,7 @@ export default function BrandingPage() {
                     method: "PUT",
                     body: JSON.stringify(values)
                   });
+                  markOnboardingStepComplete(3);
                   toast.success("Branding updated.");
                   await refetch();
                 } catch (error) {

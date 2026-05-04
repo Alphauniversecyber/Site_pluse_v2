@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import type { Route } from "next";
@@ -130,3 +130,4 @@ export function SiteFooter({ className }: { className?: string }) {
     </footer>
   );
 }
+

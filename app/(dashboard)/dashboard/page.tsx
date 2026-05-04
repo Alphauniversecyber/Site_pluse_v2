@@ -15,6 +15,8 @@ import {
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { SnapshotStatCard } from "@/components/dashboard/snapshot-stat-card";
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { AnnualTrialUpsellBanner } from "@/components/dashboard/AnnualTrialUpsellBanner";
+import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
 import { AddWebsiteButton } from "@/components/trial/AddWebsiteButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -170,29 +172,50 @@ export default async function DashboardOverviewPage() {
   const supabase = createSupabaseServerClient();
   const { data: websitesData } = await supabase
     .from("websites")
-    .select("id,user_id,url,label,is_active,created_at,updated_at")
+    .select("id,user_id,url,label,is_active,created_at,updated_at,auto_email_reports,report_frequency")
     .eq("user_id", workspace.workspaceOwnerId)
     .order("created_at", { ascending: false });
 
   const websites = (websitesData ?? []) as Website[];
   const websiteIds = websites.map((website) => website.id);
+  const [{ count: brandingCount }] = await Promise.all([
+    supabase
+      .from("agency_branding")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", workspace.workspaceOwnerId)
+  ]);
+
+  const onboardingDetectedSteps: [boolean, boolean, boolean, boolean, boolean] = [
+    websites.length > 0,
+    false,
+    false,
+    (brandingCount ?? 0) > 0,
+    false
+  ];
 
   if (!websites.length) {
     return (
-      <div className="flex min-h-[calc(100vh-18rem)] items-center justify-center">
-        <EmptyState
-          icon={Globe2}
-          title="Add your first website to get started"
-          description="SitePulse monitors your sites, runs weekly audits, and sends branded reports to your clients."
-          action={
-            workspace.role !== "viewer" ? (
-              <AddWebsiteButton profile={workspaceProfile} websiteCount={0}>
-                Add a website &rarr;
-              </AddWebsiteButton>
-            ) : undefined
-          }
-          className="w-full max-w-2xl"
+      <div className="space-y-6">
+        <OnboardingChecklist detectedSteps={onboardingDetectedSteps} />
+        <AnnualTrialUpsellBanner
+          isTrial={workspaceProfile.is_trial}
+          createdAt={workspaceProfile.created_at}
         />
+        <div className="flex min-h-[calc(100vh-18rem)] items-center justify-center">
+          <EmptyState
+            icon={Globe2}
+            title="Add your first website to get started"
+            description="SitePulse monitors your sites, runs weekly audits, and sends branded reports to your clients."
+            action={
+              workspace.role !== "viewer" ? (
+                <AddWebsiteButton profile={workspaceProfile} websiteCount={0}>
+                  Add a website &rarr;
+                </AddWebsiteButton>
+              ) : undefined
+            }
+            className="w-full max-w-2xl"
+          />
+        </div>
       </div>
     );
   }
@@ -234,6 +257,7 @@ export default async function DashboardOverviewPage() {
   }
 
   const latestScans = Array.from(latestByWebsite.values());
+  onboardingDetectedSteps[1] = latestScans.length > 0;
   const averagePerformance = latestScans.length
     ? Math.round(
         latestScans.reduce((sum, scan) => sum + (scan.performance_score ?? 0), 0) / latestScans.length
@@ -325,6 +349,11 @@ export default async function DashboardOverviewPage() {
 
   return (
     <div className="space-y-8 xl:space-y-10">
+      <OnboardingChecklist detectedSteps={onboardingDetectedSteps} />
+      <AnnualTrialUpsellBanner
+        isTrial={workspaceProfile.is_trial}
+        createdAt={workspaceProfile.created_at}
+      />
       <div className="grid items-start gap-6 min-[1480px]:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)] min-[1800px]:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
         <Card className="overflow-hidden border-border/80 dark:border-white/7 dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.96),rgba(15,23,42,0.92))] dark:shadow-[0_28px_80px_-46px_rgba(15,23,42,0.9),0_0_0_1px_rgba(96,165,250,0.05)]">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.08),transparent_26%)]" />

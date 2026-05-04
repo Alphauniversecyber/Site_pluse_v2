@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 
 import { AgencyPricingPage } from "@/components/landing/agency-pricing-page";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
-import { getBillingPlans } from "@/lib/billing-config";
 import { getPlanPricing } from "@/lib/billing";
+import { getBillingPlans } from "@/lib/billing-config";
 
 export const metadata: Metadata = {
   title: "Pricing – SitePulse SEO Audit Tool for Agencies",

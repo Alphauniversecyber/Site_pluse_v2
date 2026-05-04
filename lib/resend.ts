@@ -1591,12 +1591,6 @@ export async function trySendCriticalAlertEmail(input: {
   triggeredAt?: string | null;
 }) {
   try {
-    if (input.templateId === "alert_competitor") {
-      // Disabled to stay within daily send limits.
-      // return await sendCriticalAlertEmail(input);
-      return null;
-    }
-
     return await sendCriticalAlertEmail(input);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown alert delivery error.";
