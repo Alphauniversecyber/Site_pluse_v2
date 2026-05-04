@@ -63,6 +63,45 @@ const nextConfig = {
   async headers() {
     return [
       {
+        source: "/llms.txt",
+        headers: [
+          {
+            key: "Access-Control-Allow-Origin",
+            value: "*"
+          },
+          {
+            key: "X-Robots-Tag",
+            value: "all"
+          }
+        ]
+      },
+      {
+        source: "/robots.txt",
+        headers: [
+          {
+            key: "Access-Control-Allow-Origin",
+            value: "*"
+          },
+          {
+            key: "X-Robots-Tag",
+            value: "all"
+          }
+        ]
+      },
+      {
+        source: "/sitemap.xml",
+        headers: [
+          {
+            key: "Access-Control-Allow-Origin",
+            value: "*"
+          },
+          {
+            key: "X-Robots-Tag",
+            value: "all"
+          }
+        ]
+      },
+      {
         source: "/(.*)",
         headers: [
           {

@@ -9,6 +9,21 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/dashboard", "/api", "/admin", "/auth"]
       },
       {
+        userAgent: "GPTBot",
+        allow: "/",
+        disallow: ["/dashboard", "/api", "/admin", "/auth"]
+      },
+      {
+        userAgent: "ClaudeBot",
+        allow: "/",
+        disallow: ["/dashboard", "/api", "/admin", "/auth"]
+      },
+      {
+        userAgent: "anthropic-ai",
+        allow: "/",
+        disallow: ["/dashboard", "/api", "/admin", "/auth"]
+      },
+      {
         userAgent: "*",
         allow: "/",
         disallow: ["/dashboard", "/api", "/admin", "/auth"]
