@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { ClientDashboardPayload, GaDashboardData, GscDashboardData } from "@/types";
-import { fetchJson } from "@/lib/api-client";
 import { GOOGLE_CONTEXT_BANNER_COPY } from "@/lib/client-dashboard-rewrite-context";
 import { cn } from "@/lib/utils";
 
@@ -112,21 +111,45 @@ export function Issues({
     setLoading(true);
 
     try {
-      const response = await fetchJson<{ issues: IssueResult[] }>("/api/client/analyze-issues", {
+      const requestBody = {
+        token,
+        auditData,
+        gscData: gsc,
+        ga4Data: ga
+      };
+
+      console.log("[client-dashboard][issues] sending analyze request", requestBody);
+
+      const response = await fetch("/api/client/analyze-issues", {
         method: "POST",
-        body: JSON.stringify({
-          token,
-          auditData,
-          gscData: gsc,
-          ga4Data: ga
-        })
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(requestBody)
       });
 
+      const payload = (await response.json().catch(() => null)) as
+        | { data?: { issues?: IssueResult[] }; error?: string; rawText?: string }
+        | null;
+
+      console.log("[client-dashboard][issues] analyze response status", response.status);
+      console.log("[client-dashboard][issues] analyze response body", payload);
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Unable to analyze issues.");
+      }
+
+      const issues = payload?.data?.issues ?? [];
+      console.log("[client-dashboard][issues] setting issues state", issues);
+
       setResults(
-        [...response.issues].sort(
+        [...issues].sort(
           (left, right) => ISSUE_ORDER.indexOf(left.severity) - ISSUE_ORDER.indexOf(right.severity)
         )
       );
+      console.log("[client-dashboard][issues] state update requested");
+    } catch (error) {
+      console.error("[client-dashboard][issues] analyze failed", error);
     } finally {
       setLoading(false);
     }

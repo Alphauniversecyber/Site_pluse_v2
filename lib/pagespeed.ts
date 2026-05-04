@@ -266,6 +266,8 @@ async function fetchStrategyReport(
       params.set("key", apiKey);
     }
 
+    console.log("[pagespeed] request url", `${PAGE_SPEED_ENDPOINT}?${params.toString()}`);
+
     const controller = new AbortController();
     const timeoutHandle = setTimeout(() => controller.abort(), PAGE_SPEED_TIMEOUT_MS);
 
@@ -306,6 +308,11 @@ async function fetchStrategyReport(
       if (!payload.lighthouseResult) {
         throw new Error("Missing lighthouseResult in PageSpeed response.");
       }
+
+      console.log(
+        "[pagespeed] lighthouse audit keys",
+        Object.keys(payload.lighthouseResult.audits ?? {})
+      );
 
       return payload;
     } catch (error) {

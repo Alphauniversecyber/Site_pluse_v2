@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { ClientDashboardPayload, GaDashboardData, GscDashboardData } from "@/types";
-import { fetchJson } from "@/lib/api-client";
 import { GOOGLE_CONTEXT_BANNER_COPY } from "@/lib/client-dashboard-rewrite-context";
 import { cn } from "@/lib/utils";
 
@@ -128,20 +127,43 @@ export function Recommendations({
     setLoading(true);
 
     try {
-      const response = await fetchJson<{ recommendations: RecommendationResult[] }>(
-        "/api/client/analyze-recommendations",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            token,
-            auditData,
-            gscData: gsc,
-            ga4Data: ga
-          })
-        }
-      );
+      const requestBody = {
+        token,
+        auditData,
+        gscData: gsc,
+        ga4Data: ga
+      };
 
-      setResults(response.recommendations);
+      console.log("[client-dashboard][recommendations] sending analyze request", requestBody);
+
+      const response = await fetch("/api/client/analyze-recommendations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { data?: { recommendations?: RecommendationResult[] }; error?: string; rawText?: string }
+        | null;
+
+      console.log("[client-dashboard][recommendations] analyze response status", response.status);
+      console.log("[client-dashboard][recommendations] analyze response body", payload);
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Unable to analyze recommendations.");
+      }
+
+      const recommendations = payload?.data?.recommendations ?? [];
+      console.log(
+        "[client-dashboard][recommendations] setting recommendations state",
+        recommendations
+      );
+      setResults(recommendations);
+      console.log("[client-dashboard][recommendations] state update requested");
+    } catch (error) {
+      console.error("[client-dashboard][recommendations] analyze failed", error);
     } finally {
       setLoading(false);
     }

@@ -27,6 +27,10 @@ const SITEPULSE_LOGOS = {
   dark: "https://www.trysitepulse.com/brand/sitepulse-logo-dark.svg"
 } as const;
 
+function formatDisplayUrl(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
+
 function hexToRgba(hex: string, alpha: number) {
   const normalized = hex.trim().replace("#", "");
   const expanded =
@@ -456,7 +460,7 @@ export function TabNav({
             <div className="flex min-w-0 flex-1 items-start gap-3 rounded-[1.6rem] border border-border bg-background/80 px-4 py-4 text-left">
               <Globe2 className="h-4 w-4 shrink-0" style={{ color: accentColor }} />
               <p className="min-w-0 break-all font-display text-lg font-semibold leading-tight text-foreground sm:text-xl">
-                {dashboard.website.url}
+                {formatDisplayUrl(dashboard.website.url)}
               </p>
             </div>
 

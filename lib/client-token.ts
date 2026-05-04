@@ -82,6 +82,19 @@ function buildAuditData(scan: ScanResult | null): ClientDashboardPayload["auditD
     return null;
   }
 
+  const fcp = extractAuditValue(scan.raw_data, "first-contentful-paint");
+  const tti = extractAuditValue(scan.raw_data, "interactive");
+  const speedIndex = extractAuditValue(scan.raw_data, "speed-index");
+  const cls = scan.cls ?? null;
+
+  console.log("[client-token] extracted audit values", {
+    websiteId: scan.website_id,
+    fcp,
+    tti,
+    speedIndex,
+    cls
+  });
+
   return {
     overview: {
       performance: scan.performance_score ?? null,
@@ -89,11 +102,11 @@ function buildAuditData(scan: ScanResult | null): ClientDashboardPayload["auditD
       accessibility: scan.accessibility_score ?? null,
       bestPractices: scan.best_practices_score ?? null,
       lcp: scan.lcp ?? null,
-      fcp: extractAuditValue(scan.raw_data, "first-contentful-paint"),
+      fcp,
       tbt: scan.tbt ?? null,
-      cls: scan.cls ?? null,
-      tti: extractAuditValue(scan.raw_data, "interactive"),
-      speedIndex: extractAuditValue(scan.raw_data, "speed-index")
+      cls,
+      tti,
+      speedIndex
     },
     issues: scan.issues ?? [],
     recommendations: scan.recommendations ?? [],

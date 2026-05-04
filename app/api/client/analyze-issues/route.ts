@@ -1,13 +1,15 @@
 import { NextRequest } from "next/server";
 
 import { apiError, apiSuccess } from "@/lib/api";
-import { analyzeClientIssues } from "@/lib/client-dashboard-ai";
+import { analyzeClientIssues, ClientAiParseError } from "@/lib/client-dashboard-ai";
 import { getClientByToken } from "@/lib/client-token";
 import type { GaDashboardData, GscDashboardData } from "@/types";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  console.log("[api/client/analyze-issues] route hit");
+
   const body = (await request.json().catch(() => null)) as
     | {
         token?: string;
@@ -16,6 +18,9 @@ export async function POST(request: NextRequest) {
         ga4Data?: GaDashboardData | null;
       }
     | null;
+
+  console.log("[api/client/analyze-issues] incoming body", body);
+  console.log("[api/client/analyze-issues] incoming auditData", body?.auditData);
 
   if (!body?.token) {
     return apiError("Missing dashboard token.", 400);
@@ -37,6 +42,16 @@ export async function POST(request: NextRequest) {
 
     return apiSuccess({ issues });
   } catch (error) {
+    if (error instanceof ClientAiParseError) {
+      return Response.json(
+        {
+          error: error.message,
+          rawText: error.rawText
+        },
+        { status: 500 }
+      );
+    }
+
     return apiError(error instanceof Error ? error.message : "Unable to analyze issues right now.", 500);
   }
 }

@@ -1,24 +1,22 @@
 import "server-only";
 
-import Groq from "groq-sdk";
-
 import type { GaDashboardData, GscDashboardData } from "@/types";
 
-const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
+const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "llama-3.3-70b-versatile";
 
 const ISSUES_SYSTEM_PROMPT =
-  "You are a website performance and SEO analyst. You will receive technical audit data for a website. Your job is to identify the most important problems affecting this business's online visibility and revenue. Write in plain English — avoid raw technical terms. Instead of 'LCP is 4.2s', say 'Your main page content takes too long to load, which causes visitors to leave before it appears.' Focus on business impact. Return ONLY a valid JSON array with no markdown, no explanation. Each object: { title, severity, description, impact, category }";
+  "You are a website performance and SEO analyst. You will receive audit data for a website. Identify the most important problems hurting this business. Write in plain business English — no raw technical acronyms. Instead of 'LCP is 4.2s' say 'Your main page content takes too long to load, which causes visitors to leave.' Focus on business impact. Return ONLY a valid JSON array, no markdown, no explanation. Each object must have: title (string), severity ('critical'|'warning'|'info'), description (string, 1-2 sentences), impact (string, what this costs the business), category ('performance'|'seo'|'accessibility'|'technical')";
 
 const RECOMMENDATIONS_SYSTEM_PROMPT =
-  "You are a digital growth strategist. You will receive technical audit data and optionally live traffic data for a website. Your job is to provide clear, actionable recommendations that will grow this business's online traffic, engagement, and conversions. Write in plain English — what to do, why it matters, what result to expect. Return ONLY a valid JSON array with no markdown, no explanation. Each object: { title, priority, description, expectedResult, effort, category }";
+  "You are a digital growth strategist. You will receive audit data and optionally live traffic data for a website. Provide clear, actionable recommendations to grow traffic, engagement, and conversions. Write in plain business English — what to do, why it matters, what result to expect. Return ONLY a valid JSON array, no markdown, no explanation. Each object must have: title (string), priority ('high'|'medium'|'low'), description (string, 1-2 sentences), expectedResult (string), effort ('low'|'medium'|'high'), category ('performance'|'seo'|'content'|'technical')";
 
 export type ClientAiIssue = {
   title: string;
   severity: "critical" | "warning" | "info";
   description: string;
   impact: string;
-  category: string;
+  category: "performance" | "seo" | "accessibility" | "technical";
 };
 
 export type ClientAiRecommendation = {
@@ -27,7 +25,7 @@ export type ClientAiRecommendation = {
   description: string;
   expectedResult: string;
   effort: "low" | "medium" | "high";
-  category: string;
+  category: "performance" | "seo" | "content" | "technical";
 };
 
 type AuditDataPayload = {
@@ -37,24 +35,21 @@ type AuditDataPayload = {
   rawData?: Record<string, unknown>;
 } | null;
 
-function getGroqClient() {
-  if (!groq) {
-    throw new Error("Missing GROQ_API_KEY.");
+type ClientAiInput = {
+  token: string;
+  auditData: AuditDataPayload;
+  gscData?: GscDashboardData | null;
+  ga4Data?: GaDashboardData | null;
+};
+
+export class ClientAiParseError extends Error {
+  rawText: string;
+
+  constructor(message: string, rawText: string) {
+    super(message);
+    this.name = "ClientAiParseError";
+    this.rawText = rawText;
   }
-
-  return groq;
-}
-
-function extractJsonArray(text: string) {
-  const clean = text.replace(/```json|```/g, "").trim();
-  const firstBracket = clean.indexOf("[");
-  const lastBracket = clean.lastIndexOf("]");
-
-  if (firstBracket === -1 || lastBracket === -1 || lastBracket < firstBracket) {
-    throw new Error("Groq did not return a JSON array.");
-  }
-
-  return JSON.parse(clean.slice(firstBracket, lastBracket + 1)) as Array<Record<string, unknown>>;
 }
 
 function sanitizeText(value: unknown, fallback: string) {
@@ -70,6 +65,12 @@ function normalizeIssueSeverity(value: unknown): ClientAiIssue["severity"] {
   return value === "critical" || value === "warning" || value === "info" ? value : "info";
 }
 
+function normalizeIssueCategory(value: unknown): ClientAiIssue["category"] {
+  return value === "performance" || value === "seo" || value === "accessibility" || value === "technical"
+    ? value
+    : "technical";
+}
+
 function normalizeRecommendationPriority(value: unknown): ClientAiRecommendation["priority"] {
   return value === "high" || value === "medium" || value === "low" ? value : "medium";
 }
@@ -78,13 +79,19 @@ function normalizeRecommendationEffort(value: unknown): ClientAiRecommendation["
   return value === "low" || value === "medium" || value === "high" ? value : "medium";
 }
 
+function normalizeRecommendationCategory(value: unknown): ClientAiRecommendation["category"] {
+  return value === "performance" || value === "seo" || value === "content" || value === "technical"
+    ? value
+    : "technical";
+}
+
 function sanitizeIssue(item: Record<string, unknown>): ClientAiIssue {
   return {
     title: sanitizeText(item.title, "Issue identified"),
     severity: normalizeIssueSeverity(item.severity),
     description: sanitizeText(item.description, "This issue needs attention."),
-    impact: sanitizeText(item.impact, "This is reducing the website's ability to win trust, traffic, or leads."),
-    category: sanitizeText(item.category, "general")
+    impact: sanitizeText(item.impact, "This is costing the business visibility, trust, or leads."),
+    category: normalizeIssueCategory(item.category)
   };
 }
 
@@ -92,85 +99,80 @@ function sanitizeRecommendation(item: Record<string, unknown>): ClientAiRecommen
   return {
     title: sanitizeText(item.title, "Recommendation"),
     priority: normalizeRecommendationPriority(item.priority),
-    description: sanitizeText(item.description, "This is a worthwhile improvement to plan next."),
-    expectedResult: sanitizeText(item.expectedResult, "This should improve visibility, engagement, or conversions."),
+    description: sanitizeText(item.description, "This is a useful next step for the site."),
+    expectedResult: sanitizeText(
+      item.expectedResult,
+      "This should improve traffic, engagement, or conversions."
+    ),
     effort: normalizeRecommendationEffort(item.effort),
-    category: sanitizeText(item.category, "general")
+    category: normalizeRecommendationCategory(item.category)
   };
 }
 
-function buildUserPayload(input: {
-  token: string;
-  auditData: AuditDataPayload;
-  gscData?: GscDashboardData | null;
-  ga4Data?: GaDashboardData | null;
-}) {
-  return JSON.stringify(
-    {
-      token: input.token,
-      auditData: input.auditData,
-      gscData: input.gscData ?? null,
-      ga4Data: input.ga4Data ?? null
+function parseGroqJsonArray(text: string) {
+  const clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
+  return JSON.parse(clean) as Array<Record<string, unknown>>;
+}
+
+async function runGroqJsonArray(systemPrompt: string, auditPayload: ClientAiInput) {
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error("Missing GROQ_API_KEY.");
+  }
+
+  const groqPayload = {
+    model: MODEL,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: JSON.stringify(auditPayload) }
+    ],
+    temperature: 0.4,
+    max_tokens: 2000
+  };
+
+  console.log("[client-dashboard-ai] sending payload to Groq", groqPayload);
+
+  const response = await fetch(GROQ_ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      "Content-Type": "application/json"
     },
-    null,
-    2
-  );
-}
-
-export async function analyzeClientIssues(input: {
-  token: string;
-  auditData: AuditDataPayload;
-  gscData?: GscDashboardData | null;
-  ga4Data?: GaDashboardData | null;
-}) {
-  const client = getGroqClient();
-  const completion = await client.chat.completions.create({
-    model: MODEL,
-    temperature: 0.2,
-    response_format: { type: "json_object" as const },
-    messages: [
-      { role: "system", content: ISSUES_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `Return a JSON object with one key named "issues" whose value is the required JSON array.\n${buildUserPayload(
-          input
-        )}`
-      }
-    ]
+    body: JSON.stringify(groqPayload)
   });
 
-  const content = completion.choices[0]?.message?.content ?? '{"issues":[]}';
-  const parsed = JSON.parse(content) as { issues?: Array<Record<string, unknown>> };
+  const data = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string | null } }>;
+    error?: unknown;
+  };
+  const text = data.choices?.[0]?.message?.content ?? "";
 
-  return Array.isArray(parsed.issues) ? parsed.issues.map(sanitizeIssue) : extractJsonArray(content).map(sanitizeIssue);
-}
-
-export async function analyzeClientRecommendations(input: {
-  token: string;
-  auditData: AuditDataPayload;
-  gscData?: GscDashboardData | null;
-  ga4Data?: GaDashboardData | null;
-}) {
-  const client = getGroqClient();
-  const completion = await client.chat.completions.create({
-    model: MODEL,
-    temperature: 0.2,
-    response_format: { type: "json_object" as const },
-    messages: [
-      { role: "system", content: RECOMMENDATIONS_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `Return a JSON object with one key named "recommendations" whose value is the required JSON array.\n${buildUserPayload(
-          input
-        )}`
-      }
-    ]
+  console.log("[client-dashboard-ai] raw Groq response", {
+    status: response.status,
+    data,
+    text
   });
 
-  const content = completion.choices[0]?.message?.content ?? '{"recommendations":[]}';
-  const parsed = JSON.parse(content) as { recommendations?: Array<Record<string, unknown>> };
+  if (!response.ok) {
+    throw new Error(`Groq request failed with status ${response.status}.`);
+  }
 
-  return Array.isArray(parsed.recommendations)
-    ? parsed.recommendations.map(sanitizeRecommendation)
-    : extractJsonArray(content).map(sanitizeRecommendation);
+  try {
+    return parseGroqJsonArray(text);
+  } catch (error) {
+    console.error("[client-dashboard-ai] failed to parse Groq JSON", {
+      error,
+      rawText: text
+    });
+    throw new ClientAiParseError("Unable to parse Groq JSON response.", text);
+  }
+}
+
+export async function analyzeClientIssues(input: ClientAiInput) {
+  const parsed = await runGroqJsonArray(ISSUES_SYSTEM_PROMPT, input);
+  return parsed.map(sanitizeIssue);
+}
+
+export async function analyzeClientRecommendations(input: ClientAiInput) {
+  const parsed = await runGroqJsonArray(RECOMMENDATIONS_SYSTEM_PROMPT, input);
+  return parsed.map(sanitizeRecommendation);
 }

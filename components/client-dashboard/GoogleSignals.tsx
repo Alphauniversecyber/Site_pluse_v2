@@ -151,6 +151,20 @@ export function GoogleSignals({
   if (!gsc.connected || !ga.connected) {
     return (
       <div className="space-y-6">
+        {!gsc.connected ? (
+          <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-6 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+              Before you connect Search Console
+            </p>
+            <div className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
+              <p>1. Go to search.google.com/search-console and sign in with the Google account that owns this website.</p>
+              <p>2. Add your site as a Property if you haven&apos;t already. Use the URL Prefix option and enter your exact domain.</p>
+              <p>3. Verify ownership using the HTML tag method or Google Analytics method.</p>
+              <p>4. Wait 24-48 hours for Google to start collecting data before connecting here.</p>
+              <p>5. Once verified, click Connect Google Search Console below and sign in with the same Google account.</p>
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-6 lg:grid-cols-2">
           {!gsc.connected ? <ConnectCard service="gsc" token={token} /> : null}
           {!ga.connected ? <ConnectCard service="ga" token={token} /> : null}

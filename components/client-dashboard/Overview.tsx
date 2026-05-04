@@ -77,13 +77,20 @@ function bounceTone(bounceRate: number) {
   return "text-rose-600 dark:text-rose-300";
 }
 
-function formatVitalValue(value: number | null, kind: "seconds" | "milliseconds" | "score" | "shift") {
+function formatVitalValue(
+  value: number | null,
+  kind: "seconds" | "milliseconds" | "milliseconds_as_seconds" | "score" | "shift"
+) {
   if (value === null || Number.isNaN(value)) {
     return "—";
   }
 
   if (kind === "milliseconds") {
     return `${Math.round(value)} ms`;
+  }
+
+  if (kind === "milliseconds_as_seconds") {
+    return `${(value / 1000).toFixed(1)}s`;
   }
 
   if (kind === "shift") {
@@ -337,11 +344,11 @@ export function Overview({
           </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <AuditMetricCard label="LCP" value={formatVitalValue(auditData?.overview.lcp ?? null, "seconds")} helper="How long the main content takes to appear" />
-            <AuditMetricCard label="FCP" value={formatVitalValue(auditData?.overview.fcp ?? null, "milliseconds")} helper="How quickly the first visible content shows up" />
+            <AuditMetricCard label="FCP" value={formatVitalValue(auditData?.overview.fcp ?? null, "milliseconds_as_seconds")} helper="How quickly the first visible content shows up" />
             <AuditMetricCard label="TBT" value={formatVitalValue(auditData?.overview.tbt ?? null, "milliseconds")} helper="How much blocking work delays interaction" />
             <AuditMetricCard label="CLS" value={formatVitalValue(auditData?.overview.cls ?? null, "shift")} helper="How stable the page feels while it loads" />
-            <AuditMetricCard label="TTI" value={formatVitalValue(auditData?.overview.tti ?? null, "milliseconds")} helper="How long it takes before the page feels ready" />
-            <AuditMetricCard label="Speed Index" value={formatVitalValue(auditData?.overview.speedIndex ?? null, "milliseconds")} helper="How quickly the page looks visually complete" />
+            <AuditMetricCard label="TTI" value={formatVitalValue(auditData?.overview.tti ?? null, "milliseconds_as_seconds")} helper="How long it takes before the page feels ready" />
+            <AuditMetricCard label="Speed Index" value={formatVitalValue(auditData?.overview.speedIndex ?? null, "milliseconds_as_seconds")} helper="How quickly the page looks visually complete" />
           </div>
         </div>
       </div>
