@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   description:
     "Log in to SitePulse to access your agency SEO audit dashboard, client reports, alerts, and website monitoring workspace in one place.",
   alternates: {
-    canonical: "https://www.trysitepulse.com/login"
+    canonical: "https://trysitepulse.com/login"
   }
 };
 
@@ -25,8 +25,8 @@ export default async function LoginPage({
     <>
       <BreadcrumbJsonLd
         items={[
-          { name: "Home", item: "https://www.trysitepulse.com" },
-          { name: "Login", item: "https://www.trysitepulse.com/login" }
+          { name: "Home", item: "https://trysitepulse.com" },
+          { name: "Login", item: "https://trysitepulse.com/login" }
         ]}
       />
       <main className="container grid gap-10 py-10 md:py-16 lg:min-h-[calc(100vh-8rem)] lg:grid-cols-[1fr_28rem] lg:items-center">

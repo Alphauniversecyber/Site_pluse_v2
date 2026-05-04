@@ -48,14 +48,14 @@ const nextConfig = {
     return [
       {
         source: "/:path*",
-        has: [{ type: "host", value: "trysitepulse.com" }],
-        destination: "https://www.trysitepulse.com/:path*",
+        has: [{ type: "host", value: "www.trysitepulse.com" }],
+        destination: "https://trysitepulse.com/:path*",
         permanent: true
       },
       {
         source: "/:path*",
         has: [{ type: "header", key: "x-forwarded-proto", value: "http" }],
-        destination: "https://www.trysitepulse.com/:path*",
+        destination: "https://trysitepulse.com/:path*",
         permanent: true
       }
     ];

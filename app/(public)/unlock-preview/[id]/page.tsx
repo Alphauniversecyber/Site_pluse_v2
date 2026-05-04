@@ -18,7 +18,7 @@ export async function generateMetadata({
     description:
       "Unlock your SitePulse preview report to claim a free SEO audit and continue into the full client-ready dashboard experience.",
     alternates: {
-      canonical: `https://www.trysitepulse.com/unlock-preview/${params.id}`
+      canonical: `https://trysitepulse.com/unlock-preview/${params.id}`
     },
     robots: {
       index: false,
@@ -52,8 +52,8 @@ export default async function UnlockPreviewPage({ params }: { params: { id: stri
       <>
         <BreadcrumbJsonLd
           items={[
-            { name: "Home", item: "https://www.trysitepulse.com" },
-            { name: "Unlock Preview", item: `https://www.trysitepulse.com/unlock-preview/${params.id}` }
+            { name: "Home", item: "https://trysitepulse.com" },
+            { name: "Unlock Preview", item: `https://trysitepulse.com/unlock-preview/${params.id}` }
           ]}
         />
         <main className="container flex min-h-[calc(100vh-12rem)] items-center justify-center py-16">
