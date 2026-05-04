@@ -48,7 +48,10 @@ export async function POST(request: NextRequest) {
         .eq("magic_token", body.token);
 
       if (clearError) {
-        throw new Error(`Unable to clear saved AI recommendations. ${clearError.message}`);
+        console.error(
+          "[api/client/analyze-recommendations] unable to clear saved AI recommendations",
+          clearError
+        );
       }
     }
 
@@ -68,7 +71,10 @@ export async function POST(request: NextRequest) {
       .maybeSingle<{ ai_recommendations_generated_at: string | null }>();
 
     if (saveError) {
-      throw new Error(`Unable to save AI recommendations. ${saveError.message}`);
+      console.error(
+        "[api/client/analyze-recommendations] unable to save AI recommendations",
+        saveError
+      );
     }
 
     return apiSuccess({

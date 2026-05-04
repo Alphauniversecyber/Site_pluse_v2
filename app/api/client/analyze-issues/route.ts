@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         .eq("magic_token", body.token);
 
       if (clearError) {
-        throw new Error(`Unable to clear saved AI issues. ${clearError.message}`);
+        console.error("[api/client/analyze-issues] unable to clear saved AI issues", clearError);
       }
     }
 
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle<{ ai_issues_generated_at: string | null }>();
 
     if (saveError) {
-      throw new Error(`Unable to save AI issues. ${saveError.message}`);
+      console.error("[api/client/analyze-issues] unable to save AI issues", saveError);
     }
 
     return apiSuccess({
