@@ -24,19 +24,19 @@ const roadmapItems = [
     title: "Client-ready benchmarking",
     status: "Planned next",
     details:
-      "Expanded competitor comparisons, benchmark narratives, and account-level proof points for agencies selling retainers."
+      "Show clients exactly where they're falling behind competitors — and why your retainer is the fix."
   },
   {
     title: "Agency delivery automation",
     status: "In design",
     details:
-      "More automated report scheduling, approval workflows, and white-label delivery controls for multi-client teams."
+      "Scheduled reports, approval workflows, and white-label delivery — so your team ships faster with less manual work."
   },
   {
     title: "Retention intelligence",
     status: "Exploring",
     details:
-      "Renewal-risk indicators, client health summaries, and stronger action prompts to help agencies defend monthly revenue."
+      "Spot at-risk clients before they churn. Health scores and renewal signals built into every account view."
   }
 ] as const;
 

@@ -121,7 +121,7 @@ export function SiteFooter({ className }: { className?: string }) {
           </div>
 
           <div className="mt-10 flex flex-col gap-3 border-t border-slate-200/80 pt-5 text-[13px] text-muted-foreground/75 sm:flex-row sm:items-center sm:justify-center dark:border-white/[0.08]">
-            <p>© 2025 SitePulse. All rights reserved.</p>
+            <p>© 2026 SitePulse. All rights reserved.</p>
             <span className="hidden text-muted-foreground/50 sm:inline">|</span>
             <p>Made for agencies, not developers.</p>
           </div>

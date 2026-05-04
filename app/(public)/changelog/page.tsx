@@ -28,15 +28,27 @@ const updates = [
   },
   {
     title: "Template-based PDF reports",
-    date: "April 2026",
+    date: "February 2026",
     details:
       "Monthly reports now use a stricter fixed-page template with clearer executive summaries, security coverage, and more stable PDF rendering."
   },
   {
     title: "Paddle billing rollout",
-    date: "April 2026",
+    date: "December 2025",
     details:
       "Growth and Pro subscriptions now run exclusively through Paddle, with sale pricing, subscription lifecycle webhooks, and admin payment monitoring."
+  },
+  {
+    title: "14-day free trial system",
+    date: "October 2025",
+    details:
+      "Agencies can now start a free trial without a credit card. Trial state is tracked per account with automatic expiry and upgrade prompts."
+  },
+  {
+    title: "Client magic-link dashboard",
+    date: "August 2025",
+    details:
+      "Clients receive a private, branded report link. No login required. Links expire after 30 days and can be regenerated from the agency dashboard."
   }
 ] as const;
 
