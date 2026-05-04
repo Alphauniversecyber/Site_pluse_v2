@@ -7,7 +7,10 @@ const previewReportHtml = buildPreviewReportHtml({
   emailFromName: "SitePulse",
   replyToEmail: "reports@trysitepulse.com",
   agencyWebsiteUrl: "https://trysitepulse.com"
-});
+}).replace(
+  '<p style="font-size:14px;color:#94A3B8;margin:0 0 54px">SitePulse</p>',
+  '<img src="/brand/sitepulse-logo-dark.svg" alt="SitePulse" style="height:20px;width:auto;object-fit:contain;margin:0 0 54px"/>'
+);
 
 export function PdfReportPreview({
   compact = false,
