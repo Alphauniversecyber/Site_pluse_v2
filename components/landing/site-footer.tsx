@@ -24,7 +24,7 @@ const companyLinks: Array<{ href: string; label: string }> = [
 ];
 
 const socialLinks = [
-  { href: "https://www.linkedin.com/company/sitepulse", label: "LinkedIn", icon: Linkedin },
+  { href: "https://www.linkedin.com/company/trysitepulse/", label: "LinkedIn", icon: Linkedin },
   { href: "https://x.com/trysitepulse", label: "Twitter", icon: Twitter }
 ] as const;
 
