@@ -464,6 +464,22 @@ export interface WorkspaceSummary {
   trialEndsAt: string | null;
 }
 
+export type WorkspaceFeaturePackage = "trial" | "free" | "growth" | "pro";
+export type WorkspaceFeatureKey = "client_dashboard";
+
+export interface WorkspaceFeatureConfig {
+  key: WorkspaceFeatureKey;
+  enabled: boolean;
+  allowedPackages: WorkspaceFeaturePackage[];
+  updatedAt?: string | null;
+}
+
+export interface WorkspaceFeaturesResponse {
+  currentPackage: WorkspaceFeaturePackage;
+  features: Record<WorkspaceFeatureKey, boolean>;
+  configs: WorkspaceFeatureConfig[];
+}
+
 export interface WorkspaceClientState {
   activeWorkspace: WorkspaceSummary;
   workspaces: WorkspaceSummary[];

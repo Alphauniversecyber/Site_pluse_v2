@@ -16,6 +16,7 @@ export type AdminCronName =
 
 export const ADMIN_SIDEBAR_LINKS = [
   { href: "/admin", label: "Overview", icon: "\uD83D\uDCCA" },
+  { href: "/admin/features", label: "Features", icon: "\u2728" },
   { href: "/admin/users", label: "Users", icon: "\uD83D\uDC65" },
   { href: "/admin/websites", label: "Websites", icon: "\uD83C\uDF10" },
   { href: "/admin/reports", label: "Reports", icon: "\uD83D\uDCC4" },

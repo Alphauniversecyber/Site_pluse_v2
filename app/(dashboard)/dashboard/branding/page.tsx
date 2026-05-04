@@ -24,12 +24,14 @@ import { fetchJson } from "@/lib/api-client";
 import { markOnboardingStepComplete } from "@/lib/onboarding";
 import { useBranding } from "@/hooks/useBranding";
 import { useUser } from "@/hooks/useUser";
+import { useWorkspaceFeatures } from "@/hooks/useWorkspaceFeatures";
 import { useWorkspace } from "@/hooks/useWorkspace";
 
 export default function BrandingPage() {
   const { user, loading: userLoading } = useUser();
   const workspace = useWorkspace();
   const { branding, loading, refetch } = useBranding();
+  const { data: workspaceFeatures } = useWorkspaceFeatures();
   const [saving, setSaving] = useState(false);
   const [fullPreviewOpen, setFullPreviewOpen] = useState(false);
   const [previewTab, setPreviewTab] = useState<BrandingPreviewTab>("pdf");
@@ -66,6 +68,7 @@ export default function BrandingPage() {
   }, [branding, form]);
 
   const previewValues = form.watch();
+  const clientDashboardFeatureEnabled = workspaceFeatures?.features.client_dashboard ?? false;
 
   const uploadLogo = async (file: File) => {
     if (!user) {
@@ -218,24 +221,26 @@ export default function BrandingPage() {
                   Horizontal and square logos are both supported. Previews use contain mode so nothing gets cropped.
                 </p>
               </div>
-              <div className="rounded-2xl border border-border bg-card/60 p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className="font-medium text-foreground">Client dashboard logo</p>
-                    <p className="text-sm text-muted-foreground">
-                      Turn this on to show your branding logo on Pro and Enterprise client dashboards instead of SitePulse.
-                    </p>
+              {clientDashboardFeatureEnabled ? (
+                <div className="rounded-2xl border border-border bg-card/60 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="font-medium text-foreground">Client dashboard logo</p>
+                      <p className="text-sm text-muted-foreground">
+                        Turn this on to show your branding logo on Pro and Enterprise client dashboards instead of SitePulse.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={Boolean(form.watch("client_dashboard_use_branding_logo"))}
+                      onCheckedChange={(checked) =>
+                        form.setValue("client_dashboard_use_branding_logo", checked, {
+                          shouldDirty: true
+                        })
+                      }
+                    />
                   </div>
-                  <Switch
-                    checked={Boolean(form.watch("client_dashboard_use_branding_logo"))}
-                    onCheckedChange={(checked) =>
-                      form.setValue("client_dashboard_use_branding_logo", checked, {
-                        shouldDirty: true
-                      })
-                    }
-                  />
                 </div>
-              </div>
+              ) : null}
               <div className="space-y-2">
                 <Label htmlFor="agency-website-url">Agency website URL</Label>
                 <Input id="agency-website-url" type="url" aria-invalid={Boolean(form.formState.errors.agency_website_url)} {...form.register("agency_website_url")} />

@@ -39,6 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useTrialPaywall } from "@/hooks/useTrialPaywall";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useWorkspaceFeatures } from "@/hooks/useWorkspaceFeatures";
 import type {
   BrokenLinkRecord,
   CompetitorScanRecord,
@@ -886,6 +887,7 @@ function WebsiteHealthSignalsCard(input: {
 
 export default function WebsiteDetailPage({ params }: { params: { id: string } }) {
   const workspace = useWorkspace();
+  const { data: workspaceFeatures } = useWorkspaceFeatures();
   const [data, setData] = useState<WebsiteDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [plainLanguage, setPlainLanguage] = useState<WebsiteScanPlainEnglish | null>(null);
@@ -999,6 +1001,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const competitorEntries = latestCompetitorEntries(data?.competitor_scans ?? []);
   const businessImpact = buildSiteBusinessImpact(currentScan ?? null);
   const supportsCustomDashboardBranding = data?.package === "pro" || data?.package === "enterprise";
+  const clientDashboardFeatureEnabled = workspaceFeatures?.features.client_dashboard ?? false;
   const dashboardBrandName = data?.branding_name?.trim() || data?.label || "Client";
   const dashboardBrandColor = data?.branding_color?.trim() || "#3b82f6";
   const clientDashboardUrl =
@@ -1517,102 +1520,104 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                 <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} disabled={isPending || !canManageWorkspace} />
               </div>
 
-              <div className="rounded-2xl border border-border bg-background px-4 py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-medium">Client Dashboard</p>
-                    <p className="text-sm text-muted-foreground">
-                      Share a live dashboard link with your client so they can view their site's performance anytime.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={clientDashboardEnabled}
-                    onCheckedChange={setClientDashboardEnabled}
-                    disabled={isPending || !canManageWorkspace}
-                  />
-                </div>
-
-                {clientDashboardEnabled ? (
-                  <div className="mt-4 space-y-4">
-                    {supportsCustomDashboardBranding ? (
-                      <div className="rounded-2xl border border-border/80 bg-card p-4">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                          <div>
-                            <p className="font-medium">Client dashboard logo</p>
-                            <p className="text-sm text-muted-foreground">
-                              Turn this on to show this website&apos;s branding in the client dashboard header instead of SitePulse.
-                            </p>
-                          </div>
-
-                          <div className="min-w-[260px] rounded-2xl border border-border bg-background/80 p-4">
-                            <div className="flex min-h-16 items-center rounded-2xl border border-dashed border-border bg-card px-4 py-3">
-                              {clientDashboardUseBrandingLogo ? (
-                                data?.branding_logo ? (
-                                  <img
-                                    src={data.branding_logo}
-                                    alt={dashboardBrandName}
-                                    className="h-9 w-auto max-w-[180px] object-contain"
-                                  />
-                                ) : (
-                                  <div className="flex items-center gap-3">
-                                    <div
-                                      className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-semibold text-white"
-                                      style={{ backgroundColor: dashboardBrandColor }}
-                                    >
-                                      {(dashboardBrandName[0] ?? "C").toUpperCase()}
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-semibold text-foreground">{dashboardBrandName}</p>
-                                      <p className="text-xs text-muted-foreground">Branded header</p>
-                                    </div>
-                                  </div>
-                                )
-                              ) : (
-                                <SitePulseLogo variant="dark" className="h-8 w-[140px]" />
-                              )}
-                            </div>
-
-                            <div className="mt-4 flex items-center justify-between gap-4">
-                              <div>
-                                <p className="text-sm font-medium text-foreground">Use branded logo</p>
-                                <p className="text-xs text-muted-foreground">
-                                  Turn off to keep the SitePulse header on the client dashboard.
-                                </p>
-                              </div>
-                              <Switch
-                                checked={clientDashboardUseBrandingLogo}
-                                onCheckedChange={setClientDashboardUseBrandingLogo}
-                                disabled={isPending || !canManageWorkspace}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-
-                    <div className="rounded-2xl border border-border/80 bg-card p-4">
-                      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                        <Link2 className="h-4 w-4" />
-                        <span>Client dashboard URL</span>
-                      </div>
-
-                      {clientDashboardUrl ? (
-                        <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center">
-                          <Input value={clientDashboardUrl} readOnly className="font-mono text-xs sm:text-sm" />
-                          <Button type="button" variant="outline" onClick={copyClientDashboardUrl} className="md:shrink-0">
-                            <Copy className="mr-2 h-4 w-4" />
-                            Copy
-                          </Button>
-                        </div>
-                      ) : (
-                        <p className="mt-3 text-sm text-muted-foreground">
-                          Save settings to generate the stable client dashboard link for this website.
-                        </p>
-                      )}
+              {clientDashboardFeatureEnabled ? (
+                <div className="rounded-2xl border border-border bg-background px-4 py-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-medium">Client Dashboard</p>
+                      <p className="text-sm text-muted-foreground">
+                        Share a live dashboard link with your client so they can view their site's performance anytime.
+                      </p>
                     </div>
+                    <Switch
+                      checked={clientDashboardEnabled}
+                      onCheckedChange={setClientDashboardEnabled}
+                      disabled={isPending || !canManageWorkspace}
+                    />
                   </div>
-                ) : null}
-              </div>
+
+                  {clientDashboardEnabled ? (
+                    <div className="mt-4 space-y-4">
+                      {supportsCustomDashboardBranding ? (
+                        <div className="rounded-2xl border border-border/80 bg-card p-4">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                              <p className="font-medium">Client dashboard logo</p>
+                              <p className="text-sm text-muted-foreground">
+                                Turn this on to show this website&apos;s branding in the client dashboard header instead of SitePulse.
+                              </p>
+                            </div>
+
+                            <div className="min-w-[260px] rounded-2xl border border-border bg-background/80 p-4">
+                              <div className="flex min-h-16 items-center rounded-2xl border border-dashed border-border bg-card px-4 py-3">
+                                {clientDashboardUseBrandingLogo ? (
+                                  data?.branding_logo ? (
+                                    <img
+                                      src={data.branding_logo}
+                                      alt={dashboardBrandName}
+                                      className="h-9 w-auto max-w-[180px] object-contain"
+                                    />
+                                  ) : (
+                                    <div className="flex items-center gap-3">
+                                      <div
+                                        className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-semibold text-white"
+                                        style={{ backgroundColor: dashboardBrandColor }}
+                                      >
+                                        {(dashboardBrandName[0] ?? "C").toUpperCase()}
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-semibold text-foreground">{dashboardBrandName}</p>
+                                        <p className="text-xs text-muted-foreground">Branded header</p>
+                                      </div>
+                                    </div>
+                                  )
+                                ) : (
+                                  <SitePulseLogo variant="dark" className="h-8 w-[140px]" />
+                                )}
+                              </div>
+
+                              <div className="mt-4 flex items-center justify-between gap-4">
+                                <div>
+                                  <p className="text-sm font-medium text-foreground">Use branded logo</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Turn off to keep the SitePulse header on the client dashboard.
+                                  </p>
+                                </div>
+                                <Switch
+                                  checked={clientDashboardUseBrandingLogo}
+                                  onCheckedChange={setClientDashboardUseBrandingLogo}
+                                  disabled={isPending || !canManageWorkspace}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="rounded-2xl border border-border/80 bg-card p-4">
+                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                          <Link2 className="h-4 w-4" />
+                          <span>Client dashboard URL</span>
+                        </div>
+
+                        {clientDashboardUrl ? (
+                          <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center">
+                            <Input value={clientDashboardUrl} readOnly className="font-mono text-xs sm:text-sm" />
+                            <Button type="button" variant="outline" onClick={copyClientDashboardUrl} className="md:shrink-0">
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="mt-3 text-sm text-muted-foreground">
+                            Save settings to generate the stable client dashboard link for this website.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             {canManageWorkspace ? (
