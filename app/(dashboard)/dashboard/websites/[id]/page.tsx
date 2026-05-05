@@ -541,6 +541,8 @@ function WebsiteHealthSignalsCard(input: {
   healthScore: Website["health_score"] | null;
   healthSignalsSyncing: boolean;
   hasCurrentScan: boolean;
+  needsSeoAudit: boolean;
+  needsLinkHealth: boolean;
 }) {
   const {
     websiteUrl,
@@ -558,7 +560,9 @@ function WebsiteHealthSignalsCard(input: {
       canManageWorkspace,
       healthScore,
     healthSignalsSyncing,
-    hasCurrentScan
+    hasCurrentScan,
+    needsSeoAudit,
+    needsLinkHealth
   } = input;
 
   return (
@@ -685,7 +689,7 @@ function WebsiteHealthSignalsCard(input: {
               </div>
             ) : (
               <p className="rounded-2xl border border-border bg-background p-4 text-sm text-muted-foreground">
-                {healthSignalsSyncing && hasCurrentScan
+                {healthSignalsSyncing && needsSeoAudit && hasCurrentScan
                   ? "Generating SEO audit data from the latest scan. This usually takes a few seconds."
                   : "SEO audit data will appear here after the next completed scan."}
               </p>
@@ -696,7 +700,7 @@ function WebsiteHealthSignalsCard(input: {
             <LinkHealthPanel
               brokenLinks={brokenLinks ?? null}
               websiteUrl={websiteUrl}
-              isHydrating={healthSignalsSyncing && !brokenLinks && hasCurrentScan}
+              isHydrating={healthSignalsSyncing && needsLinkHealth && hasCurrentScan}
             />
           </TabsContent>
 
@@ -997,6 +1001,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const securityHeaders = data?.security_headers ?? null;
   const cruxData = data?.crux_data ?? null;
   const brokenLinks = normalizeBrokenLinksRecord(data?.broken_links ?? null);
+  const needsSeoAudit = Boolean(currentScan && (!seoAudit || seoAudit.scan_id !== currentScan.id));
+  const needsLinkHealth = Boolean(currentScan && (!brokenLinks || brokenLinks.scan_id !== currentScan.id));
   const uptimeSummary = buildUptimeSummary(data?.uptime_checks ?? []);
   const competitorEntries = latestCompetitorEntries(data?.competitor_scans ?? []);
   const businessImpact = buildSiteBusinessImpact(currentScan ?? null);
@@ -1062,9 +1068,6 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
       clearHealthSignalRetryTimeout();
       return;
     }
-
-    const needsSeoAudit = !seoAudit;
-    const needsLinkHealth = !brokenLinks;
 
     if (!needsSeoAudit && !needsLinkHealth) {
       clearHealthSignalRetryTimeout();
@@ -1159,7 +1162,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
     return () => {
       cancelled = true;
     };
-  }, [brokenLinks, canManageWorkspace, currentScan, currentScanFailed, healthSignalRetryTick, params.id, seoAudit]);
+  }, [canManageWorkspace, currentScan, currentScanFailed, healthSignalRetryTick, needsLinkHealth, needsSeoAudit, params.id]);
 
   const runScan = () =>
     startTransition(async () => {
@@ -2177,6 +2180,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
               healthScore={healthScore}
               healthSignalsSyncing={healthSignalsSyncing}
               hasCurrentScan={Boolean(currentScan)}
+              needsSeoAudit={needsSeoAudit}
+              needsLinkHealth={needsLinkHealth}
           />
 
           <Card>
@@ -2233,6 +2238,8 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
               healthScore={healthScore}
               healthSignalsSyncing={healthSignalsSyncing}
               hasCurrentScan={Boolean(currentScan)}
+              needsSeoAudit={needsSeoAudit}
+              needsLinkHealth={needsLinkHealth}
           />
         </>
       )}
