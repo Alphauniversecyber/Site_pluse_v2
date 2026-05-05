@@ -31,7 +31,7 @@ const organizationSchema = {
   description:
     "Automated SEO audits and white-label PDF reports for agencies. Share results with clients via magic-link dashboards. Try free for 14 days.",
   sameAs: [
-    "https://twitter.com/trysitepulse",
+    "https://www.facebook.com/profile.php?id=61589045769636",
     "https://www.linkedin.com/company/trysitepulse",
     "https://www.producthunt.com/products/sitepulse"
   ]

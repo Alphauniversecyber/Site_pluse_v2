@@ -45,6 +45,7 @@ import type {
   CompetitorScanRecord,
   CruxDataRecord,
   PlainLanguageDifficulty,
+  Report,
   ReportFrequency,
   ScanResult,
   SecurityHeadersRecord,
@@ -123,18 +124,6 @@ function cleanRawText(text: string, maxLength = 150) {
 
 function normalizeTitleKey(value: string) {
   return cleanRawText(value.toLowerCase(), 120).replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function buildPdfDownloadFilename(websiteName: string) {
-  const normalizedWebsiteName =
-    websiteName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "website";
-  const now = new Date();
-  const dateStamp = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
-
-  return `sitepulse-report-${normalizedWebsiteName}-${dateStamp}.pdf`;
 }
 
 function severityRank(severity: Severity) {
@@ -1188,38 +1177,34 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
         return;
       }
 
+      const reportWindow = window.open("about:blank", "_blank");
+
+      if (reportWindow) {
+        reportWindow.opener = null;
+        reportWindow.document.title = "Generating PDF";
+      }
+
       try {
-        const response = await fetch("/api/reports/generate", {
+        const report = await fetchJson<Report>("/api/reports/generate", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/pdf"
-          },
           body: JSON.stringify({
             websiteId: params.id,
             scanId: currentScan.id
           })
         });
 
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error ?? "Unable to generate report.");
+        const { signedUrl } = await fetchJson<{ signedUrl: string }>(`/api/reports/${report.id}`);
+
+        if (reportWindow) {
+          reportWindow.location.href = signedUrl;
+        } else {
+          window.open(signedUrl, "_blank", "noopener,noreferrer");
         }
 
-        const pdfBlob = await response.blob();
-        const downloadUrl = URL.createObjectURL(pdfBlob);
-        const link = document.createElement("a");
-
-        link.href = downloadUrl;
-        link.download = buildPdfDownloadFilename(data?.label ?? "website");
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(downloadUrl);
-
         markOnboardingStepComplete(2);
-        toast.success("PDF report downloaded.");
+        toast.success("PDF report opened.");
       } catch (error) {
+        reportWindow?.close();
         toast.error(error instanceof Error ? error.message : "Unable to generate report.");
       }
     });

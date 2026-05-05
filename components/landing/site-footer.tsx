@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { Linkedin, Twitter } from "lucide-react";
+import { Facebook, Linkedin } from "lucide-react";
 
 import { SitePulseLogo } from "@/components/brand/sitepulse-logo";
 import { useUser } from "@/hooks/useUser";
@@ -25,7 +25,11 @@ const companyLinks: Array<{ href: string; label: string }> = [
 
 const socialLinks = [
   { href: "https://www.linkedin.com/company/trysitepulse/", label: "LinkedIn", icon: Linkedin },
-  { href: "https://x.com/trysitepulse", label: "Twitter", icon: Twitter }
+  {
+    href: "https://www.facebook.com/profile.php?id=61589045769636",
+    label: "Facebook",
+    icon: Facebook
+  }
 ] as const;
 
 function footerLabel(label: string) {
