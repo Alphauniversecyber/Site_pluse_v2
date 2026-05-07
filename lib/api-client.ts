@@ -12,6 +12,7 @@ export async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit)
       ? { cache: "no-store" as const }
       : {}),
     ...init,
+    credentials: init?.credentials ?? "same-origin",
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers ?? {})

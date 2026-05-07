@@ -152,6 +152,17 @@ type AdminFailedTaskRecord = {
   resolved_at: string | null;
 };
 
+type AdminPaymentRevenueRecord = {
+  id: string;
+  user_id: string | null;
+  user_email: string;
+  plan_name: string | null;
+  event_type: string;
+  status: string;
+  amount: number | string | null;
+  timestamp: string;
+};
+
 export type AdminOverviewData = {
   stats: Array<{ label: string; value: string; tone: "neutral" | "green" | "blue" | "amber" | "red" }>;
   revenue: Array<{ label: string; value: string; note: string }>;
@@ -547,6 +558,27 @@ function toNumber(value: number | string | null | undefined) {
   return 0;
 }
 
+function getRevenueDeltaFromPaymentLog(row: Pick<AdminPaymentRevenueRecord, "event_type" | "status" | "amount">) {
+  if (row.status !== "success") {
+    return 0;
+  }
+
+  const amount = toNumber(row.amount);
+  if (amount <= 0) {
+    return 0;
+  }
+
+  if (row.event_type === "payment_succeeded") {
+    return amount;
+  }
+
+  if (row.event_type === "refund_approved") {
+    return -amount;
+  }
+
+  return 0;
+}
+
 async function loadUsersByIds(ids: string[]) {
   if (!ids.length) {
     return new Map<string, AdminUserRecord>();
@@ -653,12 +685,12 @@ export async function getAdminOverviewData(): Promise<AdminOverviewData> {
         .order("scanned_at", { ascending: false })
         .limit(10),
       admin
-        .from("users")
-        .select("id,email,subscription_price,updated_at,plan_override,plan_override_counts_as_revenue")
-        .eq("subscription_status", "active")
-        .not("subscription_price", "is", null)
-        .gte("updated_at", monthIso)
-        .order("updated_at", { ascending: false })
+        .from("payment_logs")
+        .select("id,user_id,user_email,plan_name,event_type,status,amount,timestamp")
+        .eq("event_type", "payment_succeeded")
+        .eq("status", "success")
+        .gte("timestamp", monthIso)
+        .order("timestamp", { ascending: false })
         .limit(10),
       admin
         .from("manual_revenue_entries")
@@ -748,21 +780,14 @@ export async function getAdminOverviewData(): Promise<AdminOverviewData> {
         timestamp: row.scanned_at,
         tone: "red" as const
       })),
-      ...((paymentRowsResult.data ?? []) as Array<{
-        id: string;
-        email: string;
-        subscription_price: number | null;
-        updated_at: string;
-        plan_override: boolean;
-        plan_override_counts_as_revenue: boolean;
-      }>)
-        .filter((row) => !row.plan_override)
-        .map((row) => ({
+      ...((paymentRowsResult.data ?? []) as AdminPaymentRevenueRecord[]).map((row) => ({
         id: `payment-${row.id}`,
         type: "Payment received",
-        title: row.email,
-        detail: `Approx. ${formatCurrency(row.subscription_price ?? 0)} in new paid billing activity.`,
-        timestamp: row.updated_at,
+        title: row.user_email,
+        detail: row.plan_name
+          ? `${formatCurrency(toNumber(row.amount))} collected for ${row.plan_name}.`
+          : `${formatCurrency(toNumber(row.amount))} collected.`,
+        timestamp: row.timestamp,
         tone: "green" as const
       })),
       ...manualRevenueRows.map((row) => ({
@@ -1663,7 +1688,11 @@ export async function getAdminBillingData(): Promise<AdminBillingPageData> {
   const previousMonthIso = startOfPreviousMonthIso();
 
   try {
-    const [{ data, error }, { data: manualRevenueData, error: manualRevenueError }] = await Promise.all([
+    const [
+      { data, error },
+      { data: manualRevenueData, error: manualRevenueError },
+      { data: paymentLogData, error: paymentLogError }
+    ] = await Promise.all([
       admin
         .from("users")
         .select(
@@ -1672,7 +1701,13 @@ export async function getAdminBillingData(): Promise<AdminBillingPageData> {
         .order("updated_at", { ascending: false }),
       admin
         .from("manual_revenue_entries")
-        .select("id,user_id,plan,amount,note,created_at")
+        .select("id,user_id,plan,amount,note,created_at"),
+      admin
+        .from("payment_logs")
+        .select("id,user_id,user_email,plan_name,event_type,status,amount,timestamp")
+        .in("event_type", ["payment_succeeded", "refund_approved"])
+        .eq("status", "success")
+        .gte("timestamp", previousMonthIso)
     ]);
 
     if (error) {
@@ -1681,6 +1716,10 @@ export async function getAdminBillingData(): Promise<AdminBillingPageData> {
 
     if (manualRevenueError) {
       throw new Error(manualRevenueError.message);
+    }
+
+    if (paymentLogError) {
+      throw new Error(paymentLogError.message);
     }
 
     const users = (data ?? []) as Array<
@@ -1702,6 +1741,7 @@ export async function getAdminBillingData(): Promise<AdminBillingPageData> {
       >
     >;
     const manualRevenueRows = (manualRevenueData ?? []) as ManualRevenueEntryRecord[];
+    const paymentLogs = (paymentLogData ?? []) as AdminPaymentRevenueRecord[];
     const paidUsers = users.filter(
       (row) => shouldCountUserInRevenue(row) && row.subscription_price
     );
@@ -1711,28 +1751,21 @@ export async function getAdminBillingData(): Promise<AdminBillingPageData> {
       (sum, row) => sum + toMonthlyRevenue(row.subscription_price, row.billing_cycle),
       0
     );
-    const revenueThisMonth = users
-      .filter(
-        (row) =>
-          row.subscription_status === "active" &&
-          !row.plan_override &&
-          new Date(row.updated_at).getTime() >= new Date(monthIso).getTime()
-      )
-      .reduce((sum, row) => sum + (row.subscription_price ?? 0), 0) +
+    const revenueThisMonth = paymentLogs
+      .filter((row) => new Date(row.timestamp).getTime() >= new Date(monthIso).getTime())
+      .reduce((sum, row) => sum + getRevenueDeltaFromPaymentLog(row), 0) +
       manualRevenueRows
         .filter((row) => new Date(row.created_at).getTime() >= new Date(monthIso).getTime())
         .reduce((sum, row) => sum + toNumber(row.amount), 0);
-    const revenueLastMonth = users
+    const revenueLastMonth = paymentLogs
       .filter((row) => {
-        const updatedAt = new Date(row.updated_at).getTime();
+        const loggedAt = new Date(row.timestamp).getTime();
         return (
-          row.subscription_status === "active" &&
-          !row.plan_override &&
-          updatedAt >= new Date(previousMonthIso).getTime() &&
-          updatedAt < new Date(monthIso).getTime()
+          loggedAt >= new Date(previousMonthIso).getTime() &&
+          loggedAt < new Date(monthIso).getTime()
         );
       })
-      .reduce((sum, row) => sum + (row.subscription_price ?? 0), 0) +
+      .reduce((sum, row) => sum + getRevenueDeltaFromPaymentLog(row), 0) +
       manualRevenueRows
         .filter((row) => {
           const createdAt = new Date(row.created_at).getTime();
