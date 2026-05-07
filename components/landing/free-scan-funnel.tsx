@@ -31,9 +31,9 @@ function buildAuthHref(pathname: "/signup" | "/login", nextPath?: string): Route
 
 function ScoreChip({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-2 font-display text-2xl font-semibold text-slate-950 dark:text-white">{value}</p>
+    <div className="flex min-h-[6.25rem] flex-col justify-between rounded-2xl border border-slate-200 bg-white/90 px-3.5 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none">
+      <p className="text-[0.62rem] font-semibold uppercase leading-4 tracking-[0.13em] text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="font-display text-[1.65rem] font-semibold leading-none text-slate-950 dark:text-white">{value}</p>
     </div>
   );
 }
@@ -156,7 +156,7 @@ export function FreeScanFunnel({ className }: { className?: string }) {
 
         <form className="mt-5 space-y-4" onSubmit={runPreviewScan}>
           <div className="rounded-[1.6rem] border border-slate-200 bg-white/80 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] dark:border-white/10 dark:bg-white/[0.05] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-            <div className="flex flex-col gap-2.5 md:flex-row">
+            <div className="flex flex-col gap-2.5 lg:flex-row">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
@@ -168,7 +168,7 @@ export function FreeScanFunnel({ className }: { className?: string }) {
               </div>
               <Button
                 type="submit"
-                className="h-14 rounded-2xl bg-blue-500 px-6 text-base font-semibold text-white shadow-[0_22px_50px_-28px_rgba(59,130,246,0.9)] hover:bg-blue-600"
+                className="h-14 shrink-0 rounded-2xl bg-blue-500 px-5 text-sm font-semibold text-white shadow-[0_22px_50px_-28px_rgba(59,130,246,0.9)] hover:bg-blue-600 sm:text-base lg:min-w-[13rem]"
                 disabled={isScanning}
               >
                 {isScanning
@@ -236,23 +236,23 @@ export function FreeScanFunnel({ className }: { className?: string }) {
 
         {preview ? (
           <div className="mt-6 space-y-5">
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(280px,0.95fr)]">
-              <div className="rounded-[1.7rem] border border-slate-200 bg-white/88 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none">
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
+            <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.08fr)_minmax(20rem,0.92fr)]">
+              <div className="rounded-[1.7rem] border border-slate-200 bg-white/88 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none sm:p-6">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200">
                       Partial result
                     </p>
-                    <h3 className="mt-3 font-display text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                    <h3 className="mt-3 break-words font-display text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">
                       {preview.website_label}
                     </h3>
-                    <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{preview.normalized_url}</p>
+                    <p className="mt-2 break-all text-sm text-slate-500 dark:text-slate-400">{preview.normalized_url}</p>
                   </div>
-                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/90 px-5 py-4 text-center dark:border-white/10 dark:bg-white/[0.05]">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  <div className="w-full rounded-[1.5rem] border border-slate-200 bg-slate-50/90 px-5 py-4 text-center dark:border-white/10 dark:bg-white/[0.05] sm:w-auto lg:min-w-[8rem]">
+                    <p className="text-[0.62rem] font-semibold uppercase leading-4 tracking-[0.13em] text-slate-500 dark:text-slate-400">
                       Overall score
                     </p>
-                    <p className="mt-2 font-display text-[3.2rem] font-semibold leading-none text-slate-950 dark:text-white">
+                    <p className="mt-2 font-display text-[3rem] font-semibold leading-none text-slate-950 dark:text-white">
                       {preview.overall_score}
                     </p>
                   </div>
@@ -261,7 +261,7 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                 <p className="mt-5 text-base leading-7 text-slate-800 dark:text-slate-100">{preview.impact_message}</p>
                 <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{preview.improvement_message}</p>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-4">
+                <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
                   <ScoreChip label="Performance" value={preview.scores.performance} />
                   <ScoreChip label="SEO" value={preview.scores.seo} />
                   <ScoreChip label="Accessibility" value={preview.scores.accessibility} />
@@ -269,12 +269,12 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                 </div>
               </div>
 
-              <div className="rounded-[1.7rem] border border-blue-200 bg-[linear-gradient(180deg,rgba(59,130,246,0.08),rgba(255,255,255,0.9))] p-5 shadow-[0_18px_48px_-34px_rgba(59,130,246,0.25)] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(59,130,246,0.12),rgba(255,255,255,0.04))] dark:shadow-none">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-blue-300/30 bg-blue-500/10 text-blue-600 dark:border-blue-300/20 dark:bg-blue-500/12 dark:text-blue-100">
+              <div className="rounded-[1.7rem] border border-blue-200 bg-[linear-gradient(180deg,rgba(59,130,246,0.08),rgba(255,255,255,0.9))] p-5 shadow-[0_18px_48px_-34px_rgba(59,130,246,0.25)] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(59,130,246,0.12),rgba(255,255,255,0.04))] dark:shadow-none sm:p-6">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-blue-300/30 bg-blue-500/10 text-blue-600 dark:border-blue-300/20 dark:bg-blue-500/12 dark:text-blue-100">
                     <Lock className="h-5 w-5" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold text-slate-950 dark:text-white">Unlock the full report</p>
                     <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                       Get the full issue breakdown, business impact story, and client-ready follow-up instantly.
@@ -283,20 +283,20 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                 </div>
 
                 <div className="mt-5 rounded-[1.4rem] border border-slate-200 bg-white/80 p-4 dark:border-white/10 dark:bg-slate-950/25">
-                  <div className="flex items-center gap-3">
-                    <Gauge className="h-4 w-4 text-blue-600 dark:text-blue-200" />
+                  <div className="flex items-start gap-3">
+                    <Gauge className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-200" />
                     <p className="text-sm text-slate-700 dark:text-slate-200">Full report includes the complete issue list, growth-focused explanations, and the white-label delivery workflow.</p>
                   </div>
                 </div>
 
                 <div className="mt-5 flex flex-col gap-3">
-                  <Button asChild className="h-12 rounded-2xl bg-blue-500 text-base font-semibold hover:bg-blue-600">
+                  <Button asChild className="h-12 rounded-2xl bg-blue-500 px-4 text-sm font-semibold hover:bg-blue-600 sm:text-base">
                     <Link href={unlockHref}>
                       Unlock full report
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
-                  <Button asChild variant="outline" className="h-12 rounded-2xl border-slate-300 bg-white text-slate-950 hover:bg-slate-100 dark:border-white/15 dark:bg-white/[0.02] dark:text-white dark:hover:bg-white/[0.06]">
+                  <Button asChild variant="outline" className="h-auto min-h-12 whitespace-normal rounded-2xl border-slate-300 bg-white px-4 py-3 text-center text-sm leading-5 text-slate-950 hover:bg-slate-100 dark:border-white/15 dark:bg-white/[0.02] dark:text-white dark:hover:bg-white/[0.06]">
                     <Link href={buildAuthHref("/login", preview.unlock_path)}>Already have an account? Log in</Link>
                   </Button>
                 </div>
