@@ -50,8 +50,8 @@ function getAuthOrigin() {
     return configuredAppUrl.replace(/\/$/, "");
   }
 
-  if (!isLocalRequest && configuredBaseUrl) {
-    return configuredBaseUrl.replace(/\/$/, "");
+  if (!isLocalRequest) {
+    return currentOrigin.replace(/\/$/, "");
   }
 
   if (configuredAppUrl) {
