@@ -38,8 +38,35 @@ function buildAuthHref(pathname: "/login" | "/signup", nextPath: string): Route 
   return `${pathname}?next=${encodeURIComponent(nextPath)}` as Route;
 }
 
+function getAuthOrigin() {
+  const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
+  const currentOrigin = window.location.origin;
+  const currentHost = window.location.hostname.toLowerCase();
+  const isLocalRequest =
+    currentHost === "localhost" || currentHost === "127.0.0.1" || currentHost.endsWith(".local");
+
+  if (isLocalRequest && configuredAppUrl) {
+    return configuredAppUrl.replace(/\/$/, "");
+  }
+
+  if (!isLocalRequest && configuredBaseUrl) {
+    return configuredBaseUrl.replace(/\/$/, "");
+  }
+
+  if (configuredAppUrl) {
+    return configuredAppUrl.replace(/\/$/, "");
+  }
+
+  if (configuredBaseUrl) {
+    return configuredBaseUrl.replace(/\/$/, "");
+  }
+
+  return currentOrigin.replace(/\/$/, "");
+}
+
 function buildAuthCallbackUrl(nextPath: string, inviteToken?: string) {
-  const callback = new URL("/auth/callback", window.location.origin);
+  const callback = new URL("/auth/callback", getAuthOrigin());
   callback.searchParams.set(
     "next",
     inviteToken ? `/api/team/invite/accept?token=${encodeURIComponent(inviteToken)}` : nextPath
@@ -451,7 +478,7 @@ export function ResetPasswordForm() {
               setSubmitting(true);
               const supabase = createSupabaseBrowserClient();
               const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-                redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`
+                redirectTo: `${getAuthOrigin()}/auth/callback?next=/reset-password`
               });
               setSubmitting(false);
 
