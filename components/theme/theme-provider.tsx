@@ -60,7 +60,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setResolvedTheme(applyTheme("system"));
     };
 
-    handleChange();
     media.addEventListener("change", handleChange);
 
     return () => media.removeEventListener("change", handleChange);
