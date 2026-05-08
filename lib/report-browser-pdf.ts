@@ -1,6 +1,7 @@
 import "server-only";
 
 import { buildCruxSummary, buildHealthScore, buildUptimeSummary } from "@/lib/health-score";
+import { getNextReportDate, getReportTitle } from "@/lib/report-cadence";
 import { buildReportNarrative } from "@/lib/report-ai";
 import { renderReportHtml, type ReportContext } from "@/lib/report-template";
 import { formatDateTime } from "@/lib/utils";
@@ -49,27 +50,6 @@ function overallScore(scan: ScanResult) {
 function normalizeLcpSeconds(value: number | null | undefined) {
   const raw = value ?? 0;
   return raw > 100 ? raw / 1000 : raw;
-}
-
-function addDays(value: string, days: number) {
-  const date = new Date(value);
-  date.setDate(date.getDate() + days);
-  return date;
-}
-
-function nextReportDate(
-  scan: ScanResult,
-  website: Website,
-  _schedule: ScanSchedule | null | undefined,
-  _profile: UserProfile
-) {
-  const frequency = website.report_frequency ?? "weekly";
-  if (frequency === "never") {
-    return "Not scheduled";
-  }
-
-  const days = frequency === "daily" ? 1 : frequency === "monthly" ? 30 : 7;
-  return formatDateTime(addDays(scan.scanned_at, days));
 }
 
 function statusFromScore(score: number): ReportContext["devices"]["mobile"]["status"] {
@@ -337,8 +317,9 @@ function buildReportContext(
     brand_color: brandColor,
     client_name: clientName,
     website_url: input.website.url,
+    report_title: getReportTitle(input.website.report_frequency),
     report_date: formatDateTime(input.scan.scanned_at),
-    next_report_date: nextReportDate(input.scan, input.website, input.schedule, input.profile),
+    next_report_date: getNextReportDate(input.scan.scanned_at, input.website.report_frequency),
     health_score: score,
     scores: {
       performance: clampScore(input.scan.performance_score),

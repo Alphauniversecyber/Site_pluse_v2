@@ -14,6 +14,7 @@ import {
   type ReportIssueGroup,
   type ReportRecommendationGroup
 } from "@/lib/report-ai";
+import { getNextReportDate as getScheduledNextReportDate } from "@/lib/report-cadence";
 import { formatDateTime } from "@/lib/utils";
 
 const PAGE_WIDTH = 595;
@@ -136,22 +137,7 @@ function getReportFooterNote(input: PdfContext) {
 }
 
 function getNextReportDate(input: PdfContext) {
-  const anchor = new Date(input.scan.scanned_at);
-  const frequency = input.website.report_frequency ?? "weekly";
-
-  if (frequency === "never") {
-    return "Not scheduled";
-  }
-
-  if (frequency === "daily") {
-    anchor.setDate(anchor.getDate() + 1);
-  } else if (frequency === "weekly") {
-    anchor.setDate(anchor.getDate() + 7);
-  } else {
-    anchor.setMonth(anchor.getMonth() + 1);
-  }
-
-  return formatDateTime(anchor);
+  return getScheduledNextReportDate(input.scan.scanned_at, input.website.report_frequency);
 }
 
 function getOverallScore(scan: ScanResult) {

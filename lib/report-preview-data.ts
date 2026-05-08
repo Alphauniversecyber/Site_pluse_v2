@@ -6,6 +6,7 @@ import type {
   UserProfile,
   Website
 } from "@/types";
+import { getReportTitle } from "@/lib/report-cadence";
 import { buildReportEmailTemplate } from "@/lib/report-email-template";
 import { renderReportHtml, type ReportContext } from "@/lib/report-template";
 
@@ -179,6 +180,7 @@ const PREVIEW_REPORT_CONTEXT: ReportContext = {
   brand_color: "#2563EB",
   client_name: "Client Website",
   website_url: "https://clientwebsite.com",
+  report_title: getReportTitle(PREVIEW_WEBSITE.report_frequency),
   report_date: "May 4, 2026",
   next_report_date: "May 11, 2026",
   health_score: 84,
