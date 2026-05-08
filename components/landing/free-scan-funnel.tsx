@@ -236,19 +236,19 @@ export function FreeScanFunnel({ className }: { className?: string }) {
 
         {preview ? (
           <div className="mt-6 space-y-5">
-            <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.08fr)_minmax(20rem,0.92fr)]">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_18.5rem] xl:items-start">
               <div className="rounded-[1.7rem] border border-slate-200 bg-white/88 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none sm:p-6">
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200">
                       Partial result
                     </p>
-                    <h3 className="mt-3 break-words font-display text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                    <h3 className="mt-3 max-w-[18rem] break-words font-display text-[clamp(1.9rem,3vw,2.4rem)] font-semibold leading-tight tracking-tight text-slate-950 sm:max-w-none dark:text-white">
                       {preview.website_label}
                     </h3>
                     <p className="mt-2 break-all text-sm text-slate-500 dark:text-slate-400">{preview.normalized_url}</p>
                   </div>
-                  <div className="w-full rounded-[1.5rem] border border-slate-200 bg-slate-50/90 px-5 py-4 text-center dark:border-white/10 dark:bg-white/[0.05] sm:w-auto lg:min-w-[8rem]">
+                  <div className="w-full rounded-[1.5rem] border border-slate-200 bg-slate-50/90 px-5 py-4 text-center dark:border-white/10 dark:bg-white/[0.05] sm:w-auto xl:min-w-[8rem]">
                     <p className="text-[0.62rem] font-semibold uppercase leading-4 tracking-[0.13em] text-slate-500 dark:text-slate-400">
                       Overall score
                     </p>
@@ -318,7 +318,7 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                 </Badge>
               </div>
 
-              <div className="mt-5 grid gap-4 xl:grid-cols-3">
+              <div className="mt-5 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                 {preview.issues.map((issue) => (
                   <div key={issue.id} className="rounded-[1.45rem] border border-slate-200 bg-slate-50/80 p-4 dark:border-white/8 dark:bg-slate-950/25">
                     <div className="flex items-center gap-2">

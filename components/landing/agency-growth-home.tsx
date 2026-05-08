@@ -81,8 +81,8 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
   return (
     <main className="bg-[linear-gradient(180deg,#f8fbff_0%,#f1f6ff_100%)] text-slate-950 dark:bg-none dark:bg-[#08111f] dark:text-slate-50">
       <section className="border-b border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(191,219,254,0.45),transparent_34%),linear-gradient(180deg,#fbfdff_0%,#eef5ff_100%)] dark:border-white/10 dark:bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.16),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.8),transparent_34%),linear-gradient(180deg,#0b1324_0%,#08111f_100%)]">
-        <div className="mx-auto flex min-h-[680px] w-full max-w-[1480px] flex-col items-center gap-14 px-5 py-14 sm:px-6 md:px-8 md:py-18 lg:flex-row lg:px-10 xl:min-h-[760px] xl:px-14 xl:py-24">
-          <div className="flex h-full max-w-3xl self-center flex-col justify-center">
+        <div className="mx-auto grid w-full max-w-[1480px] gap-12 px-5 py-12 sm:px-6 md:px-8 md:py-16 lg:gap-14 lg:px-10 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:items-start xl:px-14 xl:py-18">
+          <div className="flex max-w-[35rem] flex-col xl:pt-10">
             <Badge className="inline-flex w-fit border-blue-300/40 bg-blue-500/10 text-blue-700 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-100">
               Premium audit reporting for digital agencies
             </Badge>
@@ -111,7 +111,7 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
             </div>
           </div>
 
-          <div className="mx-auto flex w-full max-w-[620px] self-center flex-col justify-start">
+          <div className="mx-auto flex w-full max-w-[760px] flex-col justify-start xl:mx-0 xl:justify-self-end">
             <FreeScanFunnel />
             <div className="mt-3 grid grid-cols-3 gap-3">
               {heroSignals.map((signal) => (
