@@ -16,6 +16,7 @@ import {
   isPageSpeedRateLimitError,
   shouldUseFriendlyScanFailureMessage
 } from "@/lib/scan-errors";
+import { getNextScheduledAt } from "@/lib/schedule-monitoring";
 import { ensureSeoAudit } from "@/lib/seo-audit";
 import { ensureSecurityHeadersCheck } from "@/lib/security-headers-checker";
 import { ensureSslCheck, getSslAlertThreshold } from "@/lib/ssl-checker";
@@ -167,20 +168,6 @@ async function maybeSendSslAlert(input: {
       triggeredAt: input.scan.scanned_at
     });
   }
-}
-
-function getNextScanAt(frequency: "daily" | "weekly" | "monthly") {
-  const next = new Date();
-
-  if (frequency === "daily") {
-    next.setDate(next.getDate() + 1);
-  } else if (frequency === "weekly") {
-    next.setDate(next.getDate() + 7);
-  } else {
-    next.setMonth(next.getMonth() + 1);
-  }
-
-  return next.toISOString();
 }
 
 function getWebsiteDashboardUrl(websiteId: string) {
@@ -398,7 +385,7 @@ export async function executeWebsiteScan(
     website_id: website.id,
     frequency,
     last_scan_at: new Date().toISOString(),
-    next_scan_at: getNextScanAt(frequency)
+    next_scan_at: getNextScheduledAt(frequency)
   };
 
   if (schedule?.id) {

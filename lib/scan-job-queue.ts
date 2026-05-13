@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ReportFrequency, ScanFrequency, UserProfile, Website } from "@/types";
+import type { ScanFrequency, UserProfile, Website } from "@/types";
 import { logAdminError, logScanExecution } from "@/lib/admin/logging";
 import {
   logFailedTask,
@@ -410,10 +410,6 @@ async function countDueQueuedScanJobs() {
   return count ?? 0;
 }
 
-function toScanFrequency(value: ReportFrequency): ScanFrequency | null {
-  return value === "never" ? null : value;
-}
-
 function isCurrentPeriod(row: Pick<ScanJobQueueRow, "frequency" | "period_key" | "timezone">) {
   return row.period_key === getPeriodKey(row.frequency, new Date(), row.timezone);
 }
@@ -480,13 +476,12 @@ export async function enqueueDueScanJobs(limit?: number | null, offset = 0): Pro
     }
 
     const planLimits = PLAN_LIMITS[profile.plan];
-    if (!planLimits.emailReports || !website.auto_email_reports) {
-      continue;
-    }
-
-    const reportFrequency = website.report_frequency ?? "weekly";
-    const requestedFrequency = toScanFrequency(reportFrequency);
-    if (!requestedFrequency || !planLimits.scanFrequencies.includes(requestedFrequency)) {
+    const schedule = schedules.get(website.id);
+    const frequency =
+      schedule?.frequency && planLimits.scanFrequencies.includes(schedule.frequency)
+        ? schedule.frequency
+        : planLimits.scanFrequencies[0];
+    if (!planLimits.scanFrequencies.includes(frequency)) {
       continue;
     }
 
@@ -495,9 +490,7 @@ export async function enqueueDueScanJobs(limit?: number | null, offset = 0): Pro
       .slice()
       .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime());
     const websiteIndex = orderedWebsites.findIndex((item) => item.id === website.id);
-    const schedule = schedules.get(website.id);
     const timezone = normalizeTimezone(profile.timezone);
-    const frequency = requestedFrequency;
 
     const dueBySchedule = schedule?.next_scan_at ? new Date(schedule.next_scan_at).getTime() <= now.getTime() : true;
     const dueByPeriod = isDueForPeriod({
@@ -610,13 +603,12 @@ export async function enqueueFailedScanRetryJobs(): Promise<EnqueueFailedScanRet
     }
 
     const planLimits = PLAN_LIMITS[profile.plan];
-    if (!planLimits.emailReports || !website.auto_email_reports) {
-      continue;
-    }
-
-    const reportFrequency = website.report_frequency ?? "weekly";
-    const requestedFrequency = toScanFrequency(reportFrequency);
-    if (!requestedFrequency || !planLimits.scanFrequencies.includes(requestedFrequency)) {
+    const schedule = schedules.get(website.id);
+    const frequency =
+      schedule?.frequency && planLimits.scanFrequencies.includes(schedule.frequency)
+        ? schedule.frequency
+        : planLimits.scanFrequencies[0];
+    if (!planLimits.scanFrequencies.includes(frequency)) {
       continue;
     }
 
@@ -630,7 +622,6 @@ export async function enqueueFailedScanRetryJobs(): Promise<EnqueueFailedScanRet
     }
 
     const timezone = normalizeTimezone(profile.timezone);
-    const frequency = requestedFrequency;
     const periodKey = getPeriodKey(frequency, now, timezone);
 
     candidates.push({
@@ -772,23 +763,27 @@ export async function processQueuedScanJobs(
 
       const { data: currentWebsite } = await admin
         .from("websites")
-        .select("id,auto_email_reports,report_frequency")
+        .select("id,is_active")
         .eq("id", row.website_id)
-        .maybeSingle<Pick<Website, "id" | "auto_email_reports" | "report_frequency">>();
+        .maybeSingle<Pick<Website, "id" | "is_active">>();
+      const { data: currentSchedule } = await admin
+        .from("scan_schedules")
+        .select("website_id,frequency")
+        .eq("website_id", row.website_id)
+        .maybeSingle<Pick<ScanScheduleRow, "website_id" | "frequency">>();
 
       const currentPlanLimits = PLAN_LIMITS[currentProfile.plan];
-      const currentReportFrequency = currentWebsite?.report_frequency ?? "weekly";
       if (
         !currentWebsite ||
-        !currentPlanLimits.emailReports ||
-        !currentWebsite.auto_email_reports ||
-        currentReportFrequency === "never" ||
-        currentReportFrequency !== row.frequency
+        !currentWebsite.is_active ||
+        !currentPlanLimits.scanFrequencies.includes(row.frequency) ||
+        !currentSchedule ||
+        currentSchedule.frequency !== row.frequency
       ) {
         await updateQueueRow(row.id, {
           status: "skipped",
           failure_reason: "schedule_disabled",
-          last_error: "Scheduled scans are disabled because this website is not enabled for scheduled report emails.",
+          last_error: "Scheduled scans are disabled or this queued job no longer matches the current scan schedule.",
           last_attempt_at: startedAt
         });
         settledCount += 1;

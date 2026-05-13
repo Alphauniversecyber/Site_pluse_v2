@@ -152,6 +152,23 @@ export function isDueForPeriod(input: {
   return compareDateParts(addMonths(lastEventParts, 1), referenceParts) <= 0;
 }
 
+export function getNextScheduledAt(
+  frequency: ScanFrequency,
+  anchor: Date | string = new Date()
+) {
+  const next = typeof anchor === "string" ? new Date(anchor) : new Date(anchor);
+
+  if (frequency === "daily") {
+    next.setDate(next.getDate() + 1);
+  } else if (frequency === "weekly") {
+    next.setDate(next.getDate() + 7);
+  } else {
+    next.setMonth(next.getMonth() + 1);
+  }
+
+  return next.toISOString();
+}
+
 export function getRetryAt(minutesFromNow: number) {
   return new Date(Date.now() + minutesFromNow * 60_000).toISOString();
 }

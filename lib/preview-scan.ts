@@ -6,6 +6,7 @@ import { runPageSpeedScan } from "@/lib/pagespeed";
 import { ensureCruxData } from "@/lib/crux";
 import { ensureSecurityHeadersCheck } from "@/lib/security-headers-checker";
 import { ensureSeoAudit } from "@/lib/seo-audit";
+import { getNextScheduledAt } from "@/lib/schedule-monitoring";
 import { ensureSslCheck } from "@/lib/ssl-checker";
 import { buildSiteBusinessImpact } from "@/lib/business-impact";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -194,20 +195,6 @@ function toPreviewPayload(input: {
     issues: buildPreviewIssues(input.scan.issues),
     generated_at: input.createdAt
   };
-}
-
-function computeNextScanAt(frequency: ScanSchedule["frequency"]) {
-  const next = new Date();
-
-  if (frequency === "daily") {
-    next.setDate(next.getDate() + 1);
-  } else if (frequency === "monthly") {
-    next.setMonth(next.getMonth() + 1);
-  } else {
-    next.setDate(next.getDate() + 7);
-  }
-
-  return next.toISOString();
 }
 
 function nowPlusHours(hours: number) {
@@ -479,7 +466,7 @@ export async function claimPreviewScanSession(input: { sessionId: string; userId
     website_id: websiteId,
     frequency: defaultFrequency,
     last_scan_at: scannedAt,
-    next_scan_at: computeNextScanAt(defaultFrequency)
+    next_scan_at: getNextScheduledAt(defaultFrequency, scannedAt)
   };
 
   if (existingSchedule?.id) {

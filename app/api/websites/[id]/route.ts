@@ -1,6 +1,7 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { ensureMagicTokenForWebsite } from "@/lib/client-token";
 import { buildHealthScore } from "@/lib/health-score";
+import { getNextScheduledAt } from "@/lib/schedule-monitoring";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { PLAN_LIMITS } from "@/lib/utils";
 import { websiteUpdateSchema } from "@/lib/validation";
@@ -211,7 +212,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       .upsert({
         website_id: params.id,
         frequency: parsed.data.frequency,
-        next_scan_at: new Date().toISOString()
+        next_scan_at: getNextScheduledAt(parsed.data.frequency)
       })
       .select("*");
   }

@@ -1,5 +1,6 @@
 import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
 import { buildHealthScore } from "@/lib/health-score";
+import { getNextScheduledAt } from "@/lib/schedule-monitoring";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { PLAN_LIMITS, normalizeUrl } from "@/lib/utils";
 import { websiteSchema } from "@/lib/validation";
@@ -261,7 +262,7 @@ export async function POST(request: Request) {
   const { error: scheduleError } = await admin.from("scan_schedules").insert({
     website_id: website.id,
     frequency: defaultFrequency,
-    next_scan_at: new Date().toISOString()
+    next_scan_at: getNextScheduledAt(defaultFrequency)
   });
 
   if (scheduleError) {
