@@ -1,4 +1,4 @@
-import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
+import { apiError, apiSuccess, requireApiUser, withNoIndex } from "@/lib/api";
 import { generateAndStoreReport, generateAndStoreReportPdf } from "@/lib/report-service";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { canAccessFeature } from "@/lib/trial";
@@ -10,26 +10,26 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const { profile, errorResponse } = await requireApiUser();
   if (errorResponse || !profile) {
-    return errorResponse;
+    return withNoIndex(errorResponse);
   }
 
   const wantsPdf = request.headers.get("accept")?.includes("application/pdf") ?? false;
 
   const workspace = await resolveWorkspaceContext(profile);
   if (!canManageWorkspace(workspace)) {
-    return apiError("Viewer access is read-only.", 403);
+    return withNoIndex(apiError("Viewer access is read-only.", 403));
   }
   const admin = createSupabaseAdminClient();
 
   if (!canAccessFeature(workspace.workspaceProfile, "download_report")) {
-    return apiError("Upgrade to keep generating PDF reports.", 403);
+    return withNoIndex(apiError("Upgrade to keep generating PDF reports.", 403));
   }
 
   const body = await request.json().catch(() => null);
   const parsed = reportGenerationSchema.safeParse(body);
 
   if (!parsed.success) {
-    return apiError(parsed.error.issues[0]?.message ?? "Invalid report request.", 422);
+    return withNoIndex(apiError(parsed.error.issues[0]?.message ?? "Invalid report request.", 422));
   }
 
   const { data: website } = await admin
@@ -40,25 +40,29 @@ export async function POST(request: Request) {
     .single();
 
   if (!website) {
-    return apiError("Website not found.", 404);
+    return withNoIndex(apiError("Website not found.", 404));
   }
 
   try {
     if (wantsPdf) {
       const { pdfBuffer } = await generateAndStoreReportPdf(parsed.data);
 
-      return new Response(pdfBuffer, {
-        status: 201,
-        headers: {
-          "Content-Type": "application/pdf",
-          "Cache-Control": "no-store"
-        }
-      });
+      return withNoIndex(
+        new Response(pdfBuffer, {
+          status: 201,
+          headers: {
+            "Content-Type": "application/pdf",
+            "Cache-Control": "no-store"
+          }
+        })
+      );
     }
 
     const report = await generateAndStoreReport(parsed.data);
-    return apiSuccess(report, 201);
+    return withNoIndex(apiSuccess(report, 201));
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : "Unable to generate report.", 500);
+    return withNoIndex(
+      apiError(error instanceof Error ? error.message : "Unable to generate report.", 500)
+    );
   }
 }

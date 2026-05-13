@@ -21,14 +21,14 @@ const homeFaqSchema = {
 const homeWebPageSchema = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  name: "SitePulse – SEO Audit Tool for Digital Agencies",
-  url: "https://trysitepulse.com",
+  name: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
+  url: "https://www.trysitepulse.com",
   description:
-    "Automated SEO audits and white-label PDF reports for agencies. Share results with clients via magic-link dashboards. Try free for 14 days.",
+    "SitePulse helps digital agencies run automated SEO audits and deliver branded reports clients actually understand. Free 14-day trial. No credit card required.",
   isPartOf: {
     "@type": "WebSite",
     name: "SitePulse",
-    url: "https://trysitepulse.com"
+    url: "https://www.trysitepulse.com"
   },
   about: {
     "@type": "SoftwareApplication",
@@ -37,50 +37,22 @@ const homeWebPageSchema = {
 };
 
 export const metadata: Metadata = {
-  title: "SitePulse – SEO Audit Tool for Digital Agencies",
+  title: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
   description:
-    "Automated SEO audits and white-label PDF reports for agencies. Run website audits, generate white-label reports, and share results with clients using magic-link dashboards.",
-  keywords: [
-    "SEO audit tool for digital agencies",
-    "automated SEO audits",
-    "white-label SEO reports",
-    "agency SEO reporting",
-    "client SEO dashboards",
-    "magic link client portal",
-    "website audit software",
-    "Search Console reporting software",
-    "GA4 agency reporting",
-    "SEO SaaS for agencies"
-  ],
-  alternates: {
-    canonical: "https://trysitepulse.com"
-  },
+    "SitePulse helps digital agencies run automated SEO audits and deliver branded reports clients actually understand. Free 14-day trial. No credit card required.",
   openGraph: {
-    title: "SitePulse – SEO Audit Tool for Digital Agencies",
+    title: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
     description:
-      "Automated SEO audits and white-label PDF reports for agencies. Share results with clients via magic-link dashboards. Try free for 14 days.",
-    url: "https://trysitepulse.com",
+      "Automated SEO audit reports for digital agencies. White-label, client-ready, delivered weekly.",
+    url: "https://www.trysitepulse.com",
     siteName: "SitePulse",
-    type: "website",
-    images: [
-      {
-        url: "/opengraph-image.png",
-        width: 1200,
-        height: 630,
-        alt: "SitePulse homepage preview"
-      }
-    ]
+    type: "website"
   },
   twitter: {
     card: "summary_large_image",
-    title: "SitePulse – SEO Audit Tool for Digital Agencies",
+    title: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
     description:
-      "Automated SEO audits and white-label PDF reports for agencies. Share results with clients via magic-link dashboards. Try free for 14 days.",
-    images: ["/opengraph-image.png"]
-  },
-  robots: {
-    index: true,
-    follow: true
+      "Automated SEO audit reports for digital agencies. White-label, client-ready, delivered weekly."
   }
 };
 
@@ -89,7 +61,7 @@ export default async function LandingPage() {
 
   return (
     <>
-      <BreadcrumbJsonLd items={[{ name: "Home", item: "https://trysitepulse.com" }]} />
+      <BreadcrumbJsonLd items={[{ name: "Home", item: "https://www.trysitepulse.com" }]} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(homeWebPageSchema) }}

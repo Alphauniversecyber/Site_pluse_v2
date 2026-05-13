@@ -1,11 +1,11 @@
-import { apiError, apiSuccess, requireApiUser } from "@/lib/api";
+import { apiError, apiSuccess, requireApiUser, withNoIndex } from "@/lib/api";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { resolveWorkspaceContext } from "@/lib/workspace";
 
 export async function GET() {
   const { profile, errorResponse } = await requireApiUser();
   if (errorResponse || !profile) {
-    return errorResponse;
+    return withNoIndex(errorResponse);
   }
   const workspace = await resolveWorkspaceContext(profile);
   const admin = createSupabaseAdminClient();
@@ -15,12 +15,12 @@ export async function GET() {
     .eq("user_id", workspace.workspaceOwnerId);
 
   if (websitesError) {
-    return apiError(websitesError.message, 500);
+    return withNoIndex(apiError(websitesError.message, 500));
   }
 
   const websiteIds = (websites ?? []).map((website) => website.id);
   if (!websiteIds.length) {
-    return apiSuccess([]);
+    return withNoIndex(apiSuccess([]));
   }
 
   const { data: reports, error } = await admin
@@ -30,8 +30,8 @@ export async function GET() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    return apiError(error.message, 500);
+    return withNoIndex(apiError(error.message, 500));
   }
 
-  return apiSuccess(reports ?? []);
+  return withNoIndex(apiSuccess(reports ?? []));
 }

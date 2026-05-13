@@ -2,33 +2,21 @@ import type { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: [
-      {
-        userAgent: "Googlebot",
-        allow: "/",
-        disallow: ["/dashboard", "/api", "/admin", "/auth"]
-      },
-      {
-        userAgent: "GPTBot",
-        allow: "/",
-        disallow: ["/dashboard", "/api", "/admin", "/auth"]
-      },
-      {
-        userAgent: "ClaudeBot",
-        allow: "/",
-        disallow: ["/dashboard", "/api", "/admin", "/auth"]
-      },
-      {
-        userAgent: "anthropic-ai",
-        allow: "/",
-        disallow: ["/dashboard", "/api", "/admin", "/auth"]
-      },
-      {
-        userAgent: "*",
-        allow: "/",
-        disallow: ["/dashboard", "/api", "/admin", "/auth"]
-      }
-    ],
-    sitemap: "https://trysitepulse.com/sitemap.xml"
+    rules: {
+      userAgent: "*",
+      disallow: [
+        "/reports/",
+        "/report/",
+        "/api/reports/",
+        "/api/cron/",
+        "/api/webhooks/",
+        "/dashboard/",
+        "/admin/",
+        "/auth/",
+        "/d/",
+        "/unlock-preview/"
+      ]
+    },
+    sitemap: "https://www.trysitepulse.com/sitemap.xml"
   };
 }

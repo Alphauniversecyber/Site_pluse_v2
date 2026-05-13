@@ -6,6 +6,18 @@ import type { UserProfile } from "@/types";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
+export const NO_INDEX_HEADERS = {
+  "X-Robots-Tag": "noindex, nofollow, noarchive, nosnippet"
+} as const;
+
+export function withNoIndex<T extends Response>(response: T) {
+  Object.entries(NO_INDEX_HEADERS).forEach(([key, value]) => {
+    response.headers.set(key, value);
+  });
+
+  return response;
+}
+
 export function apiError(message: string, status = 400) {
   return NextResponse.json(
     { error: message },

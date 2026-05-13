@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const PUBLIC_SITE_URL = "https://trysitepulse.com";
+export const PUBLIC_SITE_URL = "https://www.trysitepulse.com";
 export const DEFAULT_OG_IMAGE = "/opengraph-image.png";
 
 type BuildPageMetadataOptions = {

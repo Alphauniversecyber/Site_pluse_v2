@@ -1,8 +1,19 @@
+import type { Metadata } from "next";
+
 import { SitePulseLogo } from "@/components/brand/sitepulse-logo";
 import { TabNav } from "@/components/client-dashboard/TabNav";
 import { buildClientDashboardPayload } from "@/lib/client-token";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    robots: {
+      index: false,
+      follow: false
+    }
+  };
+}
 
 export default async function ClientDashboardPage({
   params,

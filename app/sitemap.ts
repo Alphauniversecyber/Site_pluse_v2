@@ -29,54 +29,14 @@ const staticRoutes: Array<{
     priority: 0.7
   },
   {
-    path: "/contact",
-    changeFrequency: "monthly",
-    priority: 0.7
-  },
-  {
     path: "/blog",
     changeFrequency: "weekly",
     priority: 0.85
   },
   {
-    path: "/changelog",
-    changeFrequency: "monthly",
-    priority: 0.65
-  },
-  {
-    path: "/roadmap",
-    changeFrequency: "monthly",
-    priority: 0.65
-  },
-  {
-    path: "/privacy",
-    changeFrequency: "yearly",
-    priority: 0.4
-  },
-  {
-    path: "/refund",
-    changeFrequency: "yearly",
-    priority: 0.4
-  },
-  {
-    path: "/terms",
-    changeFrequency: "yearly",
-    priority: 0.4
-  },
-  {
     path: "/login",
     changeFrequency: "monthly",
     priority: 0.35
-  },
-  {
-    path: "/signup",
-    changeFrequency: "monthly",
-    priority: 0.45
-  },
-  {
-    path: "/reset-password",
-    changeFrequency: "yearly",
-    priority: 0.2
   }
 ];
 
