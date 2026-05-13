@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     }
 
     if (!result.user) {
-      const signupUrl = new URL("/register", url.origin);
+      const signupUrl = new URL("/signup", url.origin);
       signupUrl.searchParams.set("invite_token", token);
       signupUrl.searchParams.set("email", result.invite.invited_email);
       return NextResponse.redirect(signupUrl);

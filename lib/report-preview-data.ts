@@ -175,7 +175,7 @@ const PREVIEW_REPORT_CONTEXT: ReportContext = {
   agency_name: "SitePulse Studio",
   agency_logo_url: "",
   agency_email: "reports@trysitepulse.com",
-  agency_website_url: "https://trysitepulse.com",
+  agency_website_url: "https://www.trysitepulse.com",
   report_footer_text: "Automated reporting built for proactive client retention.",
   brand_color: "#2563EB",
   client_name: "Client Website",
@@ -398,7 +398,7 @@ function buildPreviewBranding(options: PreviewBrandingOptions = {}): AgencyBrand
     brand_color: options.brandColor || "#2563EB",
     email_from_name: options.emailFromName?.trim() || options.agencyName?.trim() || "SitePulse Studio",
     reply_to_email: options.replyToEmail?.trim() || "reports@trysitepulse.com",
-    agency_website_url: options.agencyWebsiteUrl?.trim() || "https://trysitepulse.com",
+    agency_website_url: options.agencyWebsiteUrl?.trim() || "https://www.trysitepulse.com",
     report_footer_text:
       options.reportFooterText?.trim() || "Automated reporting built for proactive client retention.",
     created_at: "2026-05-04T00:00:00.000Z"

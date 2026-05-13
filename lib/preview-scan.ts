@@ -29,6 +29,8 @@ import type {
 } from "@/types";
 
 const PREVIEW_SESSION_TTL_HOURS = 24;
+const SITEPULSE_CANONICAL_HOST = "www.trysitepulse.com";
+const SITEPULSE_LEGACY_HOST = "trysitepulse.com";
 
 function cleanText(value: string, maxLength = 130) {
   const cleaned = value
@@ -62,6 +64,22 @@ function buildWebsiteLabel(url: string) {
   }
 }
 
+function normalizePreviewUrl(rawUrl: string) {
+  const normalizedUrl = normalizeUrl(rawUrl);
+
+  try {
+    const parsed = new URL(normalizedUrl);
+
+    if (parsed.hostname.toLowerCase() === SITEPULSE_LEGACY_HOST) {
+      parsed.hostname = SITEPULSE_CANONICAL_HOST;
+    }
+
+    return parsed.toString();
+  } catch {
+    return normalizedUrl;
+  }
+}
+
 function categoryFromIssue(issue: ScanIssue) {
   const haystack = `${issue.title} ${issue.description}`.toLowerCase();
 
@@ -87,6 +105,7 @@ function normalizeIssueKey(issue: ScanIssue) {
 function buildPreviewCopy(issue: ScanIssue) {
   const category = categoryFromIssue(issue);
   const title = issue.title.toLowerCase();
+  const description = issue.description.toLowerCase();
 
   if (title.includes("speed index")) {
     return {
@@ -112,6 +131,85 @@ function buildPreviewCopy(issue: ScanIssue) {
         "The main sales message is taking too long to fully appear, which weakens the site’s opening impression.",
       why_it_matters:
         "If the headline, hero image, or primary value arrives late, visitors are less likely to stay long enough to act."
+    };
+  }
+
+  if (title.includes("avoid multiple page redirects") || description.includes("redirects introduce additional delays")) {
+    return {
+      summary:
+        "Visitors are taking an extra step before they even reach the real page, which slows down the first impression.",
+      why_it_matters:
+        "That added delay makes the site feel less polished and increases drop-off before someone sees the offer."
+    };
+  }
+
+  if (title.includes("reduce initial server response time") || description.includes("server responded slowly")) {
+    return {
+      summary:
+        "The page is taking too long to start responding, which makes the site feel slow before content even begins loading.",
+      why_it_matters:
+        "When the experience starts with a wait, trust slips early and more visitors abandon before engaging."
+    };
+  }
+
+  if (title.includes("largest contentful paint image") || title.includes("largest contentful paint element")) {
+    return {
+      summary:
+        "The most important visual part of the page is arriving later than it should, delaying the moment the page feels ready.",
+      why_it_matters:
+        "If the main content appears late, visitors are less likely to stay confident, keep scrolling, or take the next step."
+    };
+  }
+
+  if (title.includes("render blocking") || description.includes("requests are blocking the page")) {
+    return {
+      summary:
+        "Important page content is being held back too long, so the site feels slower and less responsive at the start.",
+      why_it_matters:
+        "That delay hurts first impressions and can reduce how many visitors stay long enough to convert."
+    };
+  }
+
+  if (title.includes("main-thread work") || title.includes("javascript execution time")) {
+    return {
+      summary:
+        "The page is doing too much work before it feels smooth, which makes the first visit feel heavier than it should.",
+      why_it_matters:
+        "When early interactions feel sluggish, visitors are more likely to stop exploring before they contact or buy."
+    };
+  }
+
+  if (title.includes("unused javascript") || title.includes("unused css")) {
+    return {
+      summary:
+        "The page is carrying extra weight that slows down how quickly visitors can get to the important parts.",
+      why_it_matters:
+        "A heavier experience lowers engagement and makes every campaign click work harder for the same result."
+    };
+  }
+
+  if (title.includes("uses efficient cache policy") || title.includes("uses long cache ttl")) {
+    return {
+      summary:
+        "Repeat visitors may not be getting the fast return experience they expect, which makes the site feel less efficient over time.",
+      why_it_matters:
+        "If returning traffic keeps waiting on the same content, engagement drops and paid traffic becomes less efficient."
+    };
+  }
+
+  const cleanedDescription = cleanText(issue.description, 150);
+
+  if (cleanedDescription && cleanedDescription !== "An issue affecting this page was detected.") {
+    return {
+      summary: cleanedDescription,
+      why_it_matters:
+        category === "performance"
+          ? "This creates extra friction in the visit, which can quietly reduce engagement, leads, and conversion intent."
+          : category === "seo"
+            ? "When visibility or clarity slips here, the business usually loses qualified traffic before the sales conversation starts."
+            : category === "accessibility"
+              ? "If part of the experience feels harder than expected, trust drops and fewer visitors complete the next step."
+              : "If visitors feel uncertainty at this stage, they become more cautious about engaging with the business."
     };
   }
 
@@ -298,9 +396,26 @@ function mapSessionRow(row: any): PreviewScanSessionRecord {
   };
 }
 
+function buildPreviewPayloadFromSession(session: PreviewScanSessionRecord) {
+  const normalizedUrl = normalizePreviewUrl(session.normalized_url);
+  const websiteLabel = buildWebsiteLabel(normalizedUrl);
+
+  return {
+    normalizedUrl,
+    websiteLabel,
+    previewPayload: toPreviewPayload({
+      sessionId: session.id,
+      url: normalizedUrl,
+      label: websiteLabel,
+      scan: session.scan_payload,
+      createdAt: session.created_at
+    })
+  };
+}
+
 export async function createPreviewScanSession(rawUrl: string): Promise<PreviewScanResult> {
   const admin = createSupabaseAdminClient();
-  const normalizedUrl = normalizeUrl(rawUrl);
+  const normalizedUrl = normalizePreviewUrl(rawUrl);
   const nowIso = new Date().toISOString();
 
   const { data: existingRow } = await admin
@@ -314,7 +429,25 @@ export async function createPreviewScanSession(rawUrl: string): Promise<PreviewS
     .maybeSingle();
 
   if (existingRow) {
-    return mapSessionRow(existingRow).preview_payload;
+    const existingSession = mapSessionRow(existingRow);
+    const refreshed = buildPreviewPayloadFromSession(existingSession);
+
+    if (
+      existingSession.normalized_url !== refreshed.normalizedUrl ||
+      existingSession.website_label !== refreshed.websiteLabel ||
+      JSON.stringify(existingSession.preview_payload) !== JSON.stringify(refreshed.previewPayload)
+    ) {
+      await admin
+        .from("preview_scan_sessions")
+        .update({
+          normalized_url: refreshed.normalizedUrl,
+          website_label: refreshed.websiteLabel,
+          preview_payload: refreshed.previewPayload
+        })
+        .eq("id", existingSession.id);
+    }
+
+    return refreshed.previewPayload;
   }
 
   const label = buildWebsiteLabel(normalizedUrl);

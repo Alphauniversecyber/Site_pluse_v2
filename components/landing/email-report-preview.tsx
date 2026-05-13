@@ -6,7 +6,7 @@ const previewEmailHtml = buildPreviewEmailHtml({
   agencyName: "SitePulse",
   emailFromName: "SitePulse",
   replyToEmail: "reports@trysitepulse.com",
-  agencyWebsiteUrl: "https://trysitepulse.com"
+  agencyWebsiteUrl: "https://www.trysitepulse.com"
 });
 
 export function EmailReportPreview({

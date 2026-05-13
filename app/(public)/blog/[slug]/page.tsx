@@ -206,7 +206,7 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
                 </p>
               </div>
               <Button asChild size="lg" className="rounded-2xl px-6">
-                <Link href={"/register" as Route}>Start free trial</Link>
+                <Link href={"/signup" as Route}>Start free trial</Link>
               </Button>
             </div>
           </div>

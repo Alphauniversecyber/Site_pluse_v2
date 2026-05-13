@@ -31,9 +31,13 @@ function buildAuthHref(pathname: "/signup" | "/login", nextPath?: string): Route
 
 function ScoreChip({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex min-h-[6.25rem] flex-col justify-between rounded-2xl border border-slate-200 bg-white/90 px-3.5 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none">
-      <p className="text-[0.62rem] font-semibold uppercase leading-4 tracking-[0.13em] text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="font-display text-[1.65rem] font-semibold leading-none text-slate-950 dark:text-white">{value}</p>
+    <div className="flex min-h-[5.75rem] min-w-0 flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white/90 px-3 py-3 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none sm:min-h-[6.1rem] sm:px-3.5 sm:py-3.5">
+      <p className="truncate text-[0.58rem] font-semibold uppercase leading-tight tracking-[0.11em] text-slate-500 dark:text-slate-400 sm:text-[0.62rem]">
+        {label}
+      </p>
+      <p className="font-display text-[1.45rem] font-semibold leading-none text-slate-950 dark:text-white sm:text-[1.65rem]">
+        {value}
+      </p>
     </div>
   );
 }
@@ -261,11 +265,11 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                 <p className="mt-5 text-base leading-7 text-slate-800 dark:text-slate-100">{preview.impact_message}</p>
                 <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{preview.improvement_message}</p>
 
-                <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+                <div className="mt-5 grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
                   <ScoreChip label="Performance" value={preview.scores.performance} />
                   <ScoreChip label="SEO" value={preview.scores.seo} />
                   <ScoreChip label="Accessibility" value={preview.scores.accessibility} />
-                  <ScoreChip label="Best practice" value={preview.scores.best_practices} />
+                  <ScoreChip label="Best Practice" value={preview.scores.best_practices} />
                 </div>
               </div>
 

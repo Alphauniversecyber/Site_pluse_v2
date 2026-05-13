@@ -64,7 +64,7 @@ type ActivationEmailDefinition = {
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const HALF_DAY_IN_MS = 12 * 60 * 60 * 1000;
-const ACTIVATION_DASHBOARD_URL = "https://trysitepulse.com/dashboard";
+const ACTIVATION_DASHBOARD_URL = "https://www.trysitepulse.com/dashboard";
 const ACTIVATION_EMAILS: ActivationEmailDefinition[] = [
   {
     emailType: "activation_day1",

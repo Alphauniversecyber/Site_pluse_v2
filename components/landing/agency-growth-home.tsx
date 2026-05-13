@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -10,7 +11,6 @@ import {
 } from "lucide-react";
 
 import { ClientDeliverablesSection } from "@/components/landing/client-deliverables-section";
-import { DashboardMockup } from "@/components/landing/dashboard-mockup";
 import { FreeScanFunnel } from "@/components/landing/free-scan-funnel";
 import { PricingGrid } from "@/components/landing/pricing-grid";
 import { Badge } from "@/components/ui/badge";
@@ -134,7 +134,7 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
       </section>
 
       <section className="border-b border-slate-200/80 bg-[#f3f8ff] dark:border-white/10 dark:bg-[#0a1426]">
-        <div className="container py-16 md:py-20">
+        <div className="container py-16">
           <div className="grid gap-10 rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(240,247,255,0.96))] p-6 shadow-[0_34px_100px_-60px_rgba(15,23,42,0.18)] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.72),rgba(8,17,31,0.92))] dark:shadow-[0_34px_100px_-60px_rgba(2,6,23,0.95)] lg:grid-cols-[minmax(0,0.92fr)_minmax(320px,1.08fr)] lg:items-center lg:p-8 xl:p-10">
             <div className="max-w-2xl">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-700 dark:text-blue-200">Product proof</p>
@@ -142,18 +142,29 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
                 Show the exact problem, the likely cost, and the next step in one view.
               </h2>
               <p className="mt-5 max-w-xl text-base leading-7 text-slate-600 dark:text-slate-300 md:text-lg md:leading-8">
-                Agencies lose momentum when the audit is technical, the explanation is vague, or the follow-up arrives too late. SitePulse keeps the story tight from first scan to delivered report.
+                Agencies lose clients when audits are technical and explanations are vague. SitePulse keeps it simple - scan, explain, deliver.
               </p>
               <div className="mt-7 rounded-[1.5rem] border border-blue-300/30 bg-blue-50/90 p-5 dark:border-blue-400/16 dark:bg-blue-500/[0.08]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-200">Sales-ready example</p>
                 <p className="mt-3 text-base leading-7 text-slate-700 dark:text-slate-100">
-                  Your website is losing visitors due to slow load speed. Fixing three issues could improve performance by up to 30%.
+                  Your page takes 5.82 seconds to load - well above the 2.5s target. Fixing 3 issues could recover lost conversions and improve your Google ranking.
                 </p>
               </div>
             </div>
 
-            <div className="mx-auto w-full max-w-[430px] justify-self-center lg:justify-self-end">
-              <DashboardMockup />
+            <div className="mx-auto w-full max-w-[540px] justify-self-center lg:justify-self-end">
+              <div className="relative overflow-hidden rounded-[1.8rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(243,247,255,0.98))] p-3 shadow-[0_32px_90px_-56px_rgba(15,23,42,0.3)] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(19,30,52,0.98),rgba(8,17,31,0.98))]">
+                <Image
+                  src="/images/report-preview.png"
+                  alt="SitePulse executive summary report preview"
+                  width={496}
+                  height={691}
+                  className="h-auto w-full rounded-[1.2rem] border border-slate-200/80 shadow-[0_18px_48px_-30px_rgba(15,23,42,0.28)]"
+                />
+                <div className="pointer-events-none absolute right-6 top-6 rounded-full border border-emerald-300/40 bg-white/92 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 shadow-[0_14px_36px_-24px_rgba(15,23,42,0.28)] dark:border-emerald-400/20 dark:bg-slate-950/88 dark:text-emerald-200">
+                  Real scan · Generated in 30s
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -17,4 +17,4 @@ SitePulse helps digital agencies run automated SEO audits, generate white-label 
 - /dashboard: Agency dashboard (auth required)
 
 ## Contact
-https://trysitepulse.com
+https://www.trysitepulse.com
