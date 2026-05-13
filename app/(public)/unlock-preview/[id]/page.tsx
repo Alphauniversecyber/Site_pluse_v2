@@ -6,6 +6,7 @@ import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { claimPreviewScanSession } from "@/lib/preview-scan";
+import { PUBLIC_SITE_URL } from "@/lib/seo";
 import { getCurrentUserProfile } from "@/lib/supabase-server";
 
 export async function generateMetadata({
@@ -18,7 +19,7 @@ export async function generateMetadata({
     description:
       "Unlock your SitePulse preview report to claim a free SEO audit and continue into the full client-ready dashboard experience.",
     alternates: {
-      canonical: `https://trysitepulse.com/unlock-preview/${params.id}`
+      canonical: `${PUBLIC_SITE_URL}/unlock-preview/${params.id}`
     },
     robots: {
       index: false,
@@ -52,8 +53,8 @@ export default async function UnlockPreviewPage({ params }: { params: { id: stri
       <>
         <BreadcrumbJsonLd
           items={[
-            { name: "Home", item: "https://trysitepulse.com" },
-            { name: "Unlock Preview", item: `https://trysitepulse.com/unlock-preview/${params.id}` }
+            { name: "Home", item: `${PUBLIC_SITE_URL}/` },
+            { name: "Unlock Preview", item: `${PUBLIC_SITE_URL}/unlock-preview/${params.id}` }
           ]}
         />
         <main className="container flex min-h-[calc(100vh-12rem)] items-center justify-center py-16">

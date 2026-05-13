@@ -84,49 +84,80 @@ function normalizeIssueKey(issue: ScanIssue) {
   return cleanText(issue.title.toLowerCase(), 90).replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function toPreviewIssue(issue: ScanIssue): PreviewScanIssue {
+function buildPreviewCopy(issue: ScanIssue) {
   const category = categoryFromIssue(issue);
+  const title = issue.title.toLowerCase();
+
+  if (title.includes("speed index")) {
+    return {
+      summary:
+        "The first impression is arriving slower than it should, so visitors wait too long to grasp the offer.",
+      why_it_matters:
+        "When the page feels slow at the start, more people leave before trust builds or a lead action gets seen."
+    };
+  }
+
+  if (title.includes("reduce javascript execution time")) {
+    return {
+      summary:
+        "The page feels busier and heavier than it should during the first visit, which makes early interactions feel less smooth.",
+      why_it_matters:
+        "That friction can reduce clicks, enquiries, and momentum right at the moment a visitor is deciding whether to continue."
+    };
+  }
+
+  if (title.includes("lcp breakdown")) {
+    return {
+      summary:
+        "The main sales message is taking too long to fully appear, which weakens the site’s opening impression.",
+      why_it_matters:
+        "If the headline, hero image, or primary value arrives late, visitors are less likely to stay long enough to act."
+    };
+  }
 
   if (category === "seo") {
     return {
-      id: issue.id,
-      title: cleanText(issue.title, 60),
       summary:
-        "Search signals are weaker than they should be, so the right visitors may not reach this site consistently.",
+        "Search visibility looks weaker than it should be, so high-intent visitors may not be reaching this site consistently.",
       why_it_matters:
-        "Lower search visibility quietly reduces qualified traffic, enquiries, and the value you can prove to clients."
+        "That usually means fewer qualified visits, fewer enquiries, and less proof of marketing value over time."
     };
   }
 
   if (category === "accessibility") {
     return {
-      id: issue.id,
-      title: cleanText(issue.title, 60),
       summary:
-        "Important content or actions are harder to use than they should be across mobile and desktop journeys.",
+        "Parts of the journey may feel harder to use than they should, which adds friction before a visitor can take action.",
       why_it_matters:
-        "When visitors struggle to read, navigate, or take action, trust drops and conversion rates usually follow."
+        "When people struggle to read, navigate, or complete simple steps, trust drops and conversion rates usually follow."
     };
   }
 
   if (category === "security") {
     return {
-      id: issue.id,
-      title: cleanText(issue.title, 60),
       summary:
-        "Trust or compliance signals need attention, which can make the website feel less dependable to visitors.",
+        "Some trust signals appear weaker than they should be, which can make the business feel less dependable at first glance.",
       why_it_matters:
-        "Low-confidence experiences reduce trust quickly, especially for new visitors deciding whether to contact or buy."
+        "Low-confidence experiences make new visitors more cautious about contacting, buying, or sharing their details."
     };
   }
 
   return {
+    summary:
+      "This issue is creating extra friction early in the visit, making the site feel slower and less convincing than it should.",
+    why_it_matters:
+      "Even small delays or hesitations can lower engagement, weaken lead quality, and reduce the return from paid or organic traffic."
+  };
+}
+
+function toPreviewIssue(issue: ScanIssue): PreviewScanIssue {
+  const previewCopy = buildPreviewCopy(issue);
+
+  return {
     id: issue.id,
     title: cleanText(issue.title, 60),
-    summary:
-      "The website is loading slower than visitors expect, which creates friction before they can see the offer clearly.",
-    why_it_matters:
-      "Slow experiences reduce engagement, hurt conversions, and make client retention conversations harder."
+    summary: previewCopy.summary,
+    why_it_matters: previewCopy.why_it_matters
   };
 }
 

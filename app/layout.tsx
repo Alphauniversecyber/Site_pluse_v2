@@ -8,6 +8,7 @@ import "@/app/globals.css";
 import { AnalyticsRoot } from "@/components/analytics/analytics-root";
 import { Providers } from "@/components/providers";
 import { themeScript } from "@/components/theme/theme-provider";
+import { PUBLIC_SITE_URL } from "@/lib/seo";
 
 const manrope = localFont({
   src: "./fonts/manrope-latin-wght-normal.woff2",
@@ -27,7 +28,7 @@ const organizationSchema = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "SitePulse",
-  url: "https://www.trysitepulse.com",
+  url: PUBLIC_SITE_URL,
   description:
     "SitePulse helps digital agencies run automated SEO audits and deliver branded reports clients actually understand. Free 14-day trial. No credit card required.",
   sameAs: [
@@ -41,7 +42,7 @@ const softwareApplicationSchema = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: "SitePulse",
-  url: "https://www.trysitepulse.com",
+  url: PUBLIC_SITE_URL,
   description:
     "SitePulse helps digital agencies run automated SEO audits and deliver branded reports clients actually understand. Free 14-day trial. No credit card required.",
   applicationCategory: "BusinessApplication",
@@ -61,28 +62,28 @@ const softwareApplicationSchema = {
     "Client-facing dashboard",
     "Revenue leak detection"
   ],
-  screenshot: "https://www.trysitepulse.com/opengraph-image.png"
+  screenshot: `${PUBLIC_SITE_URL}/opengraph-image.png`
 };
 
 const websiteSchema = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: "SitePulse",
-  url: "https://www.trysitepulse.com",
+  url: `${PUBLIC_SITE_URL}/`,
   description:
     "SitePulse helps digital agencies run automated SEO audits and deliver branded reports clients actually understand. Free 14-day trial. No credit card required.",
   potentialAction: {
     "@type": "SearchAction",
     target: {
       "@type": "EntryPoint",
-      urlTemplate: "https://www.trysitepulse.com/?q={search_term_string}"
+      urlTemplate: `${PUBLIC_SITE_URL}/?q={search_term_string}`
     },
     "query-input": "required name=search_term_string"
   }
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.trysitepulse.com"),
+  metadataBase: new URL(PUBLIC_SITE_URL),
   title: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
   description:
     "SitePulse helps digital agencies run automated SEO audits and deliver branded reports clients actually understand. Free 14-day trial. No credit card required.",
@@ -98,14 +99,14 @@ export const metadata: Metadata = {
     "Google Search Console reporting",
     "GA4 reporting for agencies"
   ],
-  authors: [{ name: "SitePulse", url: "https://www.trysitepulse.com" }],
+  authors: [{ name: "SitePulse", url: PUBLIC_SITE_URL }],
   creator: "SitePulse",
   publisher: "SitePulse",
   openGraph: {
     title: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
     description:
       "Automated SEO audit reports for digital agencies. White-label, client-ready, delivered weekly.",
-    url: "https://www.trysitepulse.com",
+    url: `${PUBLIC_SITE_URL}/`,
     siteName: "SitePulse",
     type: "website",
     images: [
@@ -130,7 +131,7 @@ export const metadata: Metadata = {
     follow: true
   },
   alternates: {
-    canonical: "https://www.trysitepulse.com"
+    canonical: `${PUBLIC_SITE_URL}/`
   },
   verification: {
     google: "PASTE_YOUR_GSC_VERIFICATION_CODE_HERE"

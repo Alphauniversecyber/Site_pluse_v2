@@ -2,14 +2,17 @@ import type { Metadata } from "next";
 
 import { LoginForm } from "@/components/landing/auth-forms";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
+import { PUBLIC_SITE_URL } from "@/lib/seo";
 import { redirectIfAuthenticated } from "@/lib/supabase-server";
+
+const LOGIN_URL = `${PUBLIC_SITE_URL}/login`;
 
 export const metadata: Metadata = {
   title: "Login to Your SEO Audit Dashboard",
   description:
     "Log in to SitePulse to access your agency SEO audit dashboard, client reports, alerts, and website monitoring workspace in one place.",
   alternates: {
-    canonical: "https://trysitepulse.com/login"
+    canonical: LOGIN_URL
   }
 };
 
@@ -25,8 +28,8 @@ export default async function LoginPage({
     <>
       <BreadcrumbJsonLd
         items={[
-          { name: "Home", item: "https://trysitepulse.com" },
-          { name: "Login", item: "https://trysitepulse.com/login" }
+          { name: "Home", item: `${PUBLIC_SITE_URL}/` },
+          { name: "Login", item: LOGIN_URL }
         ]}
       />
       <main className="container grid gap-10 py-10 md:py-16 lg:min-h-[calc(100vh-8rem)] lg:grid-cols-[1fr_28rem] lg:items-center">

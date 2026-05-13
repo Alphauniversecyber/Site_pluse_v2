@@ -1,5 +1,7 @@
-export const BLOG_BASE_URL = "https://trysitepulse.com/blog";
-export const BLOG_SITE_URL = "https://trysitepulse.com";
+import { PUBLIC_SITE_URL } from "@/lib/seo";
+
+export const BLOG_BASE_URL = `${PUBLIC_SITE_URL}/blog`;
+export const BLOG_SITE_URL = PUBLIC_SITE_URL;
 export const BLOG_AUTHOR_NAME = "SitePulse Team";
 
 export const blogCategories = [

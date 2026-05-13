@@ -2,13 +2,16 @@ import type { Metadata } from "next";
 
 import { ResetPasswordForm } from "@/components/landing/auth-forms";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
+import { PUBLIC_SITE_URL } from "@/lib/seo";
+
+const RESET_PASSWORD_URL = `${PUBLIC_SITE_URL}/reset-password`;
 
 export const metadata: Metadata = {
   title: "Reset Your SitePulse Password",
   description:
     "Reset your SitePulse password securely and regain access to your agency SEO audit dashboard, client reports, and website monitoring workspace.",
   alternates: {
-    canonical: "https://trysitepulse.com/reset-password"
+    canonical: RESET_PASSWORD_URL
   }
 };
 
@@ -21,8 +24,8 @@ export default function ResetPasswordPage({
     <>
       <BreadcrumbJsonLd
         items={[
-          { name: "Home", item: "https://trysitepulse.com" },
-          { name: "Reset Password", item: "https://trysitepulse.com/reset-password" }
+          { name: "Home", item: `${PUBLIC_SITE_URL}/` },
+          { name: "Reset Password", item: RESET_PASSWORD_URL }
         ]}
       />
       <main className="container grid gap-10 py-10 md:py-16 lg:min-h-[calc(100vh-8rem)] lg:grid-cols-[1fr_28rem] lg:items-center">

@@ -4,6 +4,9 @@ import { AgencyPricingPage } from "@/components/landing/agency-pricing-page";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { getPlanPricing } from "@/lib/billing";
 import { getBillingPlans } from "@/lib/billing-config";
+import { PUBLIC_SITE_URL } from "@/lib/seo";
+
+const PRICING_URL = `${PUBLIC_SITE_URL}/pricing`;
 
 export const metadata: Metadata = {
   title: "Pricing – SitePulse SEO Audit Tool for Agencies",
@@ -18,13 +21,13 @@ export const metadata: Metadata = {
     "client reporting SaaS pricing"
   ],
   alternates: {
-    canonical: "https://trysitepulse.com/pricing"
+    canonical: PRICING_URL
   },
   openGraph: {
     title: "Pricing – SitePulse SEO Audit Tool for Agencies",
     description:
       "Compare SitePulse pricing for digital agencies and start a 14-day free trial for automated SEO audits and white-label reporting.",
-    url: "https://trysitepulse.com/pricing",
+    url: PRICING_URL,
     siteName: "SitePulse",
     type: "website",
     images: [
@@ -58,13 +61,13 @@ export default async function PricingPage() {
     "@context": "https://schema.org",
     "@type": "WebPage",
     name: "SitePulse Pricing",
-    url: "https://trysitepulse.com/pricing",
+    url: PRICING_URL,
     description:
       "Compare SitePulse pricing for digital agencies. Start with a free scan, then choose the plan for automated SEO audits, white-label PDF reports, and client dashboards.",
     isPartOf: {
       "@type": "WebSite",
       name: "SitePulse",
-      url: "https://trysitepulse.com"
+      url: `${PUBLIC_SITE_URL}/`
     }
   };
 
@@ -72,7 +75,7 @@ export default async function PricingPage() {
     "@context": "https://schema.org",
     "@type": "OfferCatalog",
     name: "SitePulse Pricing Plans",
-    url: "https://trysitepulse.com/pricing",
+    url: PRICING_URL,
     itemListElement: [
       {
         "@type": "Offer",
@@ -80,7 +83,7 @@ export default async function PricingPage() {
         description: "Automated SEO audits and white-label reporting for growing digital agencies.",
         price: starterMonthly.salePrice,
         priceCurrency: "USD",
-        url: "https://trysitepulse.com/pricing",
+        url: PRICING_URL,
         category: "SEO audit SaaS",
         eligibleDuration: "P14D",
         priceSpecification: {
@@ -97,7 +100,7 @@ export default async function PricingPage() {
         description: "Advanced agency plan for scaling audits, client reporting, and premium delivery.",
         price: agencyMonthly.salePrice,
         priceCurrency: "USD",
-        url: "https://trysitepulse.com/pricing",
+        url: PRICING_URL,
         category: "SEO audit SaaS",
         eligibleDuration: "P14D",
         priceSpecification: {
@@ -130,8 +133,8 @@ export default async function PricingPage() {
     <>
       <BreadcrumbJsonLd
         items={[
-          { name: "Home", item: "https://trysitepulse.com" },
-          { name: "Pricing", item: "https://trysitepulse.com/pricing" }
+          { name: "Home", item: `${PUBLIC_SITE_URL}/` },
+          { name: "Pricing", item: PRICING_URL }
         ]}
       />
       <script

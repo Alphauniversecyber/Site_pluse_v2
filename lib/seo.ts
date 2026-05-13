@@ -1,7 +1,27 @@
 import type { Metadata } from "next";
 
-export const PUBLIC_SITE_URL = "https://www.trysitepulse.com";
+const CANONICAL_SITE_URL = "https://www.trysitepulse.com";
 export const DEFAULT_OG_IMAGE = "/opengraph-image.png";
+
+function resolvePublicSiteUrl() {
+  const configuredUrl =
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() || process.env.NEXT_PUBLIC_BASE_URL?.trim();
+
+  if (!configuredUrl) {
+    return CANONICAL_SITE_URL;
+  }
+
+  try {
+    const normalizedUrl = new URL(configuredUrl);
+    const origin = normalizedUrl.origin.replace(/\/+$/, "");
+
+    return origin === CANONICAL_SITE_URL ? origin : CANONICAL_SITE_URL;
+  } catch {
+    return CANONICAL_SITE_URL;
+  }
+}
+
+export const PUBLIC_SITE_URL = resolvePublicSiteUrl();
 
 type BuildPageMetadataOptions = {
   title: string;
@@ -24,7 +44,7 @@ export function buildPageMetadata({
   openGraphType = "website",
   noIndex = false
 }: BuildPageMetadataOptions): Metadata {
-  const canonical = path === "/" ? PUBLIC_SITE_URL : `${PUBLIC_SITE_URL}${path}`;
+  const canonical = path === "/" ? `${PUBLIC_SITE_URL}/` : `${PUBLIC_SITE_URL}${path}`;
 
   return {
     title,

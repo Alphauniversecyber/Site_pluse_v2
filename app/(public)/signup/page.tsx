@@ -2,14 +2,17 @@ import type { Metadata } from "next";
 
 import { SignupForm } from "@/components/landing/auth-forms";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
+import { PUBLIC_SITE_URL } from "@/lib/seo";
 import { redirectIfAuthenticated } from "@/lib/supabase-server";
+
+const SIGNUP_URL = `${PUBLIC_SITE_URL}/signup`;
 
 export const metadata: Metadata = {
   title: "Start Your SEO Audit Free Trial",
   description:
     "Start your 14-day SitePulse free trial to run SEO audits, generate white-label client reports, and turn website findings into paying clients.",
   alternates: {
-    canonical: "https://trysitepulse.com/signup"
+    canonical: SIGNUP_URL
   }
 };
 
@@ -25,8 +28,8 @@ export default async function SignupPage({
     <>
       <BreadcrumbJsonLd
         items={[
-          { name: "Home", item: "https://trysitepulse.com" },
-          { name: "Signup", item: "https://trysitepulse.com/signup" }
+          { name: "Home", item: `${PUBLIC_SITE_URL}/` },
+          { name: "Signup", item: SIGNUP_URL }
         ]}
       />
       <main className="container grid gap-10 py-10 md:py-16 lg:min-h-[calc(100vh-8rem)] lg:grid-cols-[1fr_28rem] lg:items-center">
