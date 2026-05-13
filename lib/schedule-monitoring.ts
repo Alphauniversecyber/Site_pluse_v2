@@ -6,6 +6,18 @@ type DateParts = {
   day: number;
 };
 
+function compareDateParts(left: DateParts, right: DateParts) {
+  if (left.year !== right.year) {
+    return left.year - right.year;
+  }
+
+  if (left.month !== right.month) {
+    return left.month - right.month;
+  }
+
+  return left.day - right.day;
+}
+
 function buildFormatter(timeZone: string) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -42,6 +54,33 @@ function getDateParts(reference: Date, timezone: string): DateParts {
 
 function toUtcCalendarDate(parts: DateParts) {
   return new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+}
+
+function fromUtcCalendarDate(value: Date): DateParts {
+  return {
+    year: value.getUTCFullYear(),
+    month: value.getUTCMonth() + 1,
+    day: value.getUTCDate()
+  };
+}
+
+function addDays(parts: DateParts, days: number) {
+  const value = toUtcCalendarDate(parts);
+  value.setUTCDate(value.getUTCDate() + days);
+  return fromUtcCalendarDate(value);
+}
+
+function addMonths(parts: DateParts, months: number) {
+  const monthIndex = parts.month - 1 + months;
+  const year = parts.year + Math.floor(monthIndex / 12);
+  const normalizedMonthIndex = ((monthIndex % 12) + 12) % 12;
+  const daysInTargetMonth = new Date(Date.UTC(year, normalizedMonthIndex + 1, 0)).getUTCDate();
+
+  return {
+    year,
+    month: normalizedMonthIndex + 1,
+    day: Math.min(parts.day, daysInTargetMonth)
+  };
 }
 
 function pad(value: number) {
@@ -98,10 +137,19 @@ export function isDueForPeriod(input: {
   }
 
   const reference = input.reference ?? new Date();
-  return (
-    getPeriodKey(input.frequency, input.lastEventAt, input.timezone) !==
-    getPeriodKey(input.frequency, reference, input.timezone)
-  );
+  const timezone = normalizeTimezone(input.timezone);
+  const lastEventParts = getDateParts(new Date(input.lastEventAt), timezone);
+  const referenceParts = getDateParts(reference, timezone);
+
+  if (input.frequency === "daily") {
+    return compareDateParts(lastEventParts, referenceParts) < 0;
+  }
+
+  if (input.frequency === "weekly") {
+    return compareDateParts(addDays(lastEventParts, 7), referenceParts) <= 0;
+  }
+
+  return compareDateParts(addMonths(lastEventParts, 1), referenceParts) <= 0;
 }
 
 export function getRetryAt(minutesFromNow: number) {
