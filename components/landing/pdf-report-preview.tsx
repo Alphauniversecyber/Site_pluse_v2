@@ -2,6 +2,9 @@ import { HtmlTemplatePreview } from "@/components/shared/html-template-preview";
 import { buildPreviewReportHtml } from "@/lib/report-preview-data";
 import { cn } from "@/lib/utils";
 
+const sitePulseLogoMarkup =
+  '<img src="/brand/sitepulse-logo-dark.svg" alt="SitePulse" style="height:20px;width:auto;object-fit:contain;margin:0 0 54px"/>';
+
 const previewReportHtml = buildPreviewReportHtml({
   agencyName: "SitePulse",
   emailFromName: "SitePulse",
@@ -9,7 +12,10 @@ const previewReportHtml = buildPreviewReportHtml({
   agencyWebsiteUrl: "https://www.trysitepulse.com"
 }).replace(
   '<p style="font-size:14px;color:#94A3B8;margin:0 0 54px">SitePulse</p>',
-  '<img src="/brand/sitepulse-logo-dark.svg" alt="SitePulse" style="height:20px;width:auto;object-fit:contain;margin:0 0 54px"/>'
+  sitePulseLogoMarkup
+).replace(
+  '<h1 style="font-size:26px;font-weight:700;color:#F8FAFC;margin:0 0 30px;max-width:400px;line-height:1.3">Thank you for choosing SitePulse</h1>',
+  `${sitePulseLogoMarkup}<h1 style="font-size:26px;font-weight:700;color:#F8FAFC;margin:0 0 30px;max-width:400px;line-height:1.3">Thank you for choosing SitePulse</h1>`
 );
 
 export function PdfReportPreview({

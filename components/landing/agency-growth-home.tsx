@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -10,6 +9,7 @@ import {
   SearchCheck
 } from "lucide-react";
 
+import { AgencyDashboardBrowserMockup } from "@/components/landing/agency-dashboard-browser-mockup";
 import { ClientDeliverablesSection } from "@/components/landing/client-deliverables-section";
 import { FreeScanFunnel } from "@/components/landing/free-scan-funnel";
 import { PricingGrid } from "@/components/landing/pricing-grid";
@@ -152,19 +152,8 @@ export function AgencyGrowthHome({ plans }: { plans: BillingPlanCatalog }) {
               </div>
             </div>
 
-            <div className="mx-auto w-full max-w-[540px] justify-self-center lg:justify-self-end">
-              <div className="relative overflow-hidden rounded-[1.8rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(243,247,255,0.98))] p-3 shadow-[0_32px_90px_-56px_rgba(15,23,42,0.3)] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(19,30,52,0.98),rgba(8,17,31,0.98))]">
-                <Image
-                  src="/images/report-preview.png"
-                  alt="SitePulse executive summary report preview"
-                  width={496}
-                  height={691}
-                  className="h-auto w-full rounded-[1.2rem] border border-slate-200/80 shadow-[0_18px_48px_-30px_rgba(15,23,42,0.28)]"
-                />
-                <div className="pointer-events-none absolute right-6 top-6 rounded-full border border-emerald-300/40 bg-white/92 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 shadow-[0_14px_36px_-24px_rgba(15,23,42,0.28)] dark:border-emerald-400/20 dark:bg-slate-950/88 dark:text-emerald-200">
-                  Real scan · Generated in 30s
-                </div>
-              </div>
+            <div className="mx-auto w-full max-w-[640px] justify-self-center lg:justify-self-end">
+              <AgencyDashboardBrowserMockup />
             </div>
           </div>
         </div>

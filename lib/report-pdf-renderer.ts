@@ -346,6 +346,17 @@ function drawHeaderPanel(input: {
   logoDataUrl: string | null;
 }) {
   const { doc } = input;
+  const getLogoLayout = (logoSource: string) => {
+    const image = doc.getImageProperties(logoSource);
+    const maxWidth = 130;
+    const maxHeight = 42;
+    const scale = Math.min(maxWidth / image.width, maxHeight / image.height);
+    return {
+      width: image.width * scale,
+      height: image.height * scale,
+      imageType: typeof image.fileType === "string" ? image.fileType.toUpperCase() : "PNG"
+    };
+  };
   const panelY = input.y;
   const rightColumnX = MARGIN + 190;
   const rightColumnWidth = CONTENT_WIDTH - 210;
@@ -361,14 +372,8 @@ function drawHeaderPanel(input: {
 
   if (input.logoDataUrl) {
     try {
-      const image = doc.getImageProperties(input.logoDataUrl);
-      const maxWidth = 130;
-      const maxHeight = 42;
-      const scale = Math.min(maxWidth / image.width, maxHeight / image.height);
-      const width = image.width * scale;
-      const height = image.height * scale;
-      const imageType = typeof image.fileType === "string" ? image.fileType.toUpperCase() : "PNG";
-      doc.addImage(input.logoDataUrl, imageType, MARGIN + 20, panelY + 20, width, height);
+      const logoLayout = getLogoLayout(input.logoDataUrl);
+      doc.addImage(input.logoDataUrl, logoLayout.imageType, MARGIN + 20, panelY + 20, logoLayout.width, logoLayout.height);
     } catch {
       doc.setTextColor(15, 23, 42);
       doc.setFont("helvetica", "bold");
@@ -1216,8 +1221,15 @@ export async function renderAiReportPdf(input: PdfContext) {
 
   if (logoDataUrl) {
     try {
-      doc.addImage(logoDataUrl, "PNG", PAGE_WIDTH / 2 - 72, closingY, 144, 48, undefined, "FAST");
-      closingY += 78;
+      const image = doc.getImageProperties(logoDataUrl);
+      const maxWidth = 130;
+      const maxHeight = 42;
+      const scale = Math.min(maxWidth / image.width, maxHeight / image.height);
+      const width = image.width * scale;
+      const height = image.height * scale;
+      const imageType = typeof image.fileType === "string" ? image.fileType.toUpperCase() : "PNG";
+      doc.addImage(logoDataUrl, imageType, PAGE_WIDTH / 2 - width / 2, closingY, width, height, undefined, "FAST");
+      closingY += height + 30;
     } catch {
       // Ignore logo draw failures on the fallback renderer.
     }
