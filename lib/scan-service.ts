@@ -13,6 +13,7 @@ import { sendProductEmail, trySendCriticalAlertEmail } from "@/lib/resend";
 import {
   FRIENDLY_SCAN_FAILURE_MESSAGE,
   getFriendlyScanFailureMessage,
+  getPageSpeedScanFailureMessage,
   isPageSpeedRateLimitError,
   shouldUseFriendlyScanFailureMessage
 } from "@/lib/scan-errors";
@@ -306,7 +307,7 @@ export async function executeWebsiteScan(
           mobile_snapshot: undefined,
           desktop_snapshot: undefined,
           scan_status: "failed" as const,
-          error_message: getFriendlyScanFailureMessage(
+          error_message: getPageSpeedScanFailureMessage(
             pageSpeedResult.reason instanceof Error
               ? pageSpeedResult.reason.message
               : "PageSpeed scan failed."
@@ -330,7 +331,7 @@ export async function executeWebsiteScan(
   const scanStatus = pageSpeedResult.status === "fulfilled" ? "success" : "failed";
   const normalizedPageSpeedError =
     pageSpeedResult.status === "rejected"
-      ? getFriendlyScanFailureMessage(
+      ? getPageSpeedScanFailureMessage(
           pageSpeedResult.reason instanceof Error ? pageSpeedResult.reason.message : "PageSpeed scan failed."
         )
       : null;

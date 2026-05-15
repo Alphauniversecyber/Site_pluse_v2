@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 const CANONICAL_SITE_URL = "https://www.trysitepulse.com";
 export const DEFAULT_OG_IMAGE = "/opengraph-image.png";
+export const MAX_META_DESCRIPTION_LENGTH = 155;
 
 function resolvePublicSiteUrl() {
   const configuredUrl =
@@ -22,6 +23,26 @@ function resolvePublicSiteUrl() {
 }
 
 export const PUBLIC_SITE_URL = resolvePublicSiteUrl();
+
+export function trimMetaDescription(
+  description: string,
+  maxLength = MAX_META_DESCRIPTION_LENGTH
+) {
+  const normalizedDescription = description.replace(/\s+/g, " ").trim();
+
+  if (normalizedDescription.length <= maxLength) {
+    return normalizedDescription;
+  }
+
+  const truncatedDescription = normalizedDescription.slice(0, Math.max(maxLength - 3, 0));
+  const lastWordBoundary = truncatedDescription.lastIndexOf(" ");
+  const safeDescription =
+    lastWordBoundary >= Math.max(Math.floor(maxLength * 0.6), 24)
+      ? truncatedDescription.slice(0, lastWordBoundary)
+      : truncatedDescription;
+
+  return `${safeDescription.trim()}...`;
+}
 
 type BuildPageMetadataOptions = {
   title: string;
@@ -45,17 +66,18 @@ export function buildPageMetadata({
   noIndex = false
 }: BuildPageMetadataOptions): Metadata {
   const canonical = path === "/" ? `${PUBLIC_SITE_URL}/` : `${PUBLIC_SITE_URL}${path}`;
+  const metaDescription = trimMetaDescription(description);
 
   return {
     title,
-    description,
+    description: metaDescription,
     keywords,
     alternates: {
       canonical
     },
     openGraph: {
       title,
-      description,
+      description: metaDescription,
       url: canonical,
       siteName: "SitePulse",
       type: openGraphType,
@@ -71,7 +93,7 @@ export function buildPageMetadata({
     twitter: {
       card: "summary_large_image",
       title,
-      description,
+      description: metaDescription,
       images: [imageUrl]
     },
     robots: {

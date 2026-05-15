@@ -4,6 +4,7 @@ import { load } from "cheerio";
 
 import type { SeoAuditRecord, Severity } from "@/types";
 import { logAdminError } from "@/lib/admin/logging";
+import { addBrowserRequestDelay, buildBrowserLikeHeaders } from "@/lib/browser-request";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const SEO_AUDIT_CACHE_HOURS = 24;
@@ -76,17 +77,16 @@ async function fetchHtml(url: string) {
 
   for (let attempt = 1; attempt <= SEO_AUDIT_FETCH_ATTEMPTS; attempt += 1) {
     try {
+      await addBrowserRequestDelay();
+      const headers = buildBrowserLikeHeaders();
+
       const response = await fetch(url, {
         cache: "no-store",
         redirect: "follow",
         signal: AbortSignal.timeout(SEO_AUDIT_TIMEOUT_MS),
         headers: {
-          "user-agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 SitePulseSEOAudit/1.0",
-          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "accept-language": "en-US,en;q=0.9",
-          "cache-control": "no-cache",
-          pragma: "no-cache"
+          ...headers,
+          "user-agent": `${headers["user-agent"]} SitePulseSEOAudit/1.0`
         }
       });
 

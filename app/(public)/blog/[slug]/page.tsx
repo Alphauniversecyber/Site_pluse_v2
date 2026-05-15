@@ -18,6 +18,7 @@ import {
   getBlogPostBySlug,
   getRelatedBlogPosts
 } from "@/lib/blog-posts";
+import { trimMetaDescription } from "@/lib/seo";
 
 type BlogPostPageProps = {
   params: {
@@ -52,14 +53,14 @@ export function generateMetadata({ params }: BlogPostPageProps): Metadata {
     title: {
       absolute: `${post.title} | SitePulse Blog`
     },
-    description: post.excerpt,
+    description: trimMetaDescription(post.excerpt),
     keywords: post.keywords,
     alternates: {
       canonical: canonicalUrl
     },
     openGraph: {
       title: post.title,
-      description: post.excerpt,
+      description: trimMetaDescription(post.excerpt),
       type: "article",
       url: canonicalUrl,
       publishedTime: post.publishedAt,
@@ -74,7 +75,7 @@ export function generateMetadata({ params }: BlogPostPageProps): Metadata {
     twitter: {
       card: "summary_large_image",
       title: post.title,
-      description: post.excerpt,
+      description: trimMetaDescription(post.excerpt),
       images: [post.coverImage]
     }
   };

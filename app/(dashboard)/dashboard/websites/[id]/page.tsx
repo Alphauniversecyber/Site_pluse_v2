@@ -65,6 +65,10 @@ type WebsiteDetailResponse = Website & {
   scans: ScanResult[];
 };
 
+type ScanRunResponse = {
+  scan: ScanResult;
+};
+
 const REPORT_FREQUENCY_OPTIONS: Array<{ value: ReportFrequency; label: string }> = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
@@ -1156,14 +1160,20 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const runScan = () =>
     startTransition(async () => {
       try {
-        await fetchJson<ScanResult>("/api/scan/run", {
+        const result = await fetchJson<ScanRunResponse>("/api/scan/run", {
           method: "POST",
           body: JSON.stringify({
             websiteId: params.id
           })
         });
         markOnboardingStepComplete(1);
-        toast.success("Manual scan complete.");
+
+        if (result.scan.scan_status === "success") {
+          toast.success("Manual scan complete.");
+        } else {
+          toast.error(getFriendlyScanFailureMessage(result.scan.error_message));
+        }
+
         await refetch();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to run scan.");

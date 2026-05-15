@@ -6,9 +6,10 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import "@/app/globals.css";
 
 import { AnalyticsRoot } from "@/components/analytics/analytics-root";
+import { CookieConsentBanner } from "@/components/analytics/cookie-consent-banner";
 import { Providers } from "@/components/providers";
 import { themeScript } from "@/components/theme/theme-provider";
-import { PUBLIC_SITE_URL } from "@/lib/seo";
+import { PUBLIC_SITE_URL, trimMetaDescription } from "@/lib/seo";
 
 const manrope = localFont({
   src: "./fonts/manrope-latin-wght-normal.woff2",
@@ -85,8 +86,9 @@ const websiteSchema = {
 export const metadata: Metadata = {
   metadataBase: new URL(PUBLIC_SITE_URL),
   title: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
-  description:
-    "SitePulse helps digital agencies run automated SEO audits and deliver branded reports clients actually understand. Free 14-day trial. No credit card required.",
+  description: trimMetaDescription(
+    "SitePulse helps digital agencies run automated SEO audits and deliver branded reports clients actually understand. Free 14-day trial. No credit card required."
+  ),
   keywords: [
     "SEO audit SaaS",
     "SEO audit tool",
@@ -104,8 +106,9 @@ export const metadata: Metadata = {
   publisher: "SitePulse",
   openGraph: {
     title: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
-    description:
-      "Automated SEO audit reports for digital agencies. White-label, client-ready, delivered weekly.",
+    description: trimMetaDescription(
+      "Automated SEO audit reports for digital agencies. White-label, client-ready, delivered weekly."
+    ),
     url: `${PUBLIC_SITE_URL}/`,
     siteName: "SitePulse",
     type: "website",
@@ -121,8 +124,9 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
-    description:
-      "Automated SEO audit reports for digital agencies. White-label, client-ready, delivered weekly.",
+    description: trimMetaDescription(
+      "Automated SEO audit reports for digital agencies. White-label, client-ready, delivered weekly."
+    ),
     images: ["/opengraph-image.png"],
     creator: "@trysitepulse"
   },
@@ -160,6 +164,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${manrope.variable} ${spaceGrotesk.variable}`}>
         <Providers>
           {children}
+          <CookieConsentBanner />
           <AnalyticsRoot />
           <Analytics />
           <SpeedInsights />

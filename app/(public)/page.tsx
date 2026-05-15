@@ -4,7 +4,7 @@ import { AgencyGrowthHome } from "@/components/landing/agency-growth-home";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { getBillingPlans } from "@/lib/billing-config";
 import { marketingFaq } from "@/lib/marketing-copy";
-import { PUBLIC_SITE_URL } from "@/lib/seo";
+import { PUBLIC_SITE_URL, trimMetaDescription } from "@/lib/seo";
 
 const homeFaqSchema = {
   "@context": "https://schema.org",
@@ -39,15 +39,17 @@ const homeWebPageSchema = {
 
 export const metadata: Metadata = {
   title: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
-  description:
-    "SitePulse helps digital agencies run automated SEO audits and deliver branded reports clients actually understand. Free 14-day trial. No credit card required.",
+  description: trimMetaDescription(
+    "SitePulse helps digital agencies run automated SEO audits and deliver branded reports clients actually understand. Free 14-day trial. No credit card required."
+  ),
   alternates: {
     canonical: `${PUBLIC_SITE_URL}/`
   },
   openGraph: {
     title: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
-    description:
-      "Automated SEO audit reports for digital agencies. White-label, client-ready, delivered weekly.",
+    description: trimMetaDescription(
+      "Automated SEO audit reports for digital agencies. White-label, client-ready, delivered weekly."
+    ),
     url: `${PUBLIC_SITE_URL}/`,
     siteName: "SitePulse",
     type: "website"
@@ -55,8 +57,9 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "SitePulse \u2013 SEO Audit Tool for Digital Agencies",
-    description:
+    description: trimMetaDescription(
       "Automated SEO audit reports for digital agencies. White-label, client-ready, delivered weekly."
+    )
   }
 };
 

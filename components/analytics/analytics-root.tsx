@@ -4,6 +4,11 @@ import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  COOKIE_CONSENT_EVENT,
+  type CookieConsentState,
+  readCookieConsent
+} from "@/lib/cookie-consent";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 type AnalyticsIdentity = {
@@ -29,6 +34,8 @@ declare global {
       };
     };
     Tawk_LoadStart?: Date;
+    dataLayer?: unknown[];
+    gtag?: (...args: unknown[]) => void;
   }
 }
 
@@ -60,8 +67,25 @@ function toAnalyticsIdentity(user: {
 export function AnalyticsRoot() {
   const pathname = usePathname();
   const [authUser, setAuthUser] = useState<AnalyticsIdentity | null>(null);
+  const [cookieConsent, setCookieConsent] = useState<CookieConsentState | null>(null);
   const shouldHideTawk =
     pathname === "/" || pathname?.startsWith("/dashboard") || pathname?.startsWith("/d/") || pathname === "/d";
+  const hasAnalyticsConsent = cookieConsent === "accepted";
+
+  useEffect(() => {
+    const syncCookieConsent = () => {
+      setCookieConsent(readCookieConsent());
+    };
+
+    syncCookieConsent();
+    window.addEventListener(COOKIE_CONSENT_EVENT, syncCookieConsent);
+    window.addEventListener("storage", syncCookieConsent);
+
+    return () => {
+      window.removeEventListener(COOKIE_CONSENT_EVENT, syncCookieConsent);
+      window.removeEventListener("storage", syncCookieConsent);
+    };
+  }, []);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -150,6 +174,16 @@ export function AnalyticsRoot() {
     };
   }, [authUser, shouldHideTawk]);
 
+  useEffect(() => {
+    if (!hasAnalyticsConsent || typeof window === "undefined" || !window.gtag || !pathname) {
+      return;
+    }
+
+    window.gtag("config", GA_MEASUREMENT_ID, {
+      page_path: pathname
+    });
+  }, [hasAnalyticsConsent, pathname]);
+
   const tawkBootScript = useMemo(() => {
     const visitorScript = authUser?.email
       ? `window.Tawk_API.visitor=${JSON.stringify({
@@ -163,7 +197,7 @@ export function AnalyticsRoot() {
 
   return (
     <>
-      {GA_MEASUREMENT_ID ? (
+      {hasAnalyticsConsent && GA_MEASUREMENT_ID ? (
         <>
           <Script
             id="sitepulse-google-tag-loader"
@@ -171,7 +205,7 @@ export function AnalyticsRoot() {
             strategy="afterInteractive"
           />
           <Script id="sitepulse-google-tag" strategy="afterInteractive">
-            {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}window.gtag=window.gtag||gtag;gtag('js', new Date());gtag('config', '${GA_MEASUREMENT_ID}');`}
+            {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}window.gtag=window.gtag||gtag;gtag('js', new Date());gtag('config', '${GA_MEASUREMENT_ID}', { page_path: window.location.pathname });`}
           </Script>
         </>
       ) : null}

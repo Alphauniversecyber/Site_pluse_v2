@@ -6,7 +6,7 @@ import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { claimPreviewScanSession } from "@/lib/preview-scan";
-import { PUBLIC_SITE_URL } from "@/lib/seo";
+import { PUBLIC_SITE_URL, trimMetaDescription } from "@/lib/seo";
 import { getCurrentUserProfile } from "@/lib/supabase-server";
 
 export async function generateMetadata({
@@ -16,8 +16,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   return {
     title: "Unlock Your Free SEO Audit Report",
-    description:
-      "Unlock your SitePulse preview report to claim a free SEO audit and continue into the full client-ready dashboard experience.",
+    description: trimMetaDescription(
+      "Unlock your SitePulse preview report to claim a free SEO audit and continue into the full client-ready dashboard experience."
+    ),
     alternates: {
       canonical: `${PUBLIC_SITE_URL}/unlock-preview/${params.id}`
     },

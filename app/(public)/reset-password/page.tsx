@@ -2,14 +2,15 @@ import type { Metadata } from "next";
 
 import { ResetPasswordForm } from "@/components/landing/auth-forms";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
-import { PUBLIC_SITE_URL } from "@/lib/seo";
+import { PUBLIC_SITE_URL, trimMetaDescription } from "@/lib/seo";
 
 const RESET_PASSWORD_URL = `${PUBLIC_SITE_URL}/reset-password`;
 
 export const metadata: Metadata = {
   title: "Reset Your SitePulse Password",
-  description:
-    "Reset your SitePulse password securely and regain access to your agency SEO audit dashboard, client reports, and website monitoring workspace.",
+  description: trimMetaDescription(
+    "Reset your SitePulse password securely and regain access to your agency SEO audit dashboard, client reports, and website monitoring workspace."
+  ),
   alternates: {
     canonical: RESET_PASSWORD_URL
   }

@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { getFriendlyScanFailureMessage } from "@/lib/scan-errors";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient, requireAuthenticatedUser } from "@/lib/supabase-server";
 import { formatDateTime, formatRelativeTime } from "@/lib/utils";
@@ -112,6 +113,11 @@ export default async function DashboardScanDetailPage({ params }: { params: { id
               </Badge>
               <Badge variant="outline">{compactUrl(website.url)}</Badge>
             </div>
+            {scan.scan_status === "failed" ? (
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+                {getFriendlyScanFailureMessage(scan.error_message)}
+              </p>
+            ) : null}
             <p className="mt-4 text-lg font-semibold">Saved on {formatDateTime(scan.scanned_at)}</p>
             <p className="mt-2 text-sm text-muted-foreground">
               {scan.scanned_at ? `Last updated ${formatRelativeTime(scan.scanned_at)}.` : null} Use this result to jump into the full website workspace or move straight into client reporting.

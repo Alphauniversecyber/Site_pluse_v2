@@ -24,6 +24,10 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import { useWebsites } from "@/hooks/useWebsites";
 import type { ScanResult } from "@/types";
 
+type ScanRunResponse = {
+  scan: ScanResult;
+};
+
 export default function WebsitesPage() {
   const { websites, loading, error, refetch } = useWebsites();
   const workspace = useWorkspace();
@@ -46,11 +50,17 @@ export default function WebsitesPage() {
     startTransition(async () => {
       setScanningWebsiteId(websiteId);
       try {
-        await fetchJson<ScanResult>("/api/scan/run", {
+        const result = await fetchJson<ScanRunResponse>("/api/scan/run", {
           method: "POST",
           body: JSON.stringify({ websiteId })
         });
-        toast.success("Scan completed and saved.");
+
+        if (result.scan.scan_status === "success") {
+          toast.success("Scan completed and saved.");
+        } else {
+          toast.error(getFriendlyScanFailureMessage(result.scan.error_message));
+        }
+
         await refetch();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to start scan.");

@@ -4,14 +4,15 @@ import { AgencyPricingPage } from "@/components/landing/agency-pricing-page";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { getPlanPricing } from "@/lib/billing";
 import { getBillingPlans } from "@/lib/billing-config";
-import { PUBLIC_SITE_URL } from "@/lib/seo";
+import { PUBLIC_SITE_URL, trimMetaDescription } from "@/lib/seo";
 
 const PRICING_URL = `${PUBLIC_SITE_URL}/pricing`;
 
 export const metadata: Metadata = {
   title: "Pricing – SitePulse SEO Audit Tool for Agencies",
-  description:
-    "Compare SitePulse pricing for digital agencies. Start with a free scan, then choose the plan for automated SEO audits, white-label PDF reports, and client dashboards.",
+  description: trimMetaDescription(
+    "Compare SitePulse pricing for digital agencies. Start with a free scan, then choose the plan for automated SEO audits, white-label PDF reports, and client dashboards."
+  ),
   keywords: [
     "SitePulse pricing",
     "SEO audit software pricing",
@@ -25,8 +26,9 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Pricing – SitePulse SEO Audit Tool for Agencies",
-    description:
-      "Compare SitePulse pricing for digital agencies and start a 14-day free trial for automated SEO audits and white-label reporting.",
+    description: trimMetaDescription(
+      "Compare SitePulse pricing for digital agencies and start a 14-day free trial for automated SEO audits and white-label reporting."
+    ),
     url: PRICING_URL,
     siteName: "SitePulse",
     type: "website",
@@ -42,8 +44,9 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Pricing – SitePulse SEO Audit Tool for Agencies",
-    description:
-      "Compare SitePulse pricing for digital agencies and start a 14-day free trial for automated SEO audits and white-label reporting.",
+    description: trimMetaDescription(
+      "Compare SitePulse pricing for digital agencies and start a 14-day free trial for automated SEO audits and white-label reporting."
+    ),
     images: ["/opengraph-image.png"]
   },
   robots: {
