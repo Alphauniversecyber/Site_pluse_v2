@@ -106,6 +106,15 @@ create table if not exists public.users (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.profiles (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  name text,
+  email text not null,
+  avatar_url text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
 create table if not exists public.sent_lifecycle_emails (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users (id) on delete cascade,
@@ -778,6 +787,11 @@ create trigger users_updated_at
   before update on public.users
   for each row execute procedure public.handle_updated_at();
 
+drop trigger if exists profiles_updated_at on public.profiles;
+create trigger profiles_updated_at
+  before update on public.profiles
+  for each row execute procedure public.handle_updated_at();
+
 drop trigger if exists agency_branding_updated_at on public.agency_branding;
 create trigger agency_branding_updated_at
   before update on public.agency_branding
@@ -870,6 +884,7 @@ end;
 $$;
 
 alter table public.users enable row level security;
+alter table public.profiles enable row level security;
 alter table public.sent_lifecycle_emails enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.billing_plan_prices enable row level security;
@@ -899,6 +914,17 @@ drop policy if exists "Users can view own profile" on public.users;
 create policy "Users can view own profile"
   on public.users for select
   using (auth.uid() = id);
+
+drop policy if exists "Users can view own google profile" on public.profiles;
+create policy "Users can view own google profile"
+  on public.profiles for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can manage own google profile" on public.profiles;
+create policy "Users can manage own google profile"
+  on public.profiles for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 drop policy if exists "Users can view own subscriptions" on public.subscriptions;
 create policy "Users can view own subscriptions"

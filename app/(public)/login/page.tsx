@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { GoogleOneTap } from "@/components/auth/google-one-tap";
 import { LoginForm } from "@/components/landing/auth-forms";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { PUBLIC_SITE_URL, trimMetaDescription } from "@/lib/seo";
@@ -27,6 +28,7 @@ export default async function LoginPage({
 
   return (
     <>
+      <GoogleOneTap />
       <BreadcrumbJsonLd
         items={[
           { name: "Home", item: `${PUBLIC_SITE_URL}/` },

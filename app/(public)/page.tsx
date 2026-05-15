@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { GoogleOneTap } from "@/components/auth/google-one-tap";
 import { AgencyGrowthHome } from "@/components/landing/agency-growth-home";
 import { BreadcrumbJsonLd } from "@/components/seo/breadcrumb-json-ld";
 import { getBillingPlans } from "@/lib/billing-config";
@@ -68,6 +69,7 @@ export default async function LandingPage() {
 
   return (
     <>
+      <GoogleOneTap />
       <BreadcrumbJsonLd items={[{ name: "Home", item: `${PUBLIC_SITE_URL}/` }]} />
       <script
         type="application/ld+json"

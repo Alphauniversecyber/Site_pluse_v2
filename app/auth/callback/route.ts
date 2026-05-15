@@ -3,6 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
+import { buildAppUserRecord, buildGoogleProfileRecord } from "@/lib/google-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { autoAcceptPendingInvitesForUser } from "@/lib/team-access";
 import { ACTIVE_WORKSPACE_COOKIE } from "@/lib/workspace";
@@ -38,44 +39,23 @@ function createCallbackSupabaseClient(response: NextResponse) {
   );
 }
 
-function resolveUserFullName(user: User) {
-  const fullName = user.user_metadata.full_name;
-  const displayName = user.user_metadata.name;
-
-  if (typeof fullName === "string" && fullName.trim()) {
-    return fullName.trim();
-  }
-
-  if (typeof displayName === "string" && displayName.trim()) {
-    return displayName.trim();
-  }
-
-  if (user.email) {
-    return user.email.split("@")[0];
-  }
-
-  return null;
-}
-
 async function upsertAuthenticatedUserProfile(user: User) {
-  if (!user.email) {
-    throw new Error("Authenticated user is missing an email address.");
+  const admin = createSupabaseAdminClient();
+  const [{ error: userError }, { error: profileError }] = await Promise.all([
+    admin.from("users").upsert(buildAppUserRecord(user), {
+      onConflict: "id"
+    }),
+    admin.from("profiles").upsert(buildGoogleProfileRecord(user), {
+      onConflict: "user_id"
+    })
+  ]);
+
+  if (userError) {
+    throw userError;
   }
 
-  const admin = createSupabaseAdminClient();
-  const { error } = await admin.from("users").upsert(
-    {
-      id: user.id,
-      email: user.email,
-      full_name: resolveUserFullName(user)
-    },
-    {
-      onConflict: "id"
-    }
-  );
-
-  if (error) {
-    throw error;
+  if (profileError) {
+    throw profileError;
   }
 }
 

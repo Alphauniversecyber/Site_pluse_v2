@@ -278,6 +278,12 @@ export function SignupForm({
             router.push(buildAuthHref("/login", nextPath));
           })}
         >
+          <GoogleOAuthButton />
+          <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground/80">
+            <span className="h-px flex-1 bg-border" />
+            <span>Or continue with email</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
           <div className="space-y-2.5">
             <Label htmlFor="signup-name">Full name</Label>
             <Input
