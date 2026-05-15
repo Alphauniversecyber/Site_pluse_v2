@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
+import { GoogleOAuthButton } from "@/components/auth/google-oauth-button";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import {
@@ -80,8 +81,13 @@ function triggerLocationTracking() {
   }).catch(() => undefined);
 }
 
-export function LoginForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
-  const router = useRouter();
+export function LoginForm({
+  nextPath = "/dashboard",
+  authError = false
+}: {
+  nextPath?: string;
+  authError?: boolean;
+}) {
   const [submitting, setSubmitting] = useState(false);
   const isPreviewUnlock = nextPath.startsWith("/unlock-preview/");
   const form = useForm({
@@ -127,6 +133,17 @@ export function LoginForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
             window.location.href = nextPath;
           })}
         >
+          {authError ? (
+            <div className="rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+              Google sign-in could not be completed. Please try again.
+            </div>
+          ) : null}
+          <GoogleOAuthButton />
+          <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground/80">
+            <span className="h-px flex-1 bg-border" />
+            <span>Or continue with email</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
           <div className="space-y-2.5">
             <Label htmlFor="login-email">Email</Label>
             <Input

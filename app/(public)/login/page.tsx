@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams
 }: {
-  searchParams: { next?: string };
+  searchParams: { next?: string; error?: string };
 }) {
   await redirectIfAuthenticated(searchParams.next ?? "/dashboard");
   const isPreviewUnlock = (searchParams.next ?? "").startsWith("/unlock-preview/");
@@ -62,7 +62,10 @@ export default async function LoginPage({
           </div>
         </div>
         <div className="order-1 lg:order-2">
-          <LoginForm nextPath={searchParams.next ?? "/dashboard"} />
+          <LoginForm
+            nextPath={searchParams.next ?? "/dashboard"}
+            authError={searchParams.error === "auth"}
+          />
         </div>
       </main>
     </>
