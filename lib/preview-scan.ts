@@ -177,6 +177,10 @@ function firstSentence(value: string) {
   return match?.[0]?.trim() ?? cleaned;
 }
 
+function firstWord(value: string) {
+  return sanitizePreviewText(value).match(/[a-z0-9]+/i)?.[0]?.toLowerCase() ?? "";
+}
+
 function tokenizeMeaningfulWords(value: string) {
   return sanitizePreviewText(value)
     .toLowerCase()
@@ -222,6 +226,17 @@ function hasRepeatedTitleWordInFirstSentence(title: string, description: string)
   }
 
   return Array.from(counts.values()).some((count) => count >= 3);
+}
+
+function hasMatchingFirstWord(title: string, description: string) {
+  const titleFirstWord = firstWord(title);
+  const descriptionFirstWord = firstWord(firstSentence(description));
+
+  if (!titleFirstWord || !descriptionFirstWord) {
+    return false;
+  }
+
+  return titleFirstWord === descriptionFirstWord;
 }
 
 function titleCase(value: string) {
@@ -299,6 +314,7 @@ Rules:
 - summary must be 1 to 2 complete sentences, plain English, and no markdown.
 - why_it_matters must be exactly 1 complete sentence and explain business impact in terms of trust, leads, conversions, sales, or visibility.
 - Do not reference or quote the issue title inside the description. Write the business impact as a standalone sentence.
+- In your description, do not start the sentence with the same word that appears in the issue title.
 - Do not use quotation marks around the issue title or repeat the raw title verbatim inside the copy.
 - Never invent numbers, pages, causes, or outcomes that are not supported by the issue itself.
 - Use calm, specific language. Avoid vague filler.
@@ -618,6 +634,10 @@ function collectPreviewIssueRetryInstructions(issues: PreviewScanIssue[]) {
 
     if (hasRepeatedTitleWordInFirstSentence(issue.title, issue.summary)) {
       instructions.add("Do not repeat words from the issue title in the first sentence of the description.");
+    }
+
+    if (hasMatchingFirstWord(issue.title, issue.summary)) {
+      instructions.add("In your description, do not start the sentence with the same word that appears in the issue title.");
     }
   }
 

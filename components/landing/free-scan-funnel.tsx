@@ -61,10 +61,23 @@ export function FreeScanFunnel({ className }: { className?: string }) {
   const [activeStage, setActiveStage] = useState(0);
   const isAuthenticated = Boolean(user);
 
-  useEffect(() => {
+  function resetPreviewState() {
     setUrl("");
     setPreview(null);
     setError(null);
+    setIsScanning(false);
+    setActiveStage(0);
+  }
+
+  useEffect(() => {
+    resetPreviewState();
+
+    const handlePageShow = () => {
+      resetPreviewState();
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
   }, []);
 
   useEffect(() => {
@@ -90,6 +103,14 @@ export function FreeScanFunnel({ className }: { className?: string }) {
 
   async function runPreviewScan(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const trimmedUrl = url.trim();
+
+    if (!trimmedUrl) {
+      setError("Please enter a website URL.");
+      setPreview(null);
+      return;
+    }
+
     setError(null);
     setPreview(null);
     setIsScanning(true);
@@ -111,7 +132,7 @@ export function FreeScanFunnel({ className }: { className?: string }) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session.access_token}`
           },
-          body: JSON.stringify({ url })
+          body: JSON.stringify({ url: trimmedUrl })
         });
 
         const payload = (await response.json().catch(() => ({}))) as {
@@ -130,7 +151,7 @@ export function FreeScanFunnel({ className }: { className?: string }) {
 
       const result = await fetchJson<PreviewScanResult>("/api/preview-scan", {
         method: "POST",
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url: trimmedUrl })
       });
 
       setPreview(result);
@@ -182,7 +203,10 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
                   placeholder="Enter a website URL..."
-                  autoComplete="off"
+                  autoComplete="new-password"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  name="sitepulse-free-scan-url"
                   className="h-14 border-none bg-white/95 pl-11 text-base text-slate-950 shadow-none placeholder:text-slate-500"
                 />
               </div>
@@ -354,12 +378,14 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                         {sanitizePreviewText(issue.title)}
                       </p>
                     </div>
-                    <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                      {sanitizePreviewText(issue.summary)}
-                    </p>
-                    <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                      {sanitizePreviewText(issue.why_it_matters)}
-                    </p>
+                    <div className="mt-3 flex flex-1 flex-col">
+                      <p className="text-sm leading-6 text-slate-700 dark:text-slate-200">
+                        {sanitizePreviewText(issue.summary)}
+                      </p>
+                      <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                        {sanitizePreviewText(issue.why_it_matters)}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
