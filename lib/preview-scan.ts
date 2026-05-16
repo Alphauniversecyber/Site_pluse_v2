@@ -1,5 +1,7 @@
 import "server-only";
 
+import Groq from "groq-sdk";
+
 import { buildHealthScore } from "@/lib/health-score";
 import { runAccessibilityScan } from "@/lib/pa11y";
 import { runPageSpeedScan } from "@/lib/pagespeed";
@@ -31,6 +33,51 @@ import type {
 const PREVIEW_SESSION_TTL_HOURS = 24;
 const SITEPULSE_CANONICAL_HOST = "www.trysitepulse.com";
 const SITEPULSE_LEGACY_HOST = "trysitepulse.com";
+const PREVIEW_ISSUE_REWRITE_MODEL = "llama-3.3-70b-versatile";
+const PREVIEW_TITLE_STOP_WORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "from",
+  "into",
+  "onto",
+  "your",
+  "that",
+  "this",
+  "than",
+  "then",
+  "when",
+  "were",
+  "was",
+  "have",
+  "has",
+  "had",
+  "been",
+  "being",
+  "does",
+  "did",
+  "not",
+  "are",
+  "is",
+  "too",
+  "can",
+  "will",
+  "site",
+  "page"
+]);
+const PREVIEW_GRAMMAR_PATTERNS = [
+  /\b(?:trust\s+signals?|signals?)\s+(?:looking|being)\b/i,
+  /\b(?:issue|issues|problem|problems)\s+(?:looking|being|adding|creating|causing|making)\b/i,
+  /\b(?:site|sites|page|pages|journey|journeys|experience|experiences)\s+(?:looking|being|adding|creating|causing|making)\b/i,
+  /\bvisitors\s+being\b/i
+] as const;
+const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
+
+type PreviewIssueRewriteResponse = {
+  summary?: string;
+  why_it_matters?: string;
+};
 
 class PreviewCopyValidationError extends Error {
   constructor(message: string) {
@@ -92,6 +139,91 @@ function keepOnlyCompleteSentences(value: string, maxLength: number) {
   return withinLimit.join(" ").trim();
 }
 
+function takeCompleteSentences(value: string, maxSentences: number, maxLength: number) {
+  const cleaned = sanitizePreviewText(value);
+
+  if (!cleaned) {
+    return "";
+  }
+
+  const sentences = cleaned
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .filter((sentence) => /[.!?]$/.test(sentence));
+
+  if (!sentences.length) {
+    return "";
+  }
+
+  const selected: string[] = [];
+
+  for (const sentence of sentences) {
+    const candidate = [...selected, sentence].join(" ").trim();
+
+    if (candidate.length > maxLength || selected.length >= maxSentences) {
+      break;
+    }
+
+    selected.push(sentence);
+  }
+
+  return selected.join(" ").trim();
+}
+
+function firstSentence(value: string) {
+  const cleaned = sanitizePreviewText(value);
+  const match = cleaned.match(/.+?[.!?](?=\s|$)/);
+  return match?.[0]?.trim() ?? cleaned;
+}
+
+function tokenizeMeaningfulWords(value: string) {
+  return sanitizePreviewText(value)
+    .toLowerCase()
+    .match(/[a-z0-9]+/g)
+    ?.filter((token) => token.length >= 4 && !PREVIEW_TITLE_STOP_WORDS.has(token)) ?? [];
+}
+
+function hasTitleReference(text: string, title: string) {
+  const normalizedText = sanitizePreviewText(text).toLowerCase();
+  const normalizedTitle = sanitizePreviewText(title).toLowerCase();
+
+  if (!normalizedText || !normalizedTitle) {
+    return false;
+  }
+
+  return normalizedText.includes(normalizedTitle) || normalizedText.includes(`"${normalizedTitle}"`) || normalizedText.includes(`'${normalizedTitle}'`);
+}
+
+function hasSimplePresentGrammarProblem(text: string) {
+  const normalizedText = sanitizePreviewText(text);
+  return PREVIEW_GRAMMAR_PATTERNS.some((pattern) => pattern.test(normalizedText));
+}
+
+function hasRepeatedTitleWordInFirstSentence(title: string, description: string) {
+  const titleTokens = tokenizeMeaningfulWords(title);
+  const firstSentenceTokens = tokenizeMeaningfulWords(firstSentence(description));
+
+  if (!titleTokens.length || !firstSentenceTokens.length) {
+    return false;
+  }
+
+  const titleTokenSet = new Set(titleTokens);
+  const counts = new Map<string, number>();
+
+  for (const token of titleTokens) {
+    counts.set(token, (counts.get(token) ?? 0) + 1);
+  }
+
+  for (const token of firstSentenceTokens) {
+    if (titleTokenSet.has(token)) {
+      counts.set(token, (counts.get(token) ?? 0) + 1);
+    }
+  }
+
+  return Array.from(counts.values()).some((count) => count >= 3);
+}
+
 function titleCase(value: string) {
   return value
     .split(/[\s-_]+/)
@@ -147,92 +279,143 @@ function normalizeIssueKey(issue: ScanIssue) {
   return cleanText(issue.title.toLowerCase(), 90).replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function getGroqClient() {
+  if (!groq) {
+    throw new Error("Missing GROQ_API_KEY.");
+  }
+
+  return groq;
+}
+
+function buildPreviewIssuesPrompt(issues: ScanIssue[], additionalInstructions: string[] = []) {
+  return `
+You are writing issue preview copy for a free website scan landing page.
+
+Rewrite each issue in clear business English for agency prospects and non-technical decision makers.
+
+Rules:
+- Return one JSON object per input issue, in the exact same order.
+- Keep every summary and why_it_matters specific to the supplied issue.
+- summary must be 1 to 2 complete sentences, plain English, and no markdown.
+- why_it_matters must be exactly 1 complete sentence and explain business impact in terms of trust, leads, conversions, sales, or visibility.
+- Do not reference or quote the issue title inside the description. Write the business impact as a standalone sentence.
+- Do not use quotation marks around the issue title or repeat the raw title verbatim inside the copy.
+- Never invent numbers, pages, causes, or outcomes that are not supported by the issue itself.
+- Use calm, specific language. Avoid vague filler.
+${additionalInstructions.length ? `- Additional corrections:\n${additionalInstructions.map((instruction) => `  - ${instruction}`).join("\n")}` : ""}
+
+Issues:
+${JSON.stringify(
+    issues.map((issue) => ({
+      title: sanitizePreviewText(issue.title),
+      description: sanitizePreviewText(issue.description),
+      severity: issue.severity
+    })),
+    null,
+    2
+  )}
+
+Return ONLY a valid JSON array with this exact shape:
+[
+  {
+    "summary": "...",
+    "why_it_matters": "..."
+  }
+]`.trim();
+}
+
+function parsePreviewIssueRewriteResponse(text: string) {
+  const clean = text.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(clean) as PreviewIssueRewriteResponse[];
+  return Array.isArray(parsed) ? parsed : [];
+}
+
 function buildIssueFocus(issue: ScanIssue) {
   const title = sanitizePreviewText(issue.title).toLowerCase();
   const description = sanitizePreviewText(issue.description).toLowerCase();
   const source = `${title} ${description}`;
 
   if (source.includes("speed index")) {
-    return "the first useful view arriving too late";
+    return "the first useful view arrives too late";
   }
 
   if (source.includes("javascript execution")) {
-    return "too much script work happening before the page feels responsive";
+    return "too much script work happens before the page feels responsive";
   }
 
   if (source.includes("largest contentful paint")) {
-    return "the main message loading later than visitors expect";
+    return "the main message loads later than visitors expect";
   }
 
   if (source.includes("redirect")) {
-    return "visitors being sent through an extra step before they reach the page";
+    return "visitors take an extra step before they reach the page";
   }
 
   if (source.includes("server response")) {
-    return "the server taking too long to answer the first request";
+    return "the server takes too long to answer the first request";
   }
 
   if (source.includes("render blocking")) {
-    return "important content waiting behind blocking files";
+    return "important content waits behind blocking files";
   }
 
   if (source.includes("main-thread")) {
-    return "the browser doing too much work before the page feels smooth";
+    return "the browser does too much work before the page feels smooth";
   }
 
   if (source.includes("unused javascript")) {
-    return "visitors downloading code they do not need on the first visit";
+    return "visitors download code they do not need on the first visit";
   }
 
   if (source.includes("unused css")) {
-    return "visitors downloading styling that does not help the first view load faster";
+    return "visitors download styling that does not help the first view load faster";
   }
 
   if (source.includes("cache")) {
-    return "returning visitors re-downloading assets that should already feel instant";
+    return "returning visitors re-download assets that should already feel instant";
   }
 
   if (source.includes("meta description")) {
-    return "search results showing a weaker sales message before the click";
+    return "search results show a weaker sales message before the click";
   }
 
   if (source.includes("title")) {
-    return "searchers seeing a less convincing page promise before visiting";
+    return "searchers see a less convincing page promise before visiting";
   }
 
   if (source.includes("canonical")) {
-    return "search engines getting mixed signals about which page should rank";
+    return "search engines get mixed signals about which page should rank";
   }
 
   if (source.includes("robots") || source.includes("sitemap")) {
-    return "search engines having a harder time discovering the right pages consistently";
+    return "search engines have a harder time discovering the right pages consistently";
   }
 
   if (source.includes("schema")) {
-    return "search engines missing extra context that supports stronger result visibility";
+    return "search engines miss extra context that supports stronger result visibility";
   }
 
   if (source.includes("alt")) {
-    return "important content losing context for visitors using assistive tools";
+    return "important content loses context for visitors using assistive tools";
   }
 
   if (source.includes("contrast")) {
-    return "key text becoming harder to read when visitors are deciding what to do next";
+    return "key text becomes harder to read when visitors are deciding what to do next";
   }
 
   if (source.includes("label")) {
-    return "forms and controls being less clear than they should be";
+    return "forms and controls feel less clear than they should";
   }
 
   if (source.includes("keyboard")) {
-    return "some visitors struggling to move through the page reliably";
+    return "some visitors struggle to move through the page reliably";
   }
 
   if (source.includes("ssl") || source.includes("https") || source.includes("security")) {
-    return "trust signals looking weaker during a critical first impression";
+    return "trust signals look weaker during a critical first impression";
   }
 
-  return `the issue "${cleanText(issue.title, 72).toLowerCase()}" adding avoidable friction`;
+  return "this problem adds avoidable friction early in the visit";
 }
 
 function buildSpecificImpactSentence(issue: ScanIssue, category: ReturnType<typeof categoryFromIssue>) {
@@ -386,13 +569,13 @@ function buildPreviewCopy(issue: ScanIssue) {
 
   return {
     summary:
-      "This issue is creating extra friction early in the visit, making the site feel slower and less convincing than it should.",
+      "This issue creates extra friction early in the visit, which makes the site feel slower and less convincing than it should.",
     why_it_matters:
       "Even small delays or hesitations can lower engagement, weaken lead quality, and reduce the return from paid or organic traffic."
   };
 }
 
-function toPreviewIssue(issue: ScanIssue): PreviewScanIssue {
+function buildFallbackPreviewIssue(issue: ScanIssue): PreviewScanIssue {
   const previewCopy = buildPreviewCopy(issue);
 
   return {
@@ -403,7 +586,87 @@ function toPreviewIssue(issue: ScanIssue): PreviewScanIssue {
   };
 }
 
-function buildPreviewIssues(issues: ScanIssue[]) {
+function normalizePreviewIssueRewrite(
+  issue: ScanIssue,
+  rewrite: PreviewIssueRewriteResponse | undefined,
+  fallback: PreviewScanIssue
+): PreviewScanIssue {
+  const summary = takeCompleteSentences(rewrite?.summary ?? "", 2, 220) || fallback.summary;
+  const whyItMatters = firstSentence(rewrite?.why_it_matters ?? "") || fallback.why_it_matters;
+
+  return {
+    id: issue.id,
+    title: cleanText(issue.title, 60),
+    summary: sanitizePreviewText(summary),
+    why_it_matters: sanitizePreviewText(whyItMatters)
+  };
+}
+
+function collectPreviewIssueRetryInstructions(issues: PreviewScanIssue[]) {
+  const instructions = new Set<string>();
+
+  for (const issue of issues) {
+    if (hasTitleReference(issue.summary, issue.title) || hasTitleReference(issue.why_it_matters, issue.title)) {
+      instructions.add(
+        "Do not reference or quote the issue title inside the description. Write the business impact as a standalone sentence."
+      );
+    }
+
+    if (hasSimplePresentGrammarProblem(issue.summary) || hasSimplePresentGrammarProblem(issue.why_it_matters)) {
+      instructions.add("Use correct grammar. Write in simple present tense.");
+    }
+
+    if (hasRepeatedTitleWordInFirstSentence(issue.title, issue.summary)) {
+      instructions.add("Do not repeat words from the issue title in the first sentence of the description.");
+    }
+  }
+
+  return Array.from(instructions);
+}
+
+async function rewritePreviewIssuesWithAi(issues: ScanIssue[], fallbackIssues: PreviewScanIssue[]) {
+  try {
+    const groqClient = getGroqClient();
+    let retryInstructions: string[] = [];
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const completion = await groqClient.chat.completions.create({
+        model: PREVIEW_ISSUE_REWRITE_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: buildPreviewIssuesPrompt(issues, retryInstructions)
+          }
+        ],
+        temperature: 0.25,
+        max_tokens: 1400
+      });
+
+      const text = completion.choices[0]?.message?.content ?? "[]";
+      const parsed = parsePreviewIssueRewriteResponse(text);
+      const normalized = issues.map((issue, index) =>
+        normalizePreviewIssueRewrite(issue, parsed[index], fallbackIssues[index] ?? buildFallbackPreviewIssue(issue))
+      );
+      const nextRetryInstructions = collectPreviewIssueRetryInstructions(normalized);
+
+      if (!nextRetryInstructions.length) {
+        return normalized;
+      }
+
+      if (attempt === 1) {
+        break;
+      }
+
+      retryInstructions = nextRetryInstructions;
+    }
+  } catch {
+    return fallbackIssues;
+  }
+
+  return fallbackIssues;
+}
+
+async function buildPreviewIssues(issues: ScanIssue[]) {
   const deduped = new Map<string, ScanIssue>();
 
   for (const issue of issues) {
@@ -423,14 +686,20 @@ function buildPreviewIssues(issues: ScanIssue[]) {
     }
   }
 
-  return Array.from(deduped.values())
+  const selectedIssues = Array.from(deduped.values())
     .sort((left, right) => {
       const leftRank = left.severity === "high" ? 3 : left.severity === "medium" ? 2 : 1;
       const rightRank = right.severity === "high" ? 3 : right.severity === "medium" ? 2 : 1;
       return rightRank - leftRank;
     })
-    .slice(0, 3)
-    .map(toPreviewIssue);
+    .slice(0, 3);
+  const fallbackIssues = selectedIssues.map(buildFallbackPreviewIssue);
+
+  if (!selectedIssues.length || !process.env.GROQ_API_KEY) {
+    return fallbackIssues;
+  }
+
+  return rewritePreviewIssuesWithAi(selectedIssues, fallbackIssues);
 }
 
 function validatePreviewIssues(issues: PreviewScanIssue[]) {
@@ -459,18 +728,18 @@ function validatePreviewIssues(issues: PreviewScanIssue[]) {
   }
 }
 
-function toPreviewPayload(input: {
+async function toPreviewPayload(input: {
   sessionId: string;
   url: string;
   label: string;
   scan: PreviewScanPayload;
   createdAt: string;
-}): PreviewScanResult {
+}): Promise<PreviewScanResult> {
   const health = buildHealthScore({
     scan: input.scan as ScanResult
   });
   const businessImpact = buildSiteBusinessImpact(input.scan as ScanResult);
-  const previewIssues = buildPreviewIssues(input.scan.issues);
+  const previewIssues = await buildPreviewIssues(input.scan.issues);
   validatePreviewIssues(previewIssues);
   const issueCount = Math.max(1, Math.min(3, previewIssues.length));
 
@@ -568,14 +837,14 @@ function mapSessionRow(row: any): PreviewScanSessionRecord {
   };
 }
 
-function buildPreviewPayloadFromSession(session: PreviewScanSessionRecord) {
+async function buildPreviewPayloadFromSession(session: PreviewScanSessionRecord) {
   const normalizedUrl = normalizePreviewUrl(session.normalized_url);
   const websiteLabel = buildWebsiteLabel(normalizedUrl);
 
   return {
     normalizedUrl,
     websiteLabel,
-    previewPayload: toPreviewPayload({
+    previewPayload: await toPreviewPayload({
       sessionId: session.id,
       url: normalizedUrl,
       label: websiteLabel,
@@ -602,10 +871,10 @@ export async function createPreviewScanSession(rawUrl: string): Promise<PreviewS
 
   if (existingRow) {
     const existingSession = mapSessionRow(existingRow);
-    let refreshed: ReturnType<typeof buildPreviewPayloadFromSession> | null = null;
+    let refreshed: Awaited<ReturnType<typeof buildPreviewPayloadFromSession>> | null = null;
 
     try {
-      refreshed = buildPreviewPayloadFromSession(existingSession);
+      refreshed = await buildPreviewPayloadFromSession(existingSession);
     } catch (error) {
       if (!(error instanceof PreviewCopyValidationError)) {
         throw error;
@@ -641,7 +910,7 @@ export async function createPreviewScanSession(rawUrl: string): Promise<PreviewS
     scan = await runPreviewScan(normalizedUrl);
 
     try {
-      previewPayload = toPreviewPayload({
+      previewPayload = await toPreviewPayload({
         sessionId,
         url: normalizedUrl,
         label,

@@ -62,6 +62,12 @@ export function FreeScanFunnel({ className }: { className?: string }) {
   const isAuthenticated = Boolean(user);
 
   useEffect(() => {
+    setUrl("");
+    setPreview(null);
+    setError(null);
+  }, []);
+
+  useEffect(() => {
     if (!isScanning) {
       setActiveStage(0);
       return;
@@ -175,7 +181,8 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                 <Input
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
-                  placeholder="Enter any website URL..."
+                  placeholder="Enter a website URL..."
+                  autoComplete="off"
                   className="h-14 border-none bg-white/95 pl-11 text-base text-slate-950 shadow-none placeholder:text-slate-500"
                 />
               </div>
@@ -335,9 +342,12 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                 </Badge>
               </div>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+              <div className="mt-5 grid items-stretch gap-4 md:grid-cols-2 2xl:grid-cols-3">
                 {preview.issues.map((issue) => (
-                  <div key={issue.id} className="rounded-[1.45rem] border border-slate-200 bg-slate-50/80 p-4 dark:border-white/8 dark:bg-slate-950/25">
+                  <div
+                    key={issue.id}
+                    className="flex h-full min-h-[280px] flex-col rounded-[1.45rem] border border-slate-200 bg-slate-50/80 p-4 dark:border-white/8 dark:bg-slate-950/25"
+                  >
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-200" />
                       <p className="text-sm font-semibold text-slate-950 dark:text-white">
