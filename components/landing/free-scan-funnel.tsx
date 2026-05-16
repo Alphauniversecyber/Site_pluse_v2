@@ -21,6 +21,15 @@ const scanStages = [
   "Detecting issues..."
 ] as const;
 
+function sanitizePreviewText(value: string) {
+  return value
+    .replace(/`+/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\bLearn more about\.(?=\s|$)/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function buildAuthHref(pathname: "/signup" | "/login", nextPath?: string): Route {
   if (!nextPath) {
     return pathname;
@@ -32,7 +41,7 @@ function buildAuthHref(pathname: "/signup" | "/login", nextPath?: string): Route
 function ScoreChip({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex min-h-[5.75rem] min-w-0 flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white/90 px-3 py-3 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:border-white/10 dark:bg-white/[0.04] dark:shadow-none sm:min-h-[6.1rem] sm:px-3.5 sm:py-3.5">
-      <p className="truncate text-[0.58rem] font-semibold uppercase leading-tight tracking-[0.11em] text-slate-500 dark:text-slate-400 sm:text-[0.62rem]">
+      <p className="whitespace-nowrap text-[0.58rem] font-semibold uppercase leading-tight tracking-[0.11em] text-slate-500 dark:text-slate-400 sm:text-[0.62rem]">
         {label}
       </p>
       <p className="font-display text-[1.45rem] font-semibold leading-none text-slate-950 dark:text-white sm:text-[1.65rem]">
@@ -166,7 +175,7 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                 <Input
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
-                  placeholder="Enter a client website URL"
+                  placeholder="Enter any website URL..."
                   className="h-14 border-none bg-white/95 pl-11 text-base text-slate-950 shadow-none placeholder:text-slate-500"
                 />
               </div>
@@ -192,9 +201,9 @@ export function FreeScanFunnel({ className }: { className?: string }) {
 
         {!preview && !isScanning ? (
           <div className="mt-5 rounded-[1.5rem] border border-blue-200 bg-blue-50/80 p-4 dark:border-blue-400/16 dark:bg-blue-500/[0.06]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-200">Value demo</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-700 dark:text-blue-200">Ready to scan</p>
             <p className="mt-2 max-w-[32rem] text-sm leading-6 text-slate-700 dark:text-slate-200">
-              Your website is losing visitors because pages take 9.6s to load. Fixing 3 issues could improve performance by up to 30%.
+              Enter any website URL to generate a live preview. No sample result is preloaded on page load.
             </p>
           </div>
         ) : null}
@@ -262,14 +271,18 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                   </div>
                 </div>
 
-                <p className="mt-5 text-base leading-7 text-slate-800 dark:text-slate-100">{preview.impact_message}</p>
-                <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{preview.improvement_message}</p>
+                <p className="mt-5 text-base leading-7 text-slate-800 dark:text-slate-100">
+                  {sanitizePreviewText(preview.impact_message)}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                  {sanitizePreviewText(preview.improvement_message)}
+                </p>
 
                 <div className="mt-5 grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-                  <ScoreChip label="Performance" value={preview.scores.performance} />
+                  <ScoreChip label="Perf" value={preview.scores.performance} />
                   <ScoreChip label="SEO" value={preview.scores.seo} />
-                  <ScoreChip label="Accessibility" value={preview.scores.accessibility} />
-                  <ScoreChip label="Best Practice" value={preview.scores.best_practices} />
+                  <ScoreChip label="Access" value={preview.scores.accessibility} />
+                  <ScoreChip label="Best" value={preview.scores.best_practices} />
                 </div>
               </div>
 
@@ -327,10 +340,16 @@ export function FreeScanFunnel({ className }: { className?: string }) {
                   <div key={issue.id} className="rounded-[1.45rem] border border-slate-200 bg-slate-50/80 p-4 dark:border-white/8 dark:bg-slate-950/25">
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-200" />
-                      <p className="text-sm font-semibold text-slate-950 dark:text-white">{issue.title}</p>
+                      <p className="text-sm font-semibold text-slate-950 dark:text-white">
+                        {sanitizePreviewText(issue.title)}
+                      </p>
                     </div>
-                    <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">{issue.summary}</p>
-                    <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">{issue.why_it_matters}</p>
+                    <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">
+                      {sanitizePreviewText(issue.summary)}
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                      {sanitizePreviewText(issue.why_it_matters)}
+                    </p>
                   </div>
                 ))}
               </div>

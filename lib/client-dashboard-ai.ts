@@ -6,10 +6,10 @@ const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "llama-3.3-70b-versatile";
 
 const ISSUES_SYSTEM_PROMPT =
-  "You are a website performance and SEO analyst. You will receive audit data for a website. Identify the most important problems hurting this business. Write in plain business English — no raw technical acronyms. Instead of 'LCP is 4.2s' say 'Your main page content takes too long to load, which causes visitors to leave.' Focus on business impact. Return ONLY a valid JSON array, no markdown, no explanation. Each object must have: title (string), severity ('critical'|'warning'|'info'), description (string, 1-2 sentences), impact (string, what this costs the business), category ('performance'|'seo'|'accessibility'|'technical')";
+  "You are a website performance and SEO analyst. You will receive audit data for a website. Identify the most important problems hurting this business. Write in plain business English - no raw technical acronyms. Instead of 'LCP is 4.2s' say 'Your main page content takes too long to load, which causes visitors to leave.' Focus on business impact. Every issue must have a unique description and a unique impact statement tied directly to that specific issue. Finish every sentence completely. Do not use markdown, backticks, placeholder copy, or the phrase 'Learn more about.' Return ONLY a valid JSON array, no markdown, no explanation. Each object must have: title (string), severity ('critical'|'warning'|'info'), description (string, 1-2 sentences), impact (string, what this costs the business), category ('performance'|'seo'|'accessibility'|'technical')";
 
 const RECOMMENDATIONS_SYSTEM_PROMPT =
-  "You are a digital growth strategist. You will receive audit data and optionally live traffic data for a website. Provide clear, actionable recommendations to grow traffic, engagement, and conversions. Write in plain business English — what to do, why it matters, what result to expect. Return ONLY a valid JSON array, no markdown, no explanation. Each object must have: title (string), priority ('high'|'medium'|'low'), description (string, 1-2 sentences), expectedResult (string), effort ('low'|'medium'|'high'), category ('performance'|'seo'|'content'|'technical')";
+  "You are a digital growth strategist. You will receive audit data and optionally live traffic data for a website. Provide clear, actionable recommendations to grow traffic, engagement, and conversions. Write in plain business English - what to do, why it matters, what result to expect. Return ONLY a valid JSON array, no markdown, no explanation. Each object must have: title (string), priority ('high'|'medium'|'low'), description (string, 1-2 sentences), expectedResult (string), effort ('low'|'medium'|'high'), category ('performance'|'seo'|'content'|'technical')";
 
 export type ClientAiIssue = {
   title: string;
@@ -109,12 +109,54 @@ export class ClientAiParseError extends Error {
   }
 }
 
-function sanitizeText(value: unknown, fallback: string) {
+class DuplicateIssueCopyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DuplicateIssueCopyError";
+  }
+}
+
+function stripBrokenTemplateText(value: string) {
+  return value
+    .replace(/`+/g, "")
+    .replace(/\bLearn more about\.(?=\s|$)/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function trimIncompleteTrailingSentence(value: string) {
+  const cleaned = stripBrokenTemplateText(value);
+
+  if (!cleaned) {
+    return "";
+  }
+
+  if (/[.!?]$/.test(cleaned)) {
+    return cleaned;
+  }
+
+  const completed = cleaned
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .filter((sentence) => /[.!?]$/.test(sentence));
+
+  if (completed.length) {
+    return completed.join(" ").trim();
+  }
+
+  return cleaned.replace(/[,:;\-]+$/, "").trim();
+}
+
+function sanitizeText(value: unknown, fallback: string, options?: { completeSentence?: boolean }) {
   if (typeof value !== "string") {
     return fallback;
   }
 
-  const cleaned = value.replace(/\s+/g, " ").trim();
+  const cleaned = options?.completeSentence
+    ? trimIncompleteTrailingSentence(value)
+    : stripBrokenTemplateText(value);
+
   return cleaned || fallback;
 }
 
@@ -146,8 +188,12 @@ function sanitizeIssue(item: Record<string, unknown>): ClientAiIssue {
   return {
     title: sanitizeText(item.title, "Issue identified"),
     severity: normalizeIssueSeverity(item.severity),
-    description: sanitizeText(item.description, "This issue needs attention."),
-    impact: sanitizeText(item.impact, "This is costing the business visibility, trust, or leads."),
+    description: sanitizeText(item.description, "This issue needs attention.", {
+      completeSentence: true
+    }),
+    impact: sanitizeText(item.impact, "This is costing the business visibility, trust, or leads.", {
+      completeSentence: true
+    }),
     category: normalizeIssueCategory(item.category)
   };
 }
@@ -169,6 +215,34 @@ function sanitizeRecommendation(item: Record<string, unknown>): ClientAiRecommen
 function parseGroqJsonArray(text: string) {
   const clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
   return JSON.parse(clean) as Array<Record<string, unknown>>;
+}
+
+function validateIssueCopyUniqueness(issues: ClientAiIssue[]) {
+  const descriptionCounts = new Map<string, number>();
+  const impactCounts = new Map<string, number>();
+
+  for (const issue of issues) {
+    const normalizedDescription = stripBrokenTemplateText(issue.description).toLowerCase();
+    const normalizedImpact = stripBrokenTemplateText(issue.impact).toLowerCase();
+
+    if (normalizedDescription) {
+      descriptionCounts.set(
+        normalizedDescription,
+        (descriptionCounts.get(normalizedDescription) ?? 0) + 1
+      );
+    }
+
+    if (normalizedImpact) {
+      impactCounts.set(normalizedImpact, (impactCounts.get(normalizedImpact) ?? 0) + 1);
+    }
+  }
+
+  if (
+    Array.from(descriptionCounts.values()).some((count) => count >= 2) ||
+    Array.from(impactCounts.values()).some((count) => count >= 2)
+  ) {
+    throw new DuplicateIssueCopyError("AI returned duplicate issue body text.");
+  }
 }
 
 function asNumber(value: unknown) {
@@ -206,10 +280,7 @@ export function buildSlimPayload(
     };
     const existing = seenTitles.get(normalizedIssue.title);
 
-    if (
-      !existing ||
-      severityRank[normalizedIssue.severity] > severityRank[existing.severity]
-    ) {
+    if (!existing || severityRank[normalizedIssue.severity] > severityRank[existing.severity]) {
       seenTitles.set(normalizedIssue.title, normalizedIssue);
     }
   }
@@ -337,7 +408,7 @@ async function runGroqJsonArray(systemPrompt: string, slimPayload: SlimClientDas
       { role: "user", content: slimPayloadJson }
     ],
     temperature: 0.4,
-    max_tokens: 2000
+    max_tokens: 2800
   };
 
   console.log("[client-dashboard-ai] sending payload to Groq", groqPayload);
@@ -379,8 +450,21 @@ async function runGroqJsonArray(systemPrompt: string, slimPayload: SlimClientDas
 }
 
 export async function analyzeClientIssues(input: ClientAiInput) {
-  const parsed = await runGroqJsonArray(ISSUES_SYSTEM_PROMPT, input.slimPayload);
-  return parsed.map(sanitizeIssue);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const parsed = await runGroqJsonArray(ISSUES_SYSTEM_PROMPT, input.slimPayload);
+    const issues = parsed.map(sanitizeIssue);
+
+    try {
+      validateIssueCopyUniqueness(issues);
+      return issues;
+    } catch (error) {
+      if (!(error instanceof DuplicateIssueCopyError) || attempt === 1) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("Unable to analyze issues right now.");
 }
 
 export async function analyzeClientRecommendations(input: ClientAiInput) {

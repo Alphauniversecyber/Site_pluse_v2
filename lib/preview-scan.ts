@@ -32,11 +32,24 @@ const PREVIEW_SESSION_TTL_HOURS = 24;
 const SITEPULSE_CANONICAL_HOST = "www.trysitepulse.com";
 const SITEPULSE_LEGACY_HOST = "trysitepulse.com";
 
-function cleanText(value: string, maxLength = 130) {
-  const cleaned = value
-    .replace(/\s+/g, " ")
+class PreviewCopyValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PreviewCopyValidationError";
+  }
+}
+
+function sanitizePreviewText(value: string) {
+  return value
+    .replace(/`+/g, "")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\bLearn more about\.(?=\s|$)/gi, "")
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+function cleanText(value: string, maxLength = 130) {
+  const cleaned = sanitizePreviewText(value);
 
   if (cleaned.length <= maxLength) {
     return cleaned;
@@ -44,7 +57,39 @@ function cleanText(value: string, maxLength = 130) {
 
   const shortened = cleaned.slice(0, maxLength);
   const boundary = shortened.search(/\s+\S*$/);
-  return `${(boundary > 32 ? shortened.slice(0, boundary) : shortened).trim()}.`;
+  return (boundary > 32 ? shortened.slice(0, boundary) : shortened).trim();
+}
+
+function keepOnlyCompleteSentences(value: string, maxLength: number) {
+  const cleaned = sanitizePreviewText(value);
+
+  if (!cleaned) {
+    return "";
+  }
+
+  const sentences = cleaned
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .filter((sentence) => /[.!?]$/.test(sentence));
+
+  if (!sentences.length) {
+    return "";
+  }
+
+  const withinLimit: string[] = [];
+
+  for (const sentence of sentences) {
+    const candidate = [...withinLimit, sentence].join(" ").trim();
+
+    if (candidate.length > maxLength) {
+      break;
+    }
+
+    withinLimit.push(sentence);
+  }
+
+  return withinLimit.join(" ").trim();
 }
 
 function titleCase(value: string) {
@@ -100,6 +145,112 @@ function categoryFromIssue(issue: ScanIssue) {
 
 function normalizeIssueKey(issue: ScanIssue) {
   return cleanText(issue.title.toLowerCase(), 90).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function buildIssueFocus(issue: ScanIssue) {
+  const title = sanitizePreviewText(issue.title).toLowerCase();
+  const description = sanitizePreviewText(issue.description).toLowerCase();
+  const source = `${title} ${description}`;
+
+  if (source.includes("speed index")) {
+    return "the first useful view arriving too late";
+  }
+
+  if (source.includes("javascript execution")) {
+    return "too much script work happening before the page feels responsive";
+  }
+
+  if (source.includes("largest contentful paint")) {
+    return "the main message loading later than visitors expect";
+  }
+
+  if (source.includes("redirect")) {
+    return "visitors being sent through an extra step before they reach the page";
+  }
+
+  if (source.includes("server response")) {
+    return "the server taking too long to answer the first request";
+  }
+
+  if (source.includes("render blocking")) {
+    return "important content waiting behind blocking files";
+  }
+
+  if (source.includes("main-thread")) {
+    return "the browser doing too much work before the page feels smooth";
+  }
+
+  if (source.includes("unused javascript")) {
+    return "visitors downloading code they do not need on the first visit";
+  }
+
+  if (source.includes("unused css")) {
+    return "visitors downloading styling that does not help the first view load faster";
+  }
+
+  if (source.includes("cache")) {
+    return "returning visitors re-downloading assets that should already feel instant";
+  }
+
+  if (source.includes("meta description")) {
+    return "search results showing a weaker sales message before the click";
+  }
+
+  if (source.includes("title")) {
+    return "searchers seeing a less convincing page promise before visiting";
+  }
+
+  if (source.includes("canonical")) {
+    return "search engines getting mixed signals about which page should rank";
+  }
+
+  if (source.includes("robots") || source.includes("sitemap")) {
+    return "search engines having a harder time discovering the right pages consistently";
+  }
+
+  if (source.includes("schema")) {
+    return "search engines missing extra context that supports stronger result visibility";
+  }
+
+  if (source.includes("alt")) {
+    return "important content losing context for visitors using assistive tools";
+  }
+
+  if (source.includes("contrast")) {
+    return "key text becoming harder to read when visitors are deciding what to do next";
+  }
+
+  if (source.includes("label")) {
+    return "forms and controls being less clear than they should be";
+  }
+
+  if (source.includes("keyboard")) {
+    return "some visitors struggling to move through the page reliably";
+  }
+
+  if (source.includes("ssl") || source.includes("https") || source.includes("security")) {
+    return "trust signals looking weaker during a critical first impression";
+  }
+
+  return `the issue "${cleanText(issue.title, 72).toLowerCase()}" adding avoidable friction`;
+}
+
+function buildSpecificImpactSentence(issue: ScanIssue, category: ReturnType<typeof categoryFromIssue>) {
+  const focus = buildIssueFocus(issue);
+
+  if (category === "seo") {
+    return `Because ${focus}, qualified search traffic is less likely to reach the site or click through with confidence.`;
+  }
+
+  if (category === "accessibility") {
+    return `Because ${focus}, more visitors face friction completing key actions, which reduces trust and completion rates.`;
+  }
+
+  if (category === "security") {
+    return `Because ${focus}, the business can look less dependable at the moment visitors decide whether to enquire or share details.`;
+  }
+
+  return `Because ${focus}, more visitors leave before they fully see the offer, which pushes bounce rate up and conversions down.`;
 }
 
 function buildPreviewCopy(issue: ScanIssue) {
@@ -197,19 +348,12 @@ function buildPreviewCopy(issue: ScanIssue) {
     };
   }
 
-  const cleanedDescription = cleanText(issue.description, 150);
+  const cleanedDescription = keepOnlyCompleteSentences(issue.description, 150);
 
   if (cleanedDescription && cleanedDescription !== "An issue affecting this page was detected.") {
     return {
       summary: cleanedDescription,
-      why_it_matters:
-        category === "performance"
-          ? "This creates extra friction in the visit, which can quietly reduce engagement, leads, and conversion intent."
-          : category === "seo"
-            ? "When visibility or clarity slips here, the business usually loses qualified traffic before the sales conversation starts."
-            : category === "accessibility"
-              ? "If part of the experience feels harder than expected, trust drops and fewer visitors complete the next step."
-              : "If visitors feel uncertainty at this stage, they become more cautious about engaging with the business."
+      why_it_matters: buildSpecificImpactSentence(issue, category)
     };
   }
 
@@ -254,8 +398,8 @@ function toPreviewIssue(issue: ScanIssue): PreviewScanIssue {
   return {
     id: issue.id,
     title: cleanText(issue.title, 60),
-    summary: previewCopy.summary,
-    why_it_matters: previewCopy.why_it_matters
+    summary: sanitizePreviewText(previewCopy.summary),
+    why_it_matters: sanitizePreviewText(previewCopy.why_it_matters)
   };
 }
 
@@ -289,6 +433,32 @@ function buildPreviewIssues(issues: ScanIssue[]) {
     .map(toPreviewIssue);
 }
 
+function validatePreviewIssues(issues: PreviewScanIssue[]) {
+  const summaryCounts = new Map<string, number>();
+  const impactCounts = new Map<string, number>();
+
+  for (const issue of issues) {
+    const normalizedSummary = sanitizePreviewText(issue.summary).toLowerCase();
+    const normalizedImpact = sanitizePreviewText(issue.why_it_matters).toLowerCase();
+
+    if (normalizedSummary) {
+      summaryCounts.set(normalizedSummary, (summaryCounts.get(normalizedSummary) ?? 0) + 1);
+    }
+
+    if (normalizedImpact) {
+      impactCounts.set(normalizedImpact, (impactCounts.get(normalizedImpact) ?? 0) + 1);
+    }
+  }
+
+  const duplicateBody =
+    Array.from(summaryCounts.entries()).find(([, count]) => count >= 2) ??
+    Array.from(impactCounts.entries()).find(([, count]) => count >= 2);
+
+  if (duplicateBody) {
+    throw new PreviewCopyValidationError("Preview generation returned duplicate issue body text.");
+  }
+}
+
 function toPreviewPayload(input: {
   sessionId: string;
   url: string;
@@ -300,7 +470,9 @@ function toPreviewPayload(input: {
     scan: input.scan as ScanResult
   });
   const businessImpact = buildSiteBusinessImpact(input.scan as ScanResult);
-  const issueCount = Math.max(1, Math.min(3, buildPreviewIssues(input.scan.issues).length));
+  const previewIssues = buildPreviewIssues(input.scan.issues);
+  validatePreviewIssues(previewIssues);
+  const issueCount = Math.max(1, Math.min(3, previewIssues.length));
 
   return {
     session_id: input.sessionId,
@@ -321,7 +493,7 @@ function toPreviewPayload(input: {
     impact_message: businessImpact.headline,
     improvement_message: `Fixing ${issueCount} key issue${issueCount === 1 ? "" : "s"} could improve performance by up to ${businessImpact.improvementPotential}%.`,
     unlock_path: `/unlock-preview/${input.sessionId}`,
-    issues: buildPreviewIssues(input.scan.issues),
+    issues: previewIssues,
     generated_at: input.createdAt
   };
 }
@@ -430,36 +602,63 @@ export async function createPreviewScanSession(rawUrl: string): Promise<PreviewS
 
   if (existingRow) {
     const existingSession = mapSessionRow(existingRow);
-    const refreshed = buildPreviewPayloadFromSession(existingSession);
+    let refreshed: ReturnType<typeof buildPreviewPayloadFromSession> | null = null;
 
-    if (
-      existingSession.normalized_url !== refreshed.normalizedUrl ||
-      existingSession.website_label !== refreshed.websiteLabel ||
-      JSON.stringify(existingSession.preview_payload) !== JSON.stringify(refreshed.previewPayload)
-    ) {
-      await admin
-        .from("preview_scan_sessions")
-        .update({
-          normalized_url: refreshed.normalizedUrl,
-          website_label: refreshed.websiteLabel,
-          preview_payload: refreshed.previewPayload
-        })
-        .eq("id", existingSession.id);
+    try {
+      refreshed = buildPreviewPayloadFromSession(existingSession);
+    } catch (error) {
+      if (!(error instanceof PreviewCopyValidationError)) {
+        throw error;
+      }
     }
 
-    return refreshed.previewPayload;
+    if (refreshed) {
+      if (
+        existingSession.normalized_url !== refreshed.normalizedUrl ||
+        existingSession.website_label !== refreshed.websiteLabel ||
+        JSON.stringify(existingSession.preview_payload) !== JSON.stringify(refreshed.previewPayload)
+      ) {
+        await admin
+          .from("preview_scan_sessions")
+          .update({
+            normalized_url: refreshed.normalizedUrl,
+            website_label: refreshed.websiteLabel,
+            preview_payload: refreshed.previewPayload
+          })
+          .eq("id", existingSession.id);
+      }
+
+      return refreshed.previewPayload;
+    }
   }
 
   const label = buildWebsiteLabel(normalizedUrl);
-  const scan = await runPreviewScan(normalizedUrl);
   const sessionId = crypto.randomUUID();
-  const previewPayload = toPreviewPayload({
-    sessionId,
-    url: normalizedUrl,
-    label,
-    scan,
-    createdAt: nowIso
-  });
+  let previewPayload: PreviewScanResult | null = null;
+  let scan: PreviewScanPayload | null = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    scan = await runPreviewScan(normalizedUrl);
+
+    try {
+      previewPayload = toPreviewPayload({
+        sessionId,
+        url: normalizedUrl,
+        label,
+        scan,
+        createdAt: nowIso
+      });
+      break;
+    } catch (error) {
+      if (!(error instanceof PreviewCopyValidationError) || attempt === 1) {
+        throw error;
+      }
+    }
+  }
+
+  if (!previewPayload || !scan) {
+    throw new Error("Unable to build preview scan copy.");
+  }
 
   const { error } = await admin.from("preview_scan_sessions").insert({
     id: sessionId,
