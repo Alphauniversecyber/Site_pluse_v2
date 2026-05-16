@@ -47,6 +47,25 @@ type LinkHealthPanelProps = {
 
 const PAGE_SIZE = 10;
 
+function TablerDownloadIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
+      <path d="M7 11l5 5l5 -5" />
+      <path d="M12 4l0 12" />
+    </svg>
+  );
+}
+
 function parseUrl(value?: string | null) {
   if (!value) {
     return null;
@@ -363,6 +382,39 @@ function buildRecommendations(issues: LinkIssueRow[]) {
   return suggestions.slice(0, 3);
 }
 
+function formatCsvValue(value: string | number) {
+  const stringValue = String(value);
+
+  if (!/[,"\n\r]/.test(stringValue)) {
+    return stringValue;
+  }
+
+  return `"${stringValue.replace(/"/g, '""')}"`;
+}
+
+function formatDateForFilename(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getIssueTypeExportValue(issue: LinkIssueRow) {
+  if (issue.issueTypeKey === "redirect") {
+    return "redirect chain";
+  }
+
+  if (issue.issueTypeKey === "server") {
+    return "server error";
+  }
+
+  if (issue.issueTypeKey === "timeout") {
+    return "timeout";
+  }
+
+  return "broken";
+}
+
 export function LinkHealthPanel({ brokenLinks, websiteUrl, isHydrating = false }: LinkHealthPanelProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -466,6 +518,10 @@ export function LinkHealthPanel({ brokenLinks, websiteUrl, isHydrating = false }
   const currentPage = Math.min(page, pageCount);
   const pagedIssues = filteredIssues.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const recommendations = useMemo(() => buildRecommendations(derived?.issues ?? []), [derived?.issues]);
+  const exportFilename = useMemo(() => {
+    const hostname = parseUrl(websiteUrl)?.hostname ?? "sitepulse";
+    return `${hostname}-broken-links-${formatDateForFilename(new Date())}.csv`;
+  }, [websiteUrl]);
 
   const summaryHeadline = `${safeRecord?.broken_links ?? 0} broken links and ${safeRecord?.redirect_chains ?? 0} redirect chains found`;
   const summaryBody = `SitePulse grouped ${filteredIssues.length || derived?.issues.length || 0} unique link issues across ${
@@ -479,6 +535,38 @@ export function LinkHealthPanel({ brokenLinks, websiteUrl, isHydrating = false }
     } catch {
       toast.error(`Unable to copy ${label.toLowerCase()}.`);
     }
+  };
+
+  const exportCsv = () => {
+    const issues = derived?.issues ?? [];
+
+    if (!issues.length) {
+      toast.error("No link issues available to export.");
+      return;
+    }
+
+    const rows = [
+      ["Issue", "URL", "Found On", "Status Code", "Issue Type", "Occurrences"],
+      ...issues.map((issue) => [
+        issue.title,
+        issue.url,
+        issue.sourcePages.join(" | ") || "No source page captured",
+        issue.statusLabel,
+        getIssueTypeExportValue(issue),
+        issue.occurrences
+      ])
+    ];
+
+    const csv = rows.map((row) => row.map((value) => formatCsvValue(value)).join(",")).join("\r\n");
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = exportFilename;
+    link.click();
+
+    URL.revokeObjectURL(url);
   };
 
   if (!safeRecord) {
@@ -544,9 +632,15 @@ export function LinkHealthPanel({ brokenLinks, websiteUrl, isHydrating = false }
               Raw URLs are condensed into grouped issues so the worst problems stay readable.
             </p>
           </div>
-          <div className="text-sm text-muted-foreground">
-            Showing {filteredIssues.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}-
-            {Math.min(currentPage * PAGE_SIZE, filteredIssues.length)} of {filteredIssues.length} issue groups
+          <div className="flex flex-wrap items-center justify-end gap-2 text-sm text-muted-foreground">
+            <span>
+              Showing {filteredIssues.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}-
+              {Math.min(currentPage * PAGE_SIZE, filteredIssues.length)} of {filteredIssues.length} issue groups
+            </span>
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={!derived?.issues.length}>
+              <TablerDownloadIcon className="h-4 w-4" />
+              Export CSV
+            </Button>
           </div>
         </div>
 
