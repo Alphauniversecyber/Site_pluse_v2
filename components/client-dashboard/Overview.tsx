@@ -303,7 +303,7 @@ export function Overview({
         <div className="rounded-[1.8rem] border border-border/70 bg-card/90 p-5 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
           <div className="mb-5 space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-              PageSpeed Scores
+              Performance Scores
             </p>
             <p className="text-sm text-muted-foreground">
               These scores come from the latest technical scan and stay visible even without Google connections.
@@ -339,7 +339,7 @@ export function Overview({
               Core Web Vitals
             </p>
             <p className="text-sm text-muted-foreground">
-              These loading and stability signals come from PageSpeed, so they are always available after a scan.
+              These loading and stability signals come from the latest technical scan, so they are always available after a scan.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

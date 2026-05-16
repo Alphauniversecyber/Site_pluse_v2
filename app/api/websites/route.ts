@@ -32,14 +32,14 @@ export async function GET(request: Request) {
     error: { message: string } | null;
   } = await admin
     .from("websites")
-    .select("id,user_id,url,label,is_active,report_frequency,extra_recipients,auto_email_reports,email_notifications,created_at,updated_at")
+    .select("id,user_id,url,label,is_active,failure_reason,report_frequency,extra_recipients,auto_email_reports,email_notifications,created_at,updated_at")
     .eq("user_id", workspace.workspaceOwnerId)
     .order("created_at", { ascending: false });
 
   if (websitesQuery.error && isMissingWebsiteNotificationColumnsError(websitesQuery.error.message)) {
     websitesQuery = await admin
       .from("websites")
-      .select("id,user_id,url,label,is_active,email_reports_enabled,email_report_frequency,report_recipients,created_at,updated_at")
+      .select("id,user_id,url,label,is_active,failure_reason,email_reports_enabled,email_report_frequency,report_recipients,created_at,updated_at")
       .eq("user_id", workspace.workspaceOwnerId)
       .order("created_at", { ascending: false });
   }

@@ -93,6 +93,14 @@ export default async function AdminWebsitesPage({
                         <td className="px-4 py-4">
                           <p className="font-medium text-white">{row.label}</p>
                           <p className="mt-1 break-all font-mono text-xs text-zinc-500">{row.url}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <AdminBadge label={row.isActive ? "active" : "paused"} tone={row.isActive ? "green" : "amber"} />
+                            {row.failureReason ? (
+                              <span className="rounded-full border border-[#2A2A2A] px-2.5 py-1 text-xs text-zinc-400">
+                                {row.failureReason}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-4 py-4 text-zinc-300">{row.ownerEmail}</td>
                         <td className="px-4 py-4">
@@ -127,6 +135,8 @@ export default async function AdminWebsitesPage({
                               <div>
                                 <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Connection status</p>
                                 <div className="mt-2 grid gap-2 text-sm text-zinc-300">
+                                  <p>Website state: {row.isActive ? "Active" : "Paused"}</p>
+                                  <p>Failure reason: {row.failureReason ?? "None"}</p>
                                   <p>Magic link token: {row.connectionDetails.magicTokenPresent ? "present" : "missing"}</p>
                                   <p>GSC property: {row.connectionDetails.gscProperty ?? "Not connected"}</p>
                                   <p>GA4 property: {row.connectionDetails.gaPropertyId ?? "Not connected"}</p>

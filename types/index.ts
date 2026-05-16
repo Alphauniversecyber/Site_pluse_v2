@@ -4,6 +4,7 @@ export type ScanFrequency = "daily" | "weekly" | "monthly";
 export type ReportFrequency = ScanFrequency | "never";
 export type Severity = "low" | "medium" | "high";
 export type WorkspaceRole = "owner" | "admin" | "viewer";
+export type WebsiteFailureReason = "scan_timeout" | "scan_blocked" | "scan_analysis_error";
 export type SubscriptionStatus =
   | "inactive"
   | "approval_pending"
@@ -57,6 +58,7 @@ export type EmailTemplateId =
   | "score_improved"
   | "new_issue_found"
   | "issue_fixed"
+  | "scan_paused"
   | "team_invite";
 export type PlainLanguageCategory = "Performance" | "SEO" | "Accessibility" | "Security";
 export type PlainLanguageDifficulty = "Easy" | "Medium" | "Complex";
@@ -161,6 +163,7 @@ export interface Website {
   client_dashboard_enabled?: boolean;
   client_dashboard_use_branding_logo?: boolean;
   competitor_urls?: string[];
+  failure_reason?: WebsiteFailureReason | null;
   created_at: string;
   updated_at?: string;
   magic_token?: string | null;

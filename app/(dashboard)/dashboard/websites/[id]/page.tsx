@@ -27,6 +27,15 @@ import { MetricTile } from "@/components/dashboard/metric-tile";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { TrialPaywall } from "@/components/trial/TrialPaywall";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,7 +67,12 @@ import { fetchJson } from "@/lib/api-client";
 import { buildSiteBusinessImpact } from "@/lib/business-impact";
 import { buildUptimeSummary } from "@/lib/health-score";
 import { markOnboardingStepComplete } from "@/lib/onboarding";
-import { getFriendlyScanFailureMessage } from "@/lib/scan-errors";
+import {
+  getFriendlyScanFailureMessage,
+  SCAN_FAILED_MODAL_MESSAGE,
+  SCAN_FAILED_MODAL_TITLE,
+  SITE_PAUSED_TOAST_MESSAGE
+} from "@/lib/scan-errors";
 import { cn } from "@/lib/utils";
 
 type WebsiteDetailResponse = Website & {
@@ -67,6 +81,9 @@ type WebsiteDetailResponse = Website & {
 
 type ScanRunResponse = {
   scan: ScanResult;
+  isFirstScanAttempt: boolean;
+  sitePaused: boolean;
+  failureReason: Website["failure_reason"] | null;
 };
 
 const REPORT_FREQUENCY_OPTIONS: Array<{ value: ReportFrequency; label: string }> = [
@@ -891,6 +908,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
   const [plainLanguageLoading, setPlainLanguageLoading] = useState(false);
   const [healthSignalsSyncing, setHealthSignalsSyncing] = useState(false);
   const [healthSignalRetryTick, setHealthSignalRetryTick] = useState(0);
+  const [firstScanFailureOpen, setFirstScanFailureOpen] = useState(false);
   const [competitorInput, setCompetitorInput] = useState("");
   const [extraRecipientsText, setExtraRecipientsText] = useState("");
   const [reportFrequency, setReportFrequency] = useState<ReportFrequency>("weekly");
@@ -1157,26 +1175,48 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
     };
   }, [canManageWorkspace, currentScan, currentScanFailed, healthSignalRetryTick, needsLinkHealth, needsSeoAudit, params.id]);
 
-  const runScan = () =>
+  const runScan = (options?: { activateSite?: boolean; successMessage?: string }) =>
     startTransition(async () => {
       try {
         const result = await fetchJson<ScanRunResponse>("/api/scan/run", {
           method: "POST",
           body: JSON.stringify({
-            websiteId: params.id
+            websiteId: params.id,
+            activateSite: options?.activateSite ?? false
           })
         });
         markOnboardingStepComplete(1);
 
         if (result.scan.scan_status === "success") {
-          toast.success("Manual scan complete.");
+          toast.success(options?.successMessage ?? "Manual scan complete.");
         } else {
-          toast.error(getFriendlyScanFailureMessage(result.scan.error_message));
+          if (result.isFirstScanAttempt && !options?.activateSite) {
+            setFirstScanFailureOpen(true);
+          } else {
+            toast.error(getFriendlyScanFailureMessage(result.scan.error_message));
+          }
         }
 
         await refetch();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to run scan.");
+      }
+    });
+
+  const pauseWebsiteAfterFailedFirstScan = () =>
+    startTransition(async () => {
+      try {
+        await fetchJson(`/api/websites/${params.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            is_active: false
+          })
+        });
+        setFirstScanFailureOpen(false);
+        toast.success(SITE_PAUSED_TOAST_MESSAGE);
+        await refetch();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to pause website.");
       }
     });
 
@@ -1371,12 +1411,21 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
             <div className="grid w-full gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-3">
               <Button
                 variant="outline"
-                onClick={runScan}
+                onClick={() =>
+                  runScan(
+                    data?.is_active
+                      ? undefined
+                      : {
+                          activateSite: true,
+                          successMessage: "Site resumed and scan completed."
+                        }
+                  )
+                }
                 disabled={isPending}
                 className="h-11 w-full justify-center rounded-xl border-slate-200/90 bg-white/75 shadow-sm dark:border-white/10 dark:bg-background/70 sm:h-12"
               >
               <WandSparkles className="h-4 w-4" />
-              Run scan
+              {data?.is_active ? "Run scan" : "Resume"}
               </Button>
               <Button
                 variant="outline"
@@ -1400,6 +1449,42 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
           ) : null
         }
       />
+
+      <AlertDialog
+        open={firstScanFailureOpen}
+        onOpenChange={() => undefined}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{SCAN_FAILED_MODAL_TITLE}</AlertDialogTitle>
+            <AlertDialogDescription>{SCAN_FAILED_MODAL_MESSAGE}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await fetchJson(`/api/websites/${params.id}`, {
+                    method: "DELETE"
+                  });
+                  setFirstScanFailureOpen(false);
+                  toast.success("Website deleted.");
+                  window.location.href = "/dashboard/websites";
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Unable to delete website.");
+                }
+              }}
+              disabled={isPending}
+            >
+              Delete Site
+            </Button>
+            <AlertDialogAction onClick={pauseWebsiteAfterFailedFirstScan} disabled={isPending}>
+              Pause Scanning
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card className="overflow-hidden border-primary/15 bg-primary/[0.06]">
         <CardContent className="p-5 sm:p-6">
@@ -1731,7 +1816,7 @@ export default function WebsiteDetailPage({ params }: { params: { id: string } }
                     </div>
                   </div>
                   {canManageWorkspace ? (
-                    <Button variant="outline" onClick={runScan} disabled={isPending} className="h-11 w-full shrink-0 sm:w-auto">
+                    <Button variant="outline" onClick={() => runScan()} disabled={isPending} className="h-11 w-full shrink-0 sm:w-auto">
                       <WandSparkles className="h-4 w-4" />
                       Retry scan
                     </Button>

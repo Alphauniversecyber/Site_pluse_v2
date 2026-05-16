@@ -73,7 +73,8 @@ export const websiteUpdateSchema = z.object({
 });
 
 export const scanRunSchema = z.object({
-  websiteId: z.string().uuid("Invalid website id.")
+  websiteId: z.string().uuid("Invalid website id."),
+  activateSite: z.boolean().optional().default(false)
 });
 
 export const previewScanSchema = z.object({

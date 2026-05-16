@@ -1296,6 +1296,59 @@ export async function sendProductEmail(input: {
   });
 }
 
+export async function sendScanPausedEmail(input: {
+  dedupeKey: string;
+  to: string;
+  website: Website;
+  triggeredAt?: string | null;
+}) {
+  const baseUrl = ensureHttpsUrl(getBaseUrl()).replace(/\/$/, "");
+  const dashboardUrl = `${baseUrl}/dashboard`;
+
+  return sendProductEmail({
+    templateId: "scan_paused",
+    dedupeKey: input.dedupeKey,
+    campaign: "operations",
+    to: input.to,
+    subject: `SitePulse: Scanning paused for ${input.website.url}`,
+    preheader: `Scanning was paused for ${input.website.url} after the latest scan could not complete.`,
+    eyebrow: "Scanning paused",
+    title: `Scanning paused for ${input.website.label}`,
+    summary:
+      `We were unable to complete the latest scan for ${input.website.url}. ` +
+      "This usually happens when a site blocks automated scanners or takes too long to respond.",
+    bodyHtml: `
+      <p style="margin:0 0 14px 0;font-size:15px;line-height:24px;color:#475569;">
+        We were unable to complete the latest scan for ${escapeHtml(input.website.url)}.
+        This usually happens when a site blocks automated scanners or takes too long to respond.
+      </p>
+      <p style="margin:0;font-size:15px;line-height:24px;color:#475569;">
+        Visit your dashboard to resume scanning or remove this site.
+      </p>
+    `,
+    ctaLabel: "Open dashboard",
+    ctaUrl: dashboardUrl,
+    secondaryLabel: "Review website",
+    secondaryUrl: `${dashboardUrl}/websites/${input.website.id}`,
+    details: [
+      {
+        label: "Website",
+        value: input.website.label
+      },
+      {
+        label: "URL",
+        value: input.website.url
+      }
+    ],
+    metadata: {
+      websiteId: input.website.id,
+      userId: input.website.user_id,
+      dedupeKey: input.dedupeKey
+    },
+    triggeredAt: input.triggeredAt ?? new Date().toISOString()
+  });
+}
+
 function getReportEmailBranding(profile: Pick<UserProfile, "plan">, branding?: AgencyBranding | null) {
   if (profile.plan !== "agency") {
     return {

@@ -1,7 +1,7 @@
 export const FRIENDLY_SCAN_FAILURE_MESSAGE =
-  "This site couldn't be scanned. This usually happens with sites on free hosting or sites that block automated scanning. Try scanning a different URL.";
+  "SitePulse was unable to analyze this site. This usually happens when a site blocks automated scanners or takes too long to respond.";
 export const PAGE_SPEED_RATE_LIMIT_MESSAGE =
-  "Google PageSpeed temporarily rate-limited this scan. Try again in a few minutes.";
+  "SitePulse couldn't complete this scan right now. Please try again in a few minutes.";
 export const ACCESSIBILITY_SCANNER_UNAVAILABLE_MESSAGE =
   "Accessibility checks are temporarily unavailable on this deployment.";
 export const FRIENDLY_PREVIEW_SCAN_REACHABILITY_MESSAGE =
@@ -10,6 +10,11 @@ export const FRIENDLY_PREVIEW_SCAN_TIMEOUT_MESSAGE =
   "The scan timed out. The site may be too slow or blocking requests.";
 export const FRIENDLY_PREVIEW_SCAN_GENERIC_MESSAGE =
   "Something went wrong. Please try a different URL.";
+export const SCAN_FAILED_MODAL_TITLE = "Scan Failed";
+export const SCAN_FAILED_MODAL_MESSAGE =
+  "SitePulse was unable to analyze this site. This usually happens when a site blocks automated scanners or takes too long to respond.";
+export const SITE_PAUSED_TOAST_MESSAGE =
+  "Site paused. You can resume it anytime from your dashboard.";
 
 const FRIENDLY_SCAN_ERROR_PATTERNS = [
   /NO_FCP/i,
@@ -124,14 +129,14 @@ export function getPageSpeedScanFailureMessage(message?: string | null) {
   }
 
   if (isPageSpeedTimeoutError(message)) {
-    return `Google PageSpeed couldn't complete this scan. ${FRIENDLY_PREVIEW_SCAN_TIMEOUT_MESSAGE}`;
+    return FRIENDLY_SCAN_FAILURE_MESSAGE;
   }
 
   if (isPageSpeedReachabilityError(message) || shouldUseFriendlyScanFailureMessage(message)) {
-    return `Google PageSpeed couldn't complete this scan. ${FRIENDLY_PREVIEW_SCAN_REACHABILITY_MESSAGE}`;
+    return FRIENDLY_SCAN_FAILURE_MESSAGE;
   }
 
-  return `Google PageSpeed couldn't complete this scan. ${FRIENDLY_PREVIEW_SCAN_GENERIC_MESSAGE}`;
+  return FRIENDLY_SCAN_FAILURE_MESSAGE;
 }
 
 export function getFriendlyScanFailureMessage(message?: string | null) {
@@ -148,4 +153,16 @@ export function getFriendlyScanFailureMessage(message?: string | null) {
   }
 
   return message?.trim() || "The latest scan failed.";
+}
+
+export function classifyWebsiteFailureReason(message?: string | null) {
+  if (isPageSpeedTimeoutError(message)) {
+    return "scan_timeout" as const;
+  }
+
+  if (isPageSpeedReachabilityError(message) || shouldUseFriendlyScanFailureMessage(message)) {
+    return "scan_blocked" as const;
+  }
+
+  return "scan_analysis_error" as const;
 }

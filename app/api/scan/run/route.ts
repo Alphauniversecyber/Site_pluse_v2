@@ -37,8 +37,24 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (parsed.data.activateSite) {
+      const { error: websiteUpdateError } = await admin
+        .from("websites")
+        .update({
+          is_active: true,
+          failure_reason: null
+        })
+        .eq("id", parsed.data.websiteId)
+        .eq("user_id", workspace.workspaceOwnerId);
+
+      if (websiteUpdateError) {
+        return apiError(websiteUpdateError.message, 500);
+      }
+    }
+
     const result = await executeWebsiteScan(parsed.data.websiteId, {
-      forceHealthSignals: true
+      forceHealthSignals: true,
+      source: "manual"
     });
     return apiSuccess(result);
   } catch (error) {

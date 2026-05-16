@@ -135,6 +135,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
   if (parsed.data.is_active !== undefined) {
     websiteUpdates.is_active = parsed.data.is_active;
+    if (parsed.data.is_active) {
+      websiteUpdates.failure_reason = null;
+    }
   }
   if (parsed.data.report_frequency !== undefined) {
     websiteUpdates.report_frequency = parsed.data.report_frequency;

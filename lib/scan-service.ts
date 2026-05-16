@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ScanResult, SslCheckRecord, UserProfile, Website } from "@/types";
+import type { ScanResult, SslCheckRecord, UserProfile, Website, WebsiteFailureReason } from "@/types";
 import { logAdminError } from "@/lib/admin/logging";
 import { ensureBrokenLinkCheck } from "@/lib/broken-links";
 import { createCronExecutionGuard, getCronBatchLimit } from "@/lib/cron";
@@ -9,9 +9,10 @@ import { ensureCruxData } from "@/lib/crux";
 import { sendDay1Email } from "@/lib/lifecycle-email-service";
 import { runAccessibilityScan } from "@/lib/pa11y";
 import { runPageSpeedScan } from "@/lib/pagespeed";
-import { sendProductEmail, trySendCriticalAlertEmail } from "@/lib/resend";
+import { sendProductEmail, sendScanPausedEmail, trySendCriticalAlertEmail } from "@/lib/resend";
 import {
   FRIENDLY_SCAN_FAILURE_MESSAGE,
+  classifyWebsiteFailureReason,
   getFriendlyScanFailureMessage,
   getPageSpeedScanFailureMessage,
   isPageSpeedRateLimitError,
@@ -31,6 +32,8 @@ type NotificationType =
   | "report_ready"
   | "accessibility_regression"
   | "ssl_expiry";
+
+type ScanExecutionSource = "manual" | "scheduled";
 
 async function createNotification(input: {
   userId: string;
@@ -88,6 +91,27 @@ async function getWebsiteContext(websiteId: string) {
     profile,
     schedule: schedule ?? null
   };
+}
+
+async function updateWebsiteFailureState(input: {
+  websiteId: string;
+  isActive?: boolean;
+  failureReason?: WebsiteFailureReason | null;
+}) {
+  const admin = createSupabaseAdminClient();
+  const updates: Record<string, unknown> = {
+    failure_reason: input.failureReason ?? null
+  };
+
+  if (typeof input.isActive === "boolean") {
+    updates.is_active = input.isActive;
+  }
+
+  const { error } = await admin.from("websites").update(updates).eq("id", input.websiteId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 async function maybeSendSslAlert(input: {
@@ -237,6 +261,18 @@ async function trySendEngagementEmail(input: Parameters<typeof sendProductEmail>
   }
 }
 
+async function trySendPausedScanEmail(input: Parameters<typeof sendScanPausedEmail>[0]) {
+  try {
+    await sendScanPausedEmail(input);
+  } catch (error) {
+    console.warn("[scan:paused_email_failed]", {
+      dedupeKey: input.dedupeKey,
+      websiteId: input.website.id,
+      error: error instanceof Error ? error.message : "Unknown paused-scan email error"
+    });
+  }
+}
+
 async function pruneHistory(websiteId: string, plan: UserProfile["plan"]) {
   const admin = createSupabaseAdminClient();
   const cutoff = new Date();
@@ -254,11 +290,13 @@ export async function executeWebsiteScan(
   options?: {
     forceHealthSignals?: boolean;
     rotationIndex?: number;
+    source?: ScanExecutionSource;
   }
 ) {
   const admin = createSupabaseAdminClient();
   const { website, profile, schedule } = await getWebsiteContext(websiteId);
   const forceHealthSignals = options?.forceHealthSignals ?? false;
+  const source = options?.source ?? "manual";
 
   const { data: priorRows } = await admin
     .from("scan_results")
@@ -268,6 +306,7 @@ export async function executeWebsiteScan(
     .limit(6);
 
   const previousScans = (priorRows ?? []) as ScanResult[];
+  const isFirstScanAttempt = previousScans.length === 0;
   const previousScan = previousScans[0] ?? null;
   const previousSuccessfulScan =
     previousScans.find((row) => row.scan_status !== "failed") ?? null;
@@ -469,7 +508,18 @@ export async function executeWebsiteScan(
   const currentHighPriorityIssueKeys = getHighPriorityIssueKeys(currentScan);
   const previousHighPriorityIssueKeys = getHighPriorityIssueKeys(previousSuccessfulScan);
 
+  let sitePaused = false;
+  let siteFailureReason: WebsiteFailureReason | null = null;
+
   if (currentScan.scan_status === "failed") {
+    siteFailureReason = classifyWebsiteFailureReason(currentScan.error_message);
+    await updateWebsiteFailureState({
+      websiteId: website.id,
+      isActive: source === "scheduled" ? false : undefined,
+      failureReason: siteFailureReason
+    });
+    sitePaused = source === "scheduled";
+
     await logAdminError({
       errorType: "scan_failed",
       errorMessage: currentScan.error_message ?? "The site was unreachable during the latest scan.",
@@ -484,26 +534,42 @@ export async function executeWebsiteScan(
       userId: profile.id,
       websiteId: website.id,
       type: "scan_failure",
-      title: `Scan failed for ${website.label}`,
-      body: currentScan.error_message ?? "The site was unreachable during the latest scan.",
+      title: sitePaused ? `Scanning paused for ${website.label}` : `Scan failed for ${website.label}`,
+      body: sitePaused
+        ? "Scheduled scanning was paused after the latest scan could not complete."
+        : getFriendlyScanFailureMessage(currentScan.error_message),
       severity: "high",
       metadata: {
-        scanId: currentScan.id
+        scanId: currentScan.id,
+        failureReason: siteFailureReason,
+        sitePaused
       }
     });
 
-    if (website.email_notifications ?? true) {
+    if (sitePaused) {
+      await trySendPausedScanEmail({
+        dedupeKey: buildEmailDedupeKey("product", "scan_paused", website.id, currentScan.id),
+        to: profile.email,
+        website,
+        triggeredAt: currentScan.scanned_at
+      });
+    } else if ((website.email_notifications ?? true) && !isFirstScanAttempt) {
       await trySendCriticalAlertEmail({
         templateId: "alert_scan_failure",
         dedupeKey: buildEmailDedupeKey("alert", "scan_failure", website.id, currentScan.id),
         to: profile.email,
         website,
         scan: currentScan,
-        reason: currentScan.error_message ?? "The latest scan failed.",
+        reason: getFriendlyScanFailureMessage(currentScan.error_message),
         triggeredAt: currentScan.scanned_at
       });
     }
   } else {
+    await updateWebsiteFailureState({
+      websiteId: website.id,
+      failureReason: null
+    });
+
     const previousScore = previousSuccessfulScan?.performance_score ?? null;
     const delta = previousScore !== null ? currentScan.performance_score - previousScore : null;
 
@@ -758,14 +824,21 @@ export async function executeWebsiteScan(
   await pruneHistory(website.id, profile.plan);
 
   return {
-    website,
+    website: {
+      ...website,
+      is_active: sitePaused ? false : website.is_active,
+      failure_reason: siteFailureReason
+    },
     profile,
     scan: currentScan,
     sslCheck,
     securityHeaders,
     seoAudit,
     cruxData,
-    brokenLinks
+    brokenLinks,
+    isFirstScanAttempt,
+    sitePaused,
+    failureReason: siteFailureReason
   };
 }
 

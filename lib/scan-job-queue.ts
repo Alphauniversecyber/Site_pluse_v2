@@ -420,7 +420,8 @@ async function executeWebsiteScanWithTimeout(websiteId: string, rotationIndex?: 
   try {
     return await Promise.race([
       executeWebsiteScan(websiteId, {
-        rotationIndex
+        rotationIndex,
+        source: "scheduled"
       }),
       new Promise<never>((_, reject) => {
         timeoutHandle = setTimeout(() => {

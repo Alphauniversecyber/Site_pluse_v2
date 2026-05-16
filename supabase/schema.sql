@@ -262,6 +262,7 @@ create table if not exists public.websites (
   url text not null,
   label text not null,
   is_active boolean not null default true,
+  failure_reason text,
   report_frequency text not null default 'weekly' check (report_frequency in ('daily', 'weekly', 'monthly', 'never')),
   extra_recipients text[] not null default '{}'::text[],
   auto_email_reports boolean not null default true,
@@ -562,6 +563,7 @@ alter table public.websites add column if not exists report_frequency text;
 alter table public.websites add column if not exists extra_recipients text[];
 alter table public.websites add column if not exists auto_email_reports boolean;
 alter table public.websites add column if not exists email_notifications boolean;
+alter table public.websites add column if not exists failure_reason text;
 alter table public.websites add column if not exists client_dashboard_enabled boolean not null default false;
 alter table public.websites add column if not exists client_dashboard_use_branding_logo boolean not null default true;
 alter table public.websites add column if not exists magic_token text;

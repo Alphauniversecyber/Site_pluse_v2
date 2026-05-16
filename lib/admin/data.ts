@@ -55,6 +55,7 @@ type AdminWebsiteRecord = {
   url: string;
   label: string;
   is_active: boolean;
+  failure_reason: string | null;
   auto_email_reports: boolean;
   magic_token: string | null;
   gsc_property: string | null;
@@ -222,6 +223,8 @@ export type AdminWebsitesPageData = {
     healthScore: number | null;
     lastScanAt: string | null;
     scanStatus: "success" | "failed" | "pending";
+    isActive: boolean;
+    failureReason: string | null;
     reportsSent: number;
     gscConnected: boolean;
     gaConnected: boolean;
@@ -602,10 +605,10 @@ async function loadWebsitesByIds(ids: string[]) {
 
   const admin = createSupabaseAdminClient();
   const { data } = await admin
-    .from("websites")
-    .select(
-      "id,user_id,url,label,is_active,auto_email_reports,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
-    )
+        .from("websites")
+        .select(
+          "id,user_id,url,label,is_active,failure_reason,auto_email_reports,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
+        )
     .in("id", ids);
 
   return new Map(((data ?? []) as AdminWebsiteRecord[]).map((row) => [row.id, row]));
@@ -960,7 +963,7 @@ export async function getAdminUsersData(input: {
         ? await admin
           .from("websites")
           .select(
-            "id,user_id,url,label,is_active,auto_email_reports,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
+            "id,user_id,url,label,is_active,failure_reason,auto_email_reports,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
           )
           .in("user_id", userIds)
       : { data: [] };
@@ -1072,7 +1075,7 @@ export async function getAdminWebsitesData(input: {
     const { data, error } = await admin
       .from("websites")
       .select(
-        "id,user_id,url,label,is_active,auto_email_reports,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
+        "id,user_id,url,label,is_active,failure_reason,auto_email_reports,magic_token,gsc_property,gsc_connected_at,ga_property_id,ga_connected_at,created_at,updated_at"
       )
       .order("created_at", { ascending: false });
 
@@ -1138,11 +1141,13 @@ export async function getAdminWebsitesData(input: {
           url: website.url,
           label: website.label,
           ownerEmail: usersById.get(website.user_id)?.email ?? "Unknown owner",
-          ownerId: website.user_id,
-          healthScore: computeScanHealth(latestScan),
-          lastScanAt: latestScan?.scanned_at ?? null,
-          scanStatus: latestScan?.scan_status ?? "pending",
-          reportsSent: (reportsByWebsite[website.id] ?? []).filter((row) => row.sent_at).length,
+            ownerId: website.user_id,
+            healthScore: computeScanHealth(latestScan),
+            lastScanAt: latestScan?.scanned_at ?? null,
+            scanStatus: latestScan?.scan_status ?? "pending",
+            isActive: website.is_active,
+            failureReason: website.failure_reason,
+            reportsSent: (reportsByWebsite[website.id] ?? []).filter((row) => row.sent_at).length,
           gscConnected: Boolean(website.gsc_property),
           gaConnected: Boolean(website.ga_property_id),
           createdAt: website.created_at,
